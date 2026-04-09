@@ -1,0 +1,28 @@
+[package]
+name = "rustbase"
+version = "0.1.0"
+edition = "2024"
+# TODO: update these fields for your project
+description = "A Rust project"
+license = "MIT"
+repository = "https://github.com/breki/rustbase"
+readme = "../../README.md"
+default-run = "rustbase"
+keywords = ["cli"]
+categories = ["command-line-utilities"]
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "rustbase"
+path = "src/bin/rustbase/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
