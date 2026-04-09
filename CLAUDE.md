@@ -13,8 +13,21 @@ they require manual approval every time.**
 
 <!-- TODO: describe your project here -->
 
-- **Stack**: Rust, single portable binary
+- **Stack**: Rust/Axum backend, Svelte 5/Vite frontend
 - **Target platforms**: Windows, Linux, macOS
+
+### Workspace Crates
+
+| Crate | Purpose |
+|-------|---------|
+| `crates/rustbase` | Core library and CLI binary |
+| `crates/rustbase-web` | Axum web server (optional) |
+| `xtask` | Build automation |
+
+The web crate is optional. To remove it: delete
+`crates/rustbase-web/`, `frontend/`, and remove
+`"crates/rustbase-web"` from `Cargo.toml` workspace
+members.
 
 ## Build Commands
 
@@ -28,6 +41,26 @@ cargo xtask fmt               # format code
 
 Never use raw `cargo test` or `cargo clippy` -- always
 go through `xtask`.
+
+### Frontend Development
+
+```bash
+cd frontend && npm install    # first time only
+cd frontend && npm run dev    # dev server on :5173
+cd frontend && npm run build  # production build to dist/
+```
+
+In dev mode, Vite proxies `/api` requests to the Axum
+backend on port 3000. Run backend and frontend in
+parallel:
+
+1. `cargo run -p rustbase-web` (backend on :3000)
+2. `cd frontend && npm run dev` (frontend on :5173)
+3. Open http://localhost:5173
+
+For production, build the frontend first, then serve
+with the backend:
+`cargo run -p rustbase-web -- --frontend frontend/dist`
 
 ## Coding Standards
 

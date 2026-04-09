@@ -1,0 +1,129 @@
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::get;
+use axum::{Json, Router};
+use serde::Serialize;
+use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::TraceLayer;
+
+/// Create the application router.
+///
+/// - `/health` -- health check endpoint
+/// - `/api/*` -- API routes
+/// - Everything else -- serves static files from
+///   `frontend_path`, falling back to `index.html`
+///   for SPA client-side routing.
+pub fn create_router(frontend_path: &str) -> Router {
+    let index_path = format!("{frontend_path}/index.html");
+    let serve_dir = ServeDir::new(frontend_path)
+        .not_found_service(ServeFile::new(&index_path));
+
+    Router::new()
+        .route("/health", get(health))
+        .nest("/api", api_routes())
+        .fallback_service(serve_dir)
+        .layer(TraceLayer::new_for_http())
+}
+
+fn api_routes() -> Router {
+    Router::new()
+        .route("/status", get(status))
+        .route("/greeting", get(greeting))
+}
+
+async fn health() -> &'static str {
+    "OK"
+}
+
+#[derive(Serialize)]
+struct StatusResponse {
+    status: String,
+    version: String,
+}
+
+async fn status() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(StatusResponse {
+            status: "ready".into(),
+            version: rustbase::version().into(),
+        }),
+    )
+}
+
+#[derive(Serialize)]
+struct GreetingResponse {
+    message: String,
+}
+
+async fn greeting() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(GreetingResponse {
+            message: "Hello from rustbase!".into(),
+        }),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn health_returns_ok() {
+        let app = create_router("nonexistent");
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn status_returns_version() {
+        let app = create_router("nonexistent");
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/status")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ready");
+        assert!(!json["version"].as_str().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn greeting_returns_message() {
+        let app = create_router("nonexistent");
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/greeting")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+}

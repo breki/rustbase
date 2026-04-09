@@ -20,3 +20,6 @@ and this project adheres to
 - GitHub Actions CI (multi-platform) and release
   workflow (5 targets)
 - Development diary and code review finding logs
+- Optional web app: Axum backend + Svelte 5/Vite
+  frontend with dev proxy, SPA routing, health/status
+  API endpoints

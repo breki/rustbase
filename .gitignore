@@ -26,5 +26,9 @@ coverage.json
 *.profraw
 *.profdata
 
+# Frontend (covered by frontend/.gitignore, belt-and-suspenders)
+/frontend/node_modules/
+/frontend/dist/
+
 # mise local overrides
 .mise.local.toml
