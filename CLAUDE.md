@@ -142,3 +142,22 @@ Always keep an `[Unreleased]` section at the top.
 | `/simplify` | Review changed code for quality |
 | `/architect` | Project overview and architecture guide |
 | `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |
+
+## Template Feedback
+
+This project was generated from the
+[rustbase](https://github.com/breki/rustbase) template.
+When you notice anything in the template-provided files
+that is suboptimal, incorrect, outdated, or could be
+improved, log it in `docs/developer/template-feedback.md`.
+
+Examples of what to log:
+- Dependency versions that needed immediate updating
+- Config that didn't work out of the box
+- Patterns that had to be reworked early on
+- Missing features that every project ends up adding
+- Conventions that turned out to be impractical
+- Unnecessary boilerplate that was deleted
+
+This feedback will be used to improve the template for
+future projects.
