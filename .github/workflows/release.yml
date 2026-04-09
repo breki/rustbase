@@ -66,8 +66,17 @@ jobs:
           restore-keys: >-
             ${{ runner.os }}-${{ matrix.target }}-cargo-
 
-      # TODO: replace 'rustbase' with your binary name
-      - name: Build release binary
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Build frontend
+        shell: bash
+        run: |
+          cd frontend && npm install && npm run build
+
+      - name: Build release binaries
         run: cargo build --release --locked --target ${{ matrix.target }}
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
@@ -87,6 +96,8 @@ jobs:
           STAGING="${{ steps.archive.outputs.name }}"
           mkdir "$STAGING"
           cp target/${{ matrix.target }}/release/rustbase "$STAGING/"
+          cp target/${{ matrix.target }}/release/rustbase-web "$STAGING/"
+          cp -r frontend/dist "$STAGING/frontend-dist"
           cp LICENSE "$STAGING/"
           tar czf "${STAGING}.tar.gz" "$STAGING"
 
@@ -97,6 +108,8 @@ jobs:
           STAGING="${{ steps.archive.outputs.name }}"
           mkdir "$STAGING"
           cp target/${{ matrix.target }}/release/rustbase.exe "$STAGING/"
+          cp target/${{ matrix.target }}/release/rustbase-web.exe "$STAGING/"
+          cp -r frontend/dist "$STAGING/frontend-dist"
           cp LICENSE "$STAGING/"
           7z a "${STAGING}.zip" "$STAGING"
 

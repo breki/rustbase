@@ -62,6 +62,29 @@ For production, build the frontend first, then serve
 with the backend:
 `cargo run -p rustbase-web -- --frontend frontend/dist`
 
+### E2E Testing
+
+```bash
+npx playwright test              # run all E2E tests
+npx playwright test smoke        # filtered
+npx playwright test --ui         # interactive UI mode
+```
+
+Playwright auto-starts both backend and frontend.
+Configure ports via `.ports` file (copy from
+`.ports.sample`).
+
+### PowerShell Build Script
+
+```powershell
+.\build.ps1 validate    # cargo xtask validate
+.\build.ps1 test        # tests only
+.\build.ps1 e2e         # Playwright E2E tests
+.\build.ps1 frontend    # npm build
+.\build.ps1 build       # full build with all checks
+.\build.ps1 clean       # clean artifacts
+```
+
 ## Coding Standards
 
 - Rust edition 2024
@@ -117,3 +140,5 @@ Always keep an `[Unreleased]` section at the top.
 | `/commit` | Commit with versioning, diary, and code review |
 | `/todo` | Process the next pending TODO item |
 | `/simplify` | Review changed code for quality |
+| `/architect` | Project overview and architecture guide |
+| `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |

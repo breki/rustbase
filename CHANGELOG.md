@@ -23,3 +23,12 @@ and this project adheres to
 - Optional web app: Axum backend + Svelte 5/Vite
   frontend with dev proxy, SPA routing, health/status
   API endpoints
+- PowerShell build script (`build.ps1`)
+- Integration test scaffold with `assert_cmd`
+- Playwright E2E test scaffold with auto-server start
+- `.ports` config pattern for port management
+- `.mise.toml` for Node.js version management
+- `llms.txt` AI-agent reference (llmstxt.org)
+- `/architect` and `/web-dev` Claude Code skills
+- CI frontend build job; release packages both
+  binaries with frontend dist

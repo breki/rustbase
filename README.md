@@ -13,6 +13,7 @@ integration, quality gates, and CI/CD.
   - Stop hook running validation on modified Rust files
   - `/commit` skill with Red Team + Artisan code review
   - `/todo` skill for TODO.md processing
+  - `/architect` and `/web-dev` domain skills
 - **xtask** build automation:
   - `cargo xtask validate` (fmt + clippy + tests +
     coverage)
@@ -22,7 +23,8 @@ integration, quality gates, and CI/CD.
   - `cargo xtask coverage` (90% threshold)
 - **GitHub Actions**:
   - CI: fmt, clippy, tests on Linux/Windows/macOS
-  - Release: 5-target builds with checksums
+  - Release: 5-target builds (both CLI + web binaries)
+    with frontend dist and checksums
 - **Code quality**:
   - `#[deny(warnings)]`, `#[forbid(unsafe_code)]`
   - Clippy pedantic + perf
@@ -62,7 +64,10 @@ Delete these and you're left with a pure CLI template:
 
 1. `crates/rustbase-web/`
 2. `frontend/`
-3. Remove `"crates/rustbase-web"` from workspace
+3. `e2e/`
+4. `playwright.config.js`
+5. Root `package.json`
+6. Remove `"crates/rustbase-web"` from workspace
    `members` in `Cargo.toml`
 
 ## Development
@@ -87,6 +92,21 @@ to the Axum backend.
 
 For production: `cd frontend && npm run build`, then
 `cargo run -p rustbase-web -- --frontend frontend/dist`.
+
+### E2E tests
+
+```bash
+npx playwright test           # auto-starts servers
+npx playwright test --ui      # interactive mode
+```
+
+### PowerShell
+
+```powershell
+.\build.ps1 validate          # full quality check
+.\build.ps1 e2e               # E2E tests
+.\build.ps1 build             # everything
+```
 
 ## Prerequisites
 

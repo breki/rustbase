@@ -30,5 +30,17 @@ coverage.json
 /frontend/node_modules/
 /frontend/dist/
 
+# Port config (local override)
+.ports
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Node (root-level, for Playwright)
+/node_modules/
+/package-lock.json
+
 # mise local overrides
 .mise.local.toml
