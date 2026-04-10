@@ -65,3 +65,16 @@ and this project adheres to
 - Clarified `anyhow` vs `thiserror` dependency split
   in `Cargo.toml` comments
 - Enforced that all commits must use `/commit` skill
+- Release workflow uses `env:` blocks instead of inline
+  `${{ }}` interpolation in `run:` blocks
+- Release workflow fails on empty release notes instead
+  of just warning
+- Release checksum generation uses `nullglob` and
+  explicit archive globs
+- Release notes extraction uses exact version match
+  instead of substring
+- `create_router` accepts `&Path` instead of `&str`
+- CLI bind address parsed as `IpAddr` via clap instead
+  of string format + parse
+- Added `edition = "2024"` to `rustfmt.toml`
+- Documented `code-dupes` prerequisite in README

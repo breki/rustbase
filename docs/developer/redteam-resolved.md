@@ -5,6 +5,48 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-013 -- awk version extraction substring match
+
+- **Date:** 2026-04-10
+- **Category:** CI/CD (Low)
+- **Commit context:** v0.2.1 review finding fixes
+- **Resolution:** Changed `index($0, "[" ver "]")` to
+  `$0 ~ "^## \\[" ver "\\]"` for exact pattern match.
+
+### RT-012 -- sha256sum glob fails without nullglob
+
+- **Date:** 2026-04-10
+- **Category:** CI/CD (Medium)
+- **Commit context:** v0.2.1 review finding fixes
+- **Resolution:** Added `shopt -s nullglob` with array
+  collection and empty-check before `sha256sum`.
+
+### RT-011 -- `sha256sum *` glob fragile in release
+
+- **Date:** 2026-04-10
+- **Category:** CI/CD (Low)
+- **Commit context:** v0.2.1 review finding fixes
+- **Resolution:** Replaced `sha256sum *` with explicit
+  `*.tar.gz *.zip` globs via nullglob array.
+
+### RT-010 -- Empty release notes don't block release
+
+- **Date:** 2026-04-10
+- **Category:** CI/CD (Medium)
+- **Commit context:** v0.2.1 review finding fixes
+- **Resolution:** Changed `::warning` to `::error` +
+  `exit 1` so release fails if CHANGELOG extraction
+  produces empty notes.
+
+### RT-009 -- Inline `${{ }}` in release run blocks
+
+- **Date:** 2026-04-10
+- **Category:** CI/CD (Medium)
+- **Commit context:** v0.2.1 review finding fixes
+- **Resolution:** Moved all `${{ }}` expressions to
+  `env:` blocks and referenced via `$STAGING`,
+  `$TARGET`, `$env:STAGING`, `$env:TARGET`.
+
 ### RT-008 -- Frontend test leaks fetch mock
 
 - **Date:** 2026-04-10

@@ -84,19 +84,23 @@ jobs:
       - name: Determine archive name
         id: archive
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           VERSION="${GITHUB_REF_NAME}"
-          NAME="rustbase-${VERSION}-${{ matrix.target }}"
+          NAME="rustbase-${VERSION}-${TARGET}"
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Package (tar.gz)
         if: matrix.archive == 'tar.gz'
         shell: bash
+        env:
+          STAGING: ${{ steps.archive.outputs.name }}
+          TARGET: ${{ matrix.target }}
         run: |
-          STAGING="${{ steps.archive.outputs.name }}"
           mkdir "$STAGING"
-          cp target/${{ matrix.target }}/release/rustbase "$STAGING/"
-          cp target/${{ matrix.target }}/release/rustbase-web "$STAGING/"
+          cp "target/${TARGET}/release/rustbase" "$STAGING/"
+          cp "target/${TARGET}/release/rustbase-web" "$STAGING/"
           cp -r frontend/dist "$STAGING/frontend-dist"
           cp LICENSE "$STAGING/"
           tar czf "${STAGING}.tar.gz" "$STAGING"
@@ -104,14 +108,16 @@ jobs:
       - name: Package (zip)
         if: matrix.archive == 'zip'
         shell: pwsh
+        env:
+          STAGING: ${{ steps.archive.outputs.name }}
+          TARGET: ${{ matrix.target }}
         run: |
-          $staging = "${{ steps.archive.outputs.name }}"
-          New-Item -ItemType Directory -Path $staging
-          Copy-Item "target/${{ matrix.target }}/release/rustbase.exe" "$staging/"
-          Copy-Item "target/${{ matrix.target }}/release/rustbase-web.exe" "$staging/"
-          Copy-Item -Recurse "frontend/dist" "$staging/frontend-dist"
-          Copy-Item "LICENSE" "$staging/"
-          Compress-Archive -Path $staging -DestinationPath "$staging.zip"
+          New-Item -ItemType Directory -Path $env:STAGING
+          Copy-Item "target/$env:TARGET/release/rustbase.exe" "$env:STAGING/"
+          Copy-Item "target/$env:TARGET/release/rustbase-web.exe" "$env:STAGING/"
+          Copy-Item -Recurse "frontend/dist" "$env:STAGING/frontend-dist"
+          Copy-Item "LICENSE" "$env:STAGING/"
+          Compress-Archive -Path $env:STAGING -DestinationPath "$env:STAGING.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -143,21 +149,28 @@ jobs:
           NOTES=$(awk -v ver="$VERSION" '
             /^## \[/ {
               if (found) exit
-              if (index($0, "[" ver "]") > 0) found=1
+              if ($0 ~ "^## \\[" ver "\\]") found=1
               next
             }
             found { print }
           ' CHANGELOG.md)
           echo "$NOTES" > release_notes.md
           if [ ! -s release_notes.md ]; then
-            echo "::warning::No release notes found for $VERSION in CHANGELOG.md"
+            echo "::error::No release notes found for $VERSION in CHANGELOG.md"
+            exit 1
           fi
 
       - name: Generate checksums
         shell: bash
         run: |
           cd artifacts
-          sha256sum * > SHA256SUMS
+          shopt -s nullglob
+          files=(*.tar.gz *.zip)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No archive files found"
+            exit 1
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS
 
       - name: Create GitHub Release
         env:

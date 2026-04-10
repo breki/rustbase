@@ -113,7 +113,9 @@ npx playwright test --ui      # interactive mode
 - Rust (stable, via `rust-toolchain.toml`)
 - `cargo-llvm-cov` for coverage:
   `cargo install cargo-llvm-cov`
-- Node.js (for frontend, if using web app)
+- `code-dupes` for duplication checks:
+  `cargo install code-dupes`
+- Node.js 22+ (for frontend, if using web app)
 
 ## License
 

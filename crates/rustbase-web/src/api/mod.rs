@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Serialize;
@@ -11,8 +13,8 @@ use tower_http::trace::TraceLayer;
 /// - Everything else -- serves static files from
 ///   `frontend_path`, falling back to `index.html`
 ///   for SPA client-side routing.
-pub fn create_router(frontend_path: &str) -> Router {
-    let index_path = format!("{frontend_path}/index.html");
+pub fn create_router(frontend_path: &Path) -> Router {
+    let index_path = frontend_path.join("index.html");
     let serve_dir = ServeDir::new(frontend_path)
         .not_found_service(ServeFile::new(&index_path));
 
@@ -65,6 +67,8 @@ async fn greeting() -> Json<GreetingResponse> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
@@ -73,7 +77,7 @@ mod tests {
 
     #[tokio::test]
     async fn health_returns_ok() {
-        let app = create_router("nonexistent");
+        let app = create_router(Path::new("nonexistent"));
         let response = app
             .oneshot(
                 Request::builder()
@@ -94,7 +98,7 @@ mod tests {
 
     #[tokio::test]
     async fn status_returns_version() {
-        let app = create_router("nonexistent");
+        let app = create_router(Path::new("nonexistent"));
         let response = app
             .oneshot(
                 Request::builder()
@@ -116,7 +120,7 @@ mod tests {
 
     #[tokio::test]
     async fn greeting_returns_message() {
-        let app = create_router("nonexistent");
+        let app = create_router(Path::new("nonexistent"));
         let response = app
             .oneshot(
                 Request::builder()

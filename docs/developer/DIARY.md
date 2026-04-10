@@ -7,6 +7,18 @@ reverse chronological order.
 
 ### 2026-04-10
 
+- Resolve open review findings (v0.2.1)
+
+    Moved inline `${{ }}` to `env:` blocks in release
+    workflow (RT-009). Release now fails on empty notes
+    (RT-010). Checksums use `nullglob` + explicit globs
+    (RT-011, RT-012). Awk uses exact pattern match for
+    version extraction (RT-013). `create_router` accepts
+    `&Path` (AQ-006). `SocketAddr` constructed via
+    `IpAddr` + `SocketAddr::new` (AQ-007). Added
+    `edition = "2024"` to `rustfmt.toml`. Documented
+    `code-dupes` prerequisite in README.
+
 - Add `/template-sync` command (v0.2.0)
 
     New slash command for syncing derived projects with

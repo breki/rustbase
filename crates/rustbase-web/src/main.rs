@@ -1,4 +1,5 @@
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
@@ -14,11 +15,11 @@ struct Cli {
 
     /// Bind address
     #[arg(short, long, default_value = "127.0.0.1")]
-    bind: String,
+    bind: IpAddr,
 
     /// Path to frontend dist directory
     #[arg(short, long, default_value = "frontend/dist")]
-    frontend: String,
+    frontend: PathBuf,
 }
 
 #[tokio::main]
@@ -33,9 +34,7 @@ async fn main() {
 
     let app = api::create_router(&cli.frontend);
 
-    let addr: SocketAddr = format!("{}:{}", cli.bind, cli.port)
-        .parse()
-        .expect("invalid bind address");
+    let addr = SocketAddr::new(cli.bind, cli.port);
 
     tracing::info!("listening on http://{addr}");
 

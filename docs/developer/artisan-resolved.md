@@ -6,6 +6,27 @@ findings.
 
 ---
 
+### AQ-007 -- format! + parse for SocketAddr
+
+- **Date:** 2026-04-10
+- **Category:** API Design
+- **Commit context:** v0.2.1 review finding fixes
+- **Resolution:** Changed `cli.bind` from `String` to
+  `IpAddr` (parsed by clap). Construct `SocketAddr`
+  directly via `SocketAddr::new(cli.bind, cli.port)`,
+  eliminating the fallible `format!` + `.parse()` +
+  `.expect()` chain.
+
+### AQ-006 -- `create_router` accepts `&str` not `&Path`
+
+- **Date:** 2026-04-10
+- **Category:** API Design
+- **Commit context:** v0.2.1 review finding fixes
+- **Resolution:** Changed `frontend_path` parameter
+  from `&str` to `&Path`. Uses `Path::join` instead of
+  `format!` for index path. Updated `cli.frontend` to
+  `PathBuf` and all test call sites.
+
 ### AQ-005 -- Inconsistent String vs &'static str
 
 - **Date:** 2026-04-10
