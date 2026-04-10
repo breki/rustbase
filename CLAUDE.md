@@ -162,6 +162,17 @@ Always keep an `[Unreleased]` section at the top.
 | `/architect` | Project overview and architecture guide |
 | `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |
 | `/template-improve` | Log feedback for the rustbase template |
+| `/template-sync` | Sync upstream template changes into this project |
+
+## Template Sync
+
+This project tracks its template origin in
+`.template-sync.toml`. Use `/template-sync` to pull
+improvements from the upstream
+[rustbase](https://github.com/breki/rustbase) template.
+The command fetches upstream changes, categorizes them,
+and helps you selectively apply relevant updates while
+preserving your project's customizations.
 
 ## Template Feedback
 

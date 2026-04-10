@@ -42,6 +42,10 @@ and this project adheres to
   `prettier-plugin-svelte`
 - Frontend unit testing with Vitest +
   `@testing-library/svelte`
+- `/template-sync` slash command for syncing upstream
+  template changes into derived projects
+- `.template-sync.toml` for tracking template version
+  origin and last sync point
 
 ### Fixed
 

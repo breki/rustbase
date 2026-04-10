@@ -7,6 +7,15 @@ reverse chronological order.
 
 ### 2026-04-10
 
+- Add `/template-sync` command (v0.2.0)
+
+    New slash command for syncing derived projects with
+    upstream template changes. Added `.template-sync.toml`
+    to track template origin (commit SHA + version).
+    The command fetches upstream, categorizes changes,
+    and helps selectively apply updates while preserving
+    project customizations.
+
 - Address template feedback: 8 fixes (v0.1.2)
 
     Replaced `__dirname` with `import.meta.dirname` in
