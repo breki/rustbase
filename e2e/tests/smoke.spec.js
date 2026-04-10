@@ -19,7 +19,8 @@ test.describe("smoke tests", () => {
   test("health endpoint returns OK", async ({ request }) => {
     const response = await request.get("/health");
     expect(response.ok()).toBeTruthy();
-    expect(await response.text()).toBe("OK");
+    const json = await response.json();
+    expect(json.status).toBe("ok");
   });
 
   test("status API returns version", async ({ request }) => {

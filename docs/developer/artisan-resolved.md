@@ -6,6 +6,18 @@ findings.
 
 ---
 
+### AQ-005 -- Inconsistent String vs &'static str
+
+- **Date:** 2026-04-10
+- **Category:** Type Safety
+- **Commit context:** v0.1.2 template feedback fixes
+- **Resolution:** Changed all response struct fields
+  that hold compile-time-known values to
+  `&'static str`. Simplified all handlers to return
+  `Json<T>` directly instead of
+  `(StatusCode::OK, Json(...))` tuple since 200 is
+  the Axum default.
+
 ### AQ-004 -- Stringly-typed errors throughout xtask
 
 - **Date:** 2026-04-10

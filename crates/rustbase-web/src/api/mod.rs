@@ -1,5 +1,3 @@
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Serialize;
@@ -31,38 +29,38 @@ fn api_routes() -> Router {
         .route("/greeting", get(greeting))
 }
 
-async fn health() -> &'static str {
-    "OK"
+/// Health check response.
+#[derive(Serialize)]
+struct HealthResponse {
+    status: &'static str,
+}
+
+async fn health() -> Json<HealthResponse> {
+    Json(HealthResponse { status: "ok" })
 }
 
 #[derive(Serialize)]
 struct StatusResponse {
-    status: String,
+    status: &'static str,
     version: String,
 }
 
-async fn status() -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(StatusResponse {
-            status: "ready".into(),
-            version: rustbase::version().into(),
-        }),
-    )
+async fn status() -> Json<StatusResponse> {
+    Json(StatusResponse {
+        status: "ready",
+        version: rustbase::version().into(),
+    })
 }
 
 #[derive(Serialize)]
 struct GreetingResponse {
-    message: String,
+    message: &'static str,
 }
 
-async fn greeting() -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(GreetingResponse {
-            message: "Hello from rustbase!".into(),
-        }),
-    )
+async fn greeting() -> Json<GreetingResponse> {
+    Json(GreetingResponse {
+        message: "Hello from rustbase!",
+    })
 }
 
 #[cfg(test)]
@@ -87,6 +85,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ok");
     }
 
     #[tokio::test]

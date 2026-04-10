@@ -37,9 +37,25 @@ and this project adheres to
 - `/template-improve` slash command for logging
   template feedback
 - TDD (red/green/refactor) guidance in `CLAUDE.md`
+- Frontend linting with ESLint + `eslint-plugin-svelte`
+- Frontend formatting with Prettier +
+  `prettier-plugin-svelte`
+- Frontend unit testing with Vitest +
+  `@testing-library/svelte`
 
 ### Fixed
 
+- `/health` endpoint now returns JSON (`{"status":"ok"}`)
+  instead of plain text for API consistency
+- `vite.config.js` uses `import.meta.dirname` instead
+  of CommonJS `__dirname`
+- Tokio dependency narrowed from `full` to explicit
+  feature list (`macros`, `rt-multi-thread`, `net`,
+  `signal`)
+- Release workflow uses `Compress-Archive` instead of
+  `7z` for Windows packaging
+- Release workflow warns when CHANGELOG extraction
+  produces empty release notes
 - Coverage no longer fails out of the box by excluding
   `xtask` crate and binary `main.rs` entry points
 - Clarified `anyhow` vs `thiserror` dependency split

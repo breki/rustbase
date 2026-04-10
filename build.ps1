@@ -34,6 +34,9 @@ Commands:
 }
 
 function Invoke-Build {
+    # Validate compiles in debug (clippy + tests);
+    # BuildOnly then compiles in release for the final
+    # binary. Two compilation passes are intentional.
     Invoke-Validate
     Invoke-BuildOnly
     Invoke-Frontend

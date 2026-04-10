@@ -5,6 +5,25 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-008 -- Frontend test leaks fetch mock
+
+- **Date:** 2026-04-10
+- **Category:** Correctness (Low)
+- **Commit context:** v0.1.2 template feedback fixes
+- **Resolution:** Used `vi.stubGlobal` with
+  `afterEach(vi.restoreAllMocks)` to properly clean up
+  the global fetch mock between tests.
+
+### RT-007 -- Zip archive missing parent directory
+
+- **Date:** 2026-04-10
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.1.2 template feedback fixes
+- **Resolution:** Changed `Compress-Archive -Path
+  "$staging/*"` to `Compress-Archive -Path $staging`
+  so the zip contains a top-level directory, matching
+  the tar.gz archive structure.
+
 ### RT-006 -- Threshold formatting inconsistent
 
 - **Date:** 2026-04-10

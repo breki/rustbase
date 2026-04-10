@@ -103,15 +103,15 @@ jobs:
 
       - name: Package (zip)
         if: matrix.archive == 'zip'
-        shell: bash
+        shell: pwsh
         run: |
-          STAGING="${{ steps.archive.outputs.name }}"
-          mkdir "$STAGING"
-          cp target/${{ matrix.target }}/release/rustbase.exe "$STAGING/"
-          cp target/${{ matrix.target }}/release/rustbase-web.exe "$STAGING/"
-          cp -r frontend/dist "$STAGING/frontend-dist"
-          cp LICENSE "$STAGING/"
-          7z a "${STAGING}.zip" "$STAGING"
+          $staging = "${{ steps.archive.outputs.name }}"
+          New-Item -ItemType Directory -Path $staging
+          Copy-Item "target/${{ matrix.target }}/release/rustbase.exe" "$staging/"
+          Copy-Item "target/${{ matrix.target }}/release/rustbase-web.exe" "$staging/"
+          Copy-Item -Recurse "frontend/dist" "$staging/frontend-dist"
+          Copy-Item "LICENSE" "$staging/"
+          Compress-Archive -Path $staging -DestinationPath "$staging.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -149,6 +149,9 @@ jobs:
             found { print }
           ' CHANGELOG.md)
           echo "$NOTES" > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "::warning::No release notes found for $VERSION in CHANGELOG.md"
+          fi
 
       - name: Generate checksums
         shell: bash

@@ -3,11 +3,11 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 
+const rootDir = resolve(import.meta.dirname, "..");
+
 // Read app version from Cargo.toml (single source of truth)
 function getAppVersion() {
-  const cargoToml = resolve(
-    __dirname, "..", "crates", "rustbase", "Cargo.toml",
-  );
+  const cargoToml = resolve(rootDir, "crates", "rustbase", "Cargo.toml");
   const content = readFileSync(cargoToml, "utf-8");
   const match = content.match(/^version\s*=\s*"([^"]+)"/m);
   if (!match) {
@@ -18,7 +18,7 @@ function getAppVersion() {
 
 // Read backend port from ../.ports if it exists
 function getBackendPort() {
-  const portsFile = resolve(__dirname, "..", ".ports");
+  const portsFile = resolve(rootDir, ".ports");
   if (!existsSync(portsFile)) return 3000;
 
   const content = readFileSync(portsFile, "utf-8");

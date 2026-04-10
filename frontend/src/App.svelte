@@ -45,10 +45,12 @@
     <h2>Getting Started</h2>
     <ol>
       <li>Edit <code>frontend/src/App.svelte</code></li>
-      <li>Add API routes in
+      <li>
+        Add API routes in
         <code>crates/rustbase-web/src/api/mod.rs</code>
       </li>
-      <li>Run <code>npm run dev</code> in
+      <li>
+        Run <code>npm run dev</code> in
         <code>frontend/</code> for hot reload
       </li>
     </ol>
