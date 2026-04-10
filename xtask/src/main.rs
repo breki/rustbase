@@ -1,4 +1,5 @@
 use std::fmt::Write as _;
+use std::path::Path;
 use std::process::Command;
 
 use clap::{Parser, Subcommand};
@@ -19,12 +20,14 @@ enum XCommand {
         /// Optional test filter
         filter: Option<String>,
     },
-    /// Run clippy + tests + coverage check
+    /// Run fmt + clippy + tests + coverage + duplication
     Validate,
     /// Format code
     Fmt,
     /// Run coverage check (requires cargo-llvm-cov)
     Coverage,
+    /// Run code duplication check (requires code-dupes)
+    Dupes,
 }
 
 /// Minimum line coverage percentage (overall).
@@ -32,6 +35,10 @@ const COVERAGE_THRESHOLD: f64 = 90.0;
 
 /// Per-module coverage floor.
 const MODULE_COVERAGE_THRESHOLD: f64 = 85.0;
+
+/// Maximum allowed exact duplication percentage
+/// (production code only, tests excluded).
+const DUPLICATION_THRESHOLD: f64 = 6.0;
 
 fn main() {
     let cli = Cli::parse();
@@ -42,9 +49,11 @@ fn main() {
         XCommand::Validate => run_fmt_check()
             .and_then(|()| run_clippy())
             .and_then(|()| run_test(None))
-            .and_then(|()| run_coverage()),
+            .and_then(|()| run_coverage())
+            .and_then(|()| run_dupes()),
         XCommand::Fmt => run_fmt(),
         XCommand::Coverage => run_coverage(),
+        XCommand::Dupes => run_dupes(),
     };
 
     if let Err(e) = result {
@@ -88,9 +97,28 @@ fn run_fmt_check() -> Result<(), String> {
 }
 
 fn run_coverage() -> Result<(), String> {
-    println!("-> checking coverage (threshold: {COVERAGE_THRESHOLD}%)");
+    println!(
+        "-> checking coverage \
+         (threshold: {COVERAGE_THRESHOLD:.1}%)"
+    );
+
+    // Regex matches main.rs binary entry points on
+    // both Unix (/) and Windows (\) paths:
+    //   crates/rustbase/src/bin/rustbase/main.rs
+    //   crates/rustbase-web/src/main.rs
+    let main_rs_regex = r"(^|[/\\])main\.rs$";
+
     let output = Command::new(cargo_bin())
-        .args(["llvm-cov", "--workspace", "--json", "--summary-only"])
+        .args([
+            "llvm-cov",
+            "--workspace",
+            "--exclude",
+            "xtask",
+            "--ignore-filename-regex",
+            main_rs_regex,
+            "--json",
+            "--summary-only",
+        ])
         .output()
         .map_err(|e| {
             format!(
@@ -145,7 +173,7 @@ fn run_coverage() -> Result<(), String> {
     if line_pct < COVERAGE_THRESHOLD {
         Err(format!(
             "coverage {line_pct:.1}% is below \
-             {COVERAGE_THRESHOLD}% threshold"
+             {COVERAGE_THRESHOLD:.1}% threshold"
         ))
     } else if !below_threshold.is_empty() {
         let mut msg = String::from("modules below coverage threshold:");
@@ -156,10 +184,99 @@ fn run_coverage() -> Result<(), String> {
     } else {
         println!(
             "  coverage OK ({line_pct:.1}% >= \
-             {COVERAGE_THRESHOLD}%)"
+             {COVERAGE_THRESHOLD:.1}%)"
         );
         Ok(())
     }
+}
+
+fn run_dupes() -> Result<(), String> {
+    println!(
+        "-> checking code duplication \
+         (threshold: {DUPLICATION_THRESHOLD:.1}%)"
+    );
+
+    let src_dirs = discover_src_dirs()?;
+
+    let threshold = format!("{DUPLICATION_THRESHOLD:.1}");
+    for src_dir in &src_dirs {
+        run_cmd(
+            "code-dupes",
+            &[
+                "-p",
+                src_dir,
+                "--exclude-tests",
+                "check",
+                "--max-exact-percent",
+                &threshold,
+            ],
+        )
+        .map_err(|e| {
+            // Only add install hint when the binary
+            // was not found, not when it ran but
+            // reported excessive duplication.
+            if e.contains("failed to run") {
+                format!(
+                    "{e}\n  Install with: \
+                     cargo install code-dupes"
+                )
+            } else {
+                e
+            }
+        })?;
+    }
+
+    Ok(())
+}
+
+/// Discover `src/` directories for non-xtask workspace
+/// members using `cargo metadata`.
+fn discover_src_dirs() -> Result<Vec<String>, String> {
+    let output = Command::new(cargo_bin())
+        .args(["metadata", "--format-version", "1", "--no-deps"])
+        .output()
+        .map_err(|e| format!("failed to run cargo metadata: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("cargo metadata failed:\n{stderr}"));
+    }
+
+    let meta: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("failed to parse cargo metadata: {e}"))?;
+
+    let workspace_root = meta["workspace_root"]
+        .as_str()
+        .ok_or("missing workspace_root in metadata")?;
+
+    let mut src_dirs = Vec::new();
+    if let Some(packages) = meta["packages"].as_array() {
+        for pkg in packages {
+            let name = pkg["name"].as_str().unwrap_or("");
+            // Skip xtask — it's build tooling, not
+            // production code.
+            if name == "xtask" {
+                continue;
+            }
+            let manifest = pkg["manifest_path"].as_str().unwrap_or("");
+            // Derive src/ dir from Cargo.toml path.
+            if let Some(pkg_dir) = Path::new(manifest).parent() {
+                let src = pkg_dir.join("src");
+                if src.is_dir() {
+                    src_dirs.push(src.to_string_lossy().into_owned());
+                }
+            }
+        }
+    }
+
+    if src_dirs.is_empty() {
+        return Err(format!(
+            "no src/ directories found in workspace \
+             at {workspace_root}"
+        ));
+    }
+
+    Ok(src_dirs)
 }
 
 /// Resolve the cargo binary path. Prefers the `CARGO`

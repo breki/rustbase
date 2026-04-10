@@ -37,6 +37,7 @@ cargo xtask test [filter]     # tests only
 cargo xtask clippy            # lint only
 cargo xtask coverage          # coverage only (>=90%)
 cargo xtask fmt               # format code
+cargo xtask dupes             # code duplication check
 ```
 
 Never use raw `cargo test` or `cargo clippy` -- always
@@ -98,9 +99,25 @@ Configure ports via `.ports` file (copy from
 - Wrap markdown at 80 characters per line
 - Maximum code line width: 80 characters (`rustfmt.toml`)
 
+## Test-Driven Development
+
+Follow red/green TDD for all functional changes:
+
+1. **Red** -- write a failing test that describes the
+   expected behaviour
+2. **Green** -- write the minimal code to make the test
+   pass
+3. **Refactor** -- clean up while keeping tests green
+
+Run `cargo xtask test` after each step to confirm the
+cycle. Do not skip ahead to implementation without a
+failing test first.
+
 ## Commits
 
-Use `/commit`. No "Co-Authored-By", no emoji.
+**All commits must go through the `/commit` skill.**
+Never use `git commit` directly. No "Co-Authored-By",
+no emoji.
 
 ## Acceptance Criteria
 
@@ -112,6 +129,8 @@ which checks:
    `cargo clippy --all-targets -- -D warnings`
 3. **All tests pass**: `cargo test`
 4. **Coverage >= 90%**
+5. **Code duplication <= 6%** (production code, tests
+   excluded)
 
 ## Semantic Versioning
 
@@ -142,6 +161,7 @@ Always keep an `[Unreleased]` section at the top.
 | `/simplify` | Review changed code for quality |
 | `/architect` | Project overview and architecture guide |
 | `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |
+| `/template-improve` | Log feedback for the rustbase template |
 
 ## Template Feedback
 

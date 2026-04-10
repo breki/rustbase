@@ -16,11 +16,12 @@ Frontend: Svelte 5 + Vite in `frontend/` (optional).
 ## Build Commands
 
 ```
-cargo xtask validate          # fmt + clippy + tests + coverage
+cargo xtask validate          # fmt + clippy + tests + coverage + dupes
 cargo xtask test [filter]     # tests only
 cargo xtask clippy            # lint only
 cargo xtask fmt               # format code
 cargo xtask coverage          # coverage check (>=90%)
+cargo xtask dupes             # code duplication check (<=6%)
 ```
 
 ## Web Server
@@ -53,6 +54,7 @@ client-side routing.
 - `#[deny(warnings)]`, `#[forbid(unsafe_code)]`
 - Clippy pedantic + perf
 - 90% line coverage minimum (85% per module)
+- Code duplication <= 6% (production code, tests excluded)
 - `cargo fmt` enforced
 
 ## Conventions

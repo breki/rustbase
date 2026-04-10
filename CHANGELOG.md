@@ -32,3 +32,16 @@ and this project adheres to
 - `/architect` and `/web-dev` Claude Code skills
 - CI frontend build job; release packages both
   binaries with frontend dist
+- Code duplication check (`cargo xtask dupes`) using
+  `code-dupes` with 6% threshold
+- `/template-improve` slash command for logging
+  template feedback
+- TDD (red/green/refactor) guidance in `CLAUDE.md`
+
+### Fixed
+
+- Coverage no longer fails out of the box by excluding
+  `xtask` crate and binary `main.rs` entry points
+- Clarified `anyhow` vs `thiserror` dependency split
+  in `Cargo.toml` comments
+- Enforced that all commits must use `/commit` skill

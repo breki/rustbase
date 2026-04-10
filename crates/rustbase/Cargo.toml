@@ -1,6 +1,6 @@
 [package]
 name = "rustbase"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 # TODO: update these fields for your project
 description = "A Rust project"
@@ -19,6 +19,9 @@ name = "rustbase"
 path = "src/bin/rustbase/main.rs"
 
 [dependencies]
+# Library code uses thiserror for typed errors.
+# anyhow is for the binary entry point only --
+# do NOT use anyhow::Result in lib.rs public API.
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
