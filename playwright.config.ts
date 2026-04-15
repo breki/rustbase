@@ -8,7 +8,8 @@ import { resolve } from "path";
 function findProjectRoot() {
   let dir = process.cwd();
   for (let i = 0; i < 10; i++) {
-    if (existsSync(resolve(dir, "Cargo.toml"))) return dir;
+    if (existsSync(resolve(dir, "Cargo.toml")))
+      return dir;
     const parent = resolve(dir, "..");
     if (parent === dir) break;
     dir = parent;
@@ -54,7 +55,7 @@ export default defineConfig({
   reporter: "html",
 
   use: {
-    baseURL: `http://127.0.0.1:${frontendPort}`,
+    baseURL: `http://localhost:${frontendPort}`,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -69,14 +70,18 @@ export default defineConfig({
   webServer: [
     {
       command: `cargo run -p rustbase-web -- --port ${backendPort}`,
-      url: `http://127.0.0.1:${backendPort}/health`,
+      cwd: projectRoot,
+      url: `http://localhost:${backendPort}/health`,
       reuseExistingServer: true,
+      stdout: "pipe",
       timeout: 120 * 1000,
     },
     {
-      command: "cd frontend && npm run dev",
-      url: `http://127.0.0.1:${frontendPort}`,
+      command: "npm run dev",
+      cwd: resolve(projectRoot, "frontend"),
+      url: `http://localhost:${frontendPort}`,
       reuseExistingServer: true,
+      stdout: "pipe",
       timeout: 120 * 1000,
     },
   ],

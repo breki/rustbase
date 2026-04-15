@@ -38,6 +38,9 @@ coverage.json
 /playwright-report/
 /playwright/.cache/
 
+# E2E test data (copied from fixtures at runtime)
+/test-data/
+
 # Node (root-level, for Playwright)
 /node_modules/
 /package-lock.json

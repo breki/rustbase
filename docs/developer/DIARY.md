@@ -5,6 +5,26 @@ reverse chronological order.
 
 ---
 
+### 2026-04-15
+
+- Apply 22 template improvements from hoard (v0.3.0)
+
+    Modularized `xtask` into 8 modules with agent-friendly
+    stepwise `[1/N]` output format. Added `cargo xtask check`
+    fast compile check. Improved `/commit` skill: code
+    reviews before E2E, expanded review scope to frontend
+    and deployment files, Deployment category in Red Team,
+    all findings reported via `AskUserQuestion`. Added
+    `/check`, `/test`, `/validate` slash commands. Updated
+    `/todo` to support adding items with arguments.
+    Converted Playwright config and E2E tests to TypeScript.
+    Fixed `127.0.0.1` to `localhost` and `cd frontend` to
+    `cwd` option in Playwright config. Created cross-platform
+    `kill-servers.sh` and `e2e.sh` scripts. Added
+    `docs/ai-agents/guidelines.md`. Added E2E test policy
+    to `CLAUDE.md`. Fixed `@eslint/js` version alignment
+    and `vitest` `passWithNoTests`.
+
 ### 2026-04-10
 
 - Resolve open review findings (v0.2.1)

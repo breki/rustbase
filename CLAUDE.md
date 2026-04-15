@@ -32,6 +32,7 @@ members.
 ## Build Commands
 
 ```bash
+cargo xtask check             # fast compile check
 cargo xtask validate          # fmt + clippy + tests + coverage
 cargo xtask test [filter]     # tests only
 cargo xtask clippy            # lint only
@@ -66,6 +67,7 @@ with the backend:
 ### E2E Testing
 
 ```bash
+scripts/e2e.sh                   # kill stale servers + run tests
 npx playwright test              # run all E2E tests
 npx playwright test smoke        # filtered
 npx playwright test --ui         # interactive UI mode
@@ -74,6 +76,10 @@ npx playwright test --ui         # interactive UI mode
 Playwright auto-starts both backend and frontend.
 Configure ports via `.ports` file (copy from
 `.ports.sample`).
+
+**Every UI feature must have E2E tests** before the
+task is marked as done. Type checking and unit tests
+verify code correctness, not feature correctness.
 
 ### PowerShell Build Script
 
@@ -156,13 +162,16 @@ Always keep an `[Unreleased]` section at the top.
 
 | Skill | Purpose |
 |-------|---------|
+| `/check` | Fast compilation check (no tests) |
+| `/test` | Run tests with agent-friendly output |
+| `/validate` | Full quality pipeline with stepwise progress |
 | `/commit` | Commit with versioning, diary, and code review |
-| `/todo` | Process the next pending TODO item |
+| `/todo` | Add a TODO item or implement the next pending one |
 | `/simplify` | Review changed code for quality |
 | `/architect` | Project overview and architecture guide |
 | `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |
 | `/template-improve` | Log feedback for the rustbase template |
-| `/template-sync` | Sync upstream template changes into this project |
+| `/template-sync` | Sync upstream template changes |
 
 ## Template Sync
 

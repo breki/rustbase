@@ -6,6 +6,64 @@ findings.
 
 ---
 
+### AQ-014 -- Vec<&str> limits future extensibility
+
+- **Date:** 2026-04-15
+- **Category:** API Design (Low)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Low severity, not fixed -- pragmatic
+  for current usage.
+
+### AQ-013 -- validate stops on first failure
+
+- **Date:** 2026-04-15
+- **Category:** API Design (Low)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Low severity, not fixed -- fail-fast
+  is defensible since later steps may depend on earlier.
+
+### AQ-012 -- String-based errors across all modules
+
+- **Date:** 2026-04-15
+- **Category:** Error Handling (Low)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Low severity, not fixed -- pragmatic
+  for xtask scope, consistent with AQ-004 resolution.
+
+### AQ-011 -- Option<String> error pattern in results
+
+- **Date:** 2026-04-15
+- **Category:** Type Safety (Medium)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Low severity, not changed structurally.
+  Applied `match` on `Option` instead of
+  `unwrap_or_default()` to eliminate masked errors.
+
+### AQ-010 -- unwrap_or_default on known-Some
+
+- **Date:** 2026-04-15
+- **Category:** Correctness (Low)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Replaced `unwrap_or_default()` with
+  `match` in `dupes()`, `run_clippy()`,
+  `run_coverage()`.
+
+### AQ-009 -- helpers.rs tests don't call step_output
+
+- **Date:** 2026-04-15
+- **Category:** Type Safety (High)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Extracted `format_step()` function,
+  tests now assert on actual function output.
+
+### AQ-008 -- Duplicated clippy argument arrays
+
+- **Date:** 2026-04-15
+- **Category:** API Design (Medium)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Extracted `CLIPPY_ARGS` constant,
+  implemented `clippy()` in terms of `clippy_check()`.
+
 ### AQ-007 -- format! + parse for SocketAddr
 
 - **Date:** 2026-04-10

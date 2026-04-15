@@ -12,6 +12,46 @@ and this project adheres to
 
 ### Added
 
+- Modular xtask with agent-friendly stepwise output
+  (`[1/5] Fmt... OK (0.3s)`) and structured result types
+- `cargo xtask check` fast compilation check
+- `/check`, `/test`, `/validate` slash commands
+- `/todo` dual-mode: add items with arguments, implement
+  without
+- Cross-platform `scripts/kill-servers.sh` and
+  `scripts/e2e.sh` for E2E test workflow
+- `docs/ai-agents/guidelines.md` for agent-consumed
+  tooling conventions
+- E2E test policy in `CLAUDE.md` (UI features require
+  Playwright tests)
+- Root `tsconfig.json` for TypeScript E2E tests and
+  Playwright config
+
+### Changed
+
+- `/commit` skill: code reviews before E2E tests,
+  expanded review scope (frontend, config, deployment
+  files), Deployment category in Red Team prompt,
+  all findings reported via `AskUserQuestion`
+- Playwright config: `127.0.0.1` to `localhost`,
+  `cd frontend` to `cwd` option, `.js` to `.ts`
+- E2E smoke test renamed from `.spec.js` to `.spec.ts`
+
+### Fixed
+
+- `@eslint/js` version aligned with `eslint` (`^10.2.0`)
+- `vitest` config: `passWithNoTests: true` prevents
+  failure with no test files
+- xtask: `CARGO_TERM_COLOR=never` for all JSON-parsed
+  cargo output (coverage, metadata)
+- xtask: clippy noise lines (`generated N warning`)
+  filtered from output
+- `kill-servers.sh`: `pkill -x` instead of `pkill -f`;
+  PowerShell `Get-CimInstance` instead of deprecated
+  `wmic`
+
+### Added
+
 - Initial project template with workspace structure
 - xtask build automation (validate, test, clippy, fmt,
   coverage)

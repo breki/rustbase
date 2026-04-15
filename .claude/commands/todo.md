@@ -1,11 +1,29 @@
 ---
-description: Process the next pending TODO item
-allowed-tools: Bash(cargo xtask*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Read, Edit, Agent, AskUserQuestion, Skill(commit)
+description: Add a TODO item, or implement the next pending one
+allowed-tools: Bash(cargo xtask*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(scripts/e2e.sh), Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill(commit)
 ---
 
-Process the next pending item from `TODO.md`.
+Manage the project TODO list (`TODO.md`).
 
-## Instructions
+## Behaviour
+
+- **With arguments** (e.g. `/todo fix the search bar`):
+  add the text as a new pending item to `TODO.md` under
+  `## Pending`. Do NOT implement it -- just add it and
+  confirm.
+
+- **Without arguments** (just `/todo`): read `TODO.md`,
+  pick the first pending item, and implement it using
+  the steps below.
+
+## Adding an item
+
+1. Read `TODO.md`
+2. Append a new bullet under `## Pending` with the
+   user's text (wrap at 80 chars, use markdown bullet)
+3. Confirm the item was added
+
+## Implementing the next item
 
 1. Read `TODO.md` and identify the first pending item
    (items under the `## Done` heading are completed)

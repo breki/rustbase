@@ -5,6 +5,64 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-020 -- No port range validation in Playwright config
+
+- **Date:** 2026-04-15
+- **Category:** Correctness (Low)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Low severity, not fixed -- `.ports`
+  file is developer-controlled local config.
+
+### RT-019 -- helpers.rs tests don't call step_output
+
+- **Date:** 2026-04-15
+- **Category:** Correctness (High)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Extracted `format_step()` returning
+  `String`, tests now call the actual function.
+  `step_output()` delegates to `format_step()`.
+
+### RT-018 -- Clippy "generated N warning" noise lines
+
+- **Date:** 2026-04-15
+- **Category:** Correctness (Low)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Added `.contains("generated")` filter
+  to `extract_warning_lines()`.
+
+### RT-017 -- cargo metadata missing CARGO_TERM_COLOR
+
+- **Date:** 2026-04-15
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Added `.env("CARGO_TERM_COLOR", "never")`
+  to `discover_src_dirs()` cargo metadata command.
+
+### RT-016 -- coverage.rs missing CARGO_TERM_COLOR
+
+- **Date:** 2026-04-15
+- **Category:** Correctness (High)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Replaced raw `Command::new` with
+  `run_cargo_capture()` which sets the env var.
+
+### RT-015 -- wmic deprecated on Windows 11
+
+- **Date:** 2026-04-15
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Replaced `wmic` with PowerShell
+  `Get-CimInstance` + `Stop-Process` in
+  `kill-servers.sh`.
+
+### RT-014 -- pkill -f too broad in kill-servers.sh
+
+- **Date:** 2026-04-15
+- **Category:** Security (Medium)
+- **Commit context:** v0.3.0 template improvements
+- **Resolution:** Changed `pkill -f rustbase-web` to
+  `pkill -x rustbase-web` for exact process name match.
+
 ### RT-013 -- awk version extraction substring match
 
 - **Date:** 2026-04-10
