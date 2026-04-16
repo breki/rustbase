@@ -6,6 +6,43 @@ findings.
 
 ---
 
+### AQ-018 -- tsconfig.json redeclared @tsconfig/svelte defaults
+
+- **Date:** 2026-04-16
+- **Category:** Project Configuration (Low)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** Reduced to only `noEmit: true`;
+  everything else inherited from the extended base.
+
+### AQ-017 -- template-feedback entries mixed statuses
+
+- **Date:** 2026-04-16
+- **Category:** Maintainability (Low)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** Added `[Deferred]`, `[Fixed locally]`,
+  `[N/A for template]` prefixes to the 2026-04-16
+  entries so triage is immediate.
+
+### AQ-016 -- JSON type assertions trusted server blindly
+
+- **Date:** 2026-04-16
+- **Category:** Type Safety (Medium)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** `App.svelte` now throws on `!res.ok`
+  and narrows results via `Partial<T>` + `??` fallbacks,
+  so a 500 response or a missing field no longer
+  silently produces `undefined` values in state.
+
+### AQ-015 -- Invoke-Dev had no guard for missing node_modules
+
+- **Date:** 2026-04-16
+- **Category:** Maintainability (Medium)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** `Invoke-Dev` now checks
+  `frontend/node_modules` before launching the backend
+  and emits an actionable error pointing at
+  `cd frontend && npm install`.
+
 ### AQ-014 -- Vec<&str> limits future extensibility
 
 - **Date:** 2026-04-15

@@ -5,6 +5,74 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-027 -- CHANGELOG not updated for 0.4.0
+
+- **Date:** 2026-04-16
+- **Category:** Project Configuration (High)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** Moved `[Unreleased]` content to
+  `[0.4.0] - 2026-04-16` with Added / Fixed entries for
+  this release.
+
+### RT-026 -- `npm run check` not wired into any pipeline
+
+- **Date:** 2026-04-16
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** Added `xtask/src/frontend_check.rs`
+  and wired `svelte-check` into `cargo xtask validate`
+  as step 6. Skips gracefully when frontend or
+  `node_modules` is absent.
+
+### RT-025 -- `allowImportingTsExtensions` unused in tsconfig
+
+- **Date:** 2026-04-16
+- **Category:** Project Configuration (Low)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** Removed. Also dropped other redeclared
+  defaults already set by `@tsconfig/svelte` base.
+
+### RT-024 -- `typescript: ^5.8.0` pin narrower than peers need
+
+- **Date:** 2026-04-16
+- **Category:** Project Configuration (Low)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** Relaxed to `^5.0.0` to match
+  `@tsconfig/svelte` / `svelte-check` peer requirements.
+
+### RT-023 -- Invoke-Dev has no backend pre-build
+
+- **Date:** 2026-04-16
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** `Invoke-Dev` now runs `cargo build -p
+  rustbase-web` up front and launches the compiled
+  binary directly. Compile errors surface immediately
+  instead of silently behind a running frontend.
+
+### RT-022 -- `.ports` config silently ignored by Invoke-Dev
+
+- **Date:** 2026-04-16
+- **Category:** Correctness (High)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** Added `Get-BackendPort` helper that
+  parses `.ports` the same way `vite.config.js` does,
+  and passes `--port $backendPort` to the backend.
+  Parallel worktrees now work with `Invoke-Dev`.
+
+### RT-021 -- Invoke-Dev orphaned the backend on Ctrl+C
+
+- **Date:** 2026-04-16
+- **Category:** Security / Correctness (High)
+- **Commit context:** v0.4.0 dev command + frontend TypeScript
+- **Resolution:** Combined two fixes: (1) launch the
+  already-built `rustbase-web.exe` directly instead of
+  via `cargo run`, so there is no cargo shim process;
+  (2) in the `finally` block, enumerate descendants via
+  `Get-CimInstance Win32_Process -Filter
+  "ParentProcessId=..."` and stop them before the
+  parent, as belt-and-suspenders.
+
 ### RT-020 -- No port range validation in Playwright config
 
 - **Date:** 2026-04-15

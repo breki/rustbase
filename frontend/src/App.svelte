@@ -1,5 +1,14 @@
-<script>
+<script lang="ts">
   import { onMount } from "svelte";
+
+  interface StatusResponse {
+    status: string;
+    version: string;
+  }
+
+  interface GreetingResponse {
+    message: string;
+  }
 
   let status = $state("loading...");
   let version = $state("");
@@ -8,17 +17,19 @@
   onMount(async () => {
     try {
       const res = await fetch("/api/status");
-      const data = await res.json();
-      status = data.status;
-      version = data.version;
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = (await res.json()) as Partial<StatusResponse>;
+      status = data.status ?? "unreachable";
+      version = data.version ?? "";
     } catch {
       status = "unreachable";
     }
 
     try {
       const res = await fetch("/api/greeting");
-      const data = await res.json();
-      greeting = data.message;
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = (await res.json()) as Partial<GreetingResponse>;
+      greeting = data.message ?? "Could not reach API";
     } catch {
       greeting = "Could not reach API";
     }

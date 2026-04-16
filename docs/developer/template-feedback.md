@@ -9,6 +9,47 @@ Newest entries first.
 
 ---
 
+## 2026-04-16
+
+- **[Deferred] Deploy logic belongs in xtask, not bash
+  scripts.** Logged in this session; deferred for a
+  dedicated design discussion -- hoard's deploy is
+  specific to a Raspberry Pi / SSH / systemd workflow,
+  and the right template baseline needs a call on
+  config format (toml?), target (any SSH host vs.
+  arch-specific cross-compile), and whether to ship
+  placeholder or no implementation at all. Not
+  resolved by the implement pass that followed the
+  initial log.
+
+- **[Fixed locally] `@eslint/js` pin in
+  `frontend/package.json` was unresolvable.** The
+  template shipped `"@eslint/js": "^10.2.0"`, but
+  10.0.1 is the latest published version on npm, so
+  `npm install` from a clean clone failed with
+  `ETARGET`. The lockfile had 10.0.1 installed,
+  masking the problem until someone ran `install`
+  without the lock. **Fix:** changed the pin to
+  `^10.0.0`. Template should pin to a version that
+  actually exists and ideally be kept in sync by a
+  bot like Renovate.
+
+- **[N/A for template] Playwright config should isolate
+  test data from committed fixtures.** Logged in this
+  session, but not directly applicable to the template
+  as-is: `rustbase-web` has no persistent data --
+  `/api/status` and `/api/greeting` return static
+  values. The fixture-isolation pattern becomes
+  relevant the moment a downstream project adds a data
+  store. **Fix (for the template):** when a
+  data-persistence example is eventually added to the
+  template, include the hoard pattern alongside it
+  (globalSetup copies `e2e/fixtures/*.json` to
+  `test-data/`, backend run with `--data test-data`).
+  Until then, leave it to individual projects.
+
+## Pre-2026-04-16 entries
+
 ## vite.config.js uses CommonJS `__dirname` in ESM context
 
 `frontend/package.json` declares `"type": "module"`,

@@ -3,6 +3,7 @@ mod clippy_cmd;
 mod coverage;
 mod dupes;
 mod fmt_cmd;
+mod frontend_check;
 mod helpers;
 mod test_cmd;
 mod validate;

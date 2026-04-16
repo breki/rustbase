@@ -6,7 +6,7 @@
 param(
     [Parameter(Position = 0)]
     [ValidateSet(
-        "build", "build-only", "test", "clippy",
+        "build", "build-only", "dev", "test", "clippy",
         "coverage", "validate", "e2e", "frontend",
         "clean", "help"
     )]
@@ -21,6 +21,7 @@ Usage: .\build.ps1 [command]
 Commands:
   build       Full build with all quality checks (default)
   build-only  Build release binaries only
+  dev         Start backend + frontend dev servers
   test        Run all Rust tests
   clippy      Run clippy linter
   coverage    Generate HTML coverage report
@@ -46,6 +47,60 @@ function Invoke-Build {
 function Invoke-BuildOnly {
     cargo build --release
     if ($LASTEXITCODE -ne 0) { exit 4 }
+}
+
+function Get-BackendPort {
+    $portsFile = Join-Path $PSScriptRoot ".ports"
+    if (-not (Test-Path $portsFile)) { return 3000 }
+    foreach ($line in Get-Content $portsFile) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#")) { continue }
+        if ($trimmed -match '^backend_port\s*=\s*(\d+)') {
+            return [int]$Matches[1]
+        }
+    }
+    return 3000
+}
+
+function Invoke-Dev {
+    if (-not (Test-Path "frontend/node_modules")) {
+        Write-Host "frontend/node_modules missing. Run:"
+        Write-Host "  cd frontend && npm install"
+        exit 4
+    }
+
+    # Build the backend up front so compile errors surface
+    # immediately, and so the dev loop launches the already-
+    # built binary rather than a cargo shim (which on Windows
+    # would orphan the web server process on Ctrl+C).
+    Write-Host "Building backend..."
+    cargo build -p rustbase-web
+    if ($LASTEXITCODE -ne 0) { exit 4 }
+
+    $backendPort = Get-BackendPort
+    $backendExe = "target/debug/rustbase-web.exe"
+    Write-Host "Starting backend on :$backendPort and frontend on :5173..."
+    Write-Host "Open http://localhost:5173"
+    Write-Host "Press Ctrl+C to stop; backend will be terminated automatically."
+    $backend = Start-Process -PassThru -NoNewWindow $backendExe `
+        -ArgumentList "--port", $backendPort
+    try {
+        Push-Location frontend
+        npm run dev
+    }
+    finally {
+        Pop-Location
+        Get-CimInstance Win32_Process `
+            -Filter "ParentProcessId=$($backend.Id)" |
+            ForEach-Object {
+                Stop-Process -Id $_.ProcessId -Force `
+                    -ErrorAction SilentlyContinue
+            }
+        if (!$backend.HasExited) {
+            Stop-Process -Id $backend.Id -Force `
+                -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Invoke-Test {
@@ -101,6 +156,7 @@ function Invoke-Clean {
 switch ($Command) {
     "build"      { Invoke-Build }
     "build-only" { Invoke-BuildOnly }
+    "dev"        { Invoke-Dev }
     "test"       { Invoke-Test }
     "clippy"     { Invoke-Clippy }
     "coverage"   { Invoke-Coverage }

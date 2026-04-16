@@ -10,8 +10,23 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-16
+
 ### Added
 
+- `build.ps1 dev` command launches backend + frontend
+  dev servers with one invocation (parses `.ports`,
+  pre-builds the backend, kills descendants cleanly on
+  Ctrl+C)
+- Frontend TypeScript support: `tsconfig.json`,
+  `typescript`, `@tsconfig/svelte`, `svelte-check`
+  dev dependencies; `.ts` entry point; `lang="ts"` in
+  `App.svelte` with typed API response interfaces and
+  runtime `res.ok` narrowing
+- `npm run check` script in `frontend/package.json`
+- `cargo xtask validate` now runs `svelte-check` as
+  step 6 (skipped gracefully when no frontend is
+  present or `node_modules` is missing)
 - Modular xtask with agent-friendly stepwise output
   (`[1/5] Fmt... OK (0.3s)`) and structured result types
 - `cargo xtask check` fast compilation check
@@ -39,7 +54,13 @@ and this project adheres to
 
 ### Fixed
 
-- `@eslint/js` version aligned with `eslint` (`^10.2.0`)
+- `@eslint/js` pin corrected from `^10.2.0` to
+  `^10.0.0` (10.2.0 was never published to npm, so
+  `npm install` failed with `ETARGET` on clean clones)
+- Vite dev proxy now forwards `/health` to the backend
+  (previously only `/api/*` was proxied, which broke
+  the `health endpoint returns OK` E2E test against
+  the frontend origin)
 - `vitest` config: `passWithNoTests: true` prevents
   failure with no test files
 - xtask: `CARGO_TERM_COLOR=never` for all JSON-parsed

@@ -5,6 +5,40 @@ reverse chronological order.
 
 ---
 
+### 2026-04-16
+
+- Add `build.ps1 dev` command + frontend TypeScript (v0.4.0)
+
+    Added `Invoke-Dev` to `build.ps1`: parses `.ports` for
+    `backend_port`, pre-builds the backend so compile errors
+    surface immediately, launches the compiled
+    `rustbase-web.exe` directly (not via `cargo run`) so
+    Ctrl+C cleanup via `Get-CimInstance` descendant
+    enumeration actually kills the web server instead of
+    orphaning it. Guards against missing
+    `frontend/node_modules` before starting the backend.
+
+    Added frontend TypeScript: `typescript`,
+    `@tsconfig/svelte`, `svelte-check` dev deps;
+    `tsconfig.json` extending `@tsconfig/svelte` (only
+    `noEmit` override); renamed `main.js` to `main.ts` with
+    a `getElementById` null guard; converted `App.svelte`
+    to `<script lang="ts">` with `StatusResponse` /
+    `GreetingResponse` interfaces and `res.ok` + partial
+    narrowing on `fetch` results. Added `npm run check`
+    script. Wired `svelte-check` into `cargo xtask validate`
+    as step 6 via new `xtask/src/frontend_check.rs` module
+    (skips gracefully when no frontend or `node_modules`).
+
+    Fixed pre-existing bad pin: `@eslint/js` was `^10.2.0`
+    but the latest published version on npm is `10.0.1`,
+    so `npm install` failed with `ETARGET` on clean
+    clones. Relaxed `typescript` pin from `^5.8.0` to
+    `^5.0.0` to match peer requirements. Added `/health`
+    to `vite.config.js` proxy list so dev mode matches
+    production topology and the `health endpoint returns
+    OK` E2E test actually exercises the backend.
+
 ### 2026-04-15
 
 - Apply 22 template improvements from hoard (v0.3.0)

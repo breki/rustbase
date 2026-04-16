@@ -45,6 +45,10 @@ export default defineConfig({
         target: `http://127.0.0.1:${backendPort}`,
         changeOrigin: true,
       },
+      "/health": {
+        target: `http://127.0.0.1:${backendPort}`,
+        changeOrigin: true,
+      },
     },
   },
 });
