@@ -198,7 +198,8 @@ Always keep an `[Unreleased]` section at the top.
 | `/test` | Run tests with agent-friendly output |
 | `/validate` | Full quality pipeline with stepwise progress |
 | `/commit` | Commit with versioning, diary, and code review |
-| `/todo` | Add a TODO item or implement the next pending one |
+| `/todo` | Capture a work item into `docs/todo.md` (no implementation) |
+| `/implement` | Plan + implement a captured item; writes `docs/issues/<slug>.md` |
 | `/simplify` | Review changed code for quality |
 | `/architect` | Project overview and architecture guide |
 | `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |

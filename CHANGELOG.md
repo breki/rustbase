@@ -10,6 +10,34 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- New `/implement` skill plans + executes a captured
+  TODO item. Phase 1 writes `docs/issues/<slug>.md`
+  (Problem, Context, Open questions, Plan, Test
+  strategy, Decisions); Phase 2 codes with TDD per
+  the refined CLAUDE.md rule; Phase 3 finalises
+  (validate, status update, optional pre-launched
+  reviewers in the background, manual verification,
+  `/commit`).
+- `docs/issues/` directory for per-item planning
+  docs. Each implemented item gets a stable
+  audit-trail document linked from `docs/todo.md`.
+
+### Changed
+
+- `/todo` skill split into capture-only behaviour:
+  with arguments it captures a new item with a
+  generated slug; without arguments it lists pending
+  slugs. The "implement next pending item" mode
+  moved to the new `/implement` skill, where
+  planning and implementation are explicit phases.
+- TODO list relocated from root `TODO.md` to
+  `docs/todo.md`. The slug-prefixed bullet shape
+  (`- **<slug>** -- summary`) is now part of the
+  captured format so `/implement <slug>` can locate
+  items unambiguously.
+
 ### Changed (workflow)
 
 - `/template-sync` step 5 now cross-references

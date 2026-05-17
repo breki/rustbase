@@ -12,7 +12,9 @@ integration, quality gates, and CI/CD.
   - `CLAUDE.md` project guidance
   - Stop hook running validation on modified Rust files
   - `/commit` skill with Red Team + Artisan code review
-  - `/todo` skill for TODO.md processing
+  - `/todo` skill captures work into `docs/todo.md`
+  - `/implement` skill plans + executes captured items
+    (writes `docs/issues/<slug>.md`)
   - `/architect` and `/web-dev` domain skills
 - **xtask** build automation:
   - `cargo xtask validate` (fmt + clippy + tests +
