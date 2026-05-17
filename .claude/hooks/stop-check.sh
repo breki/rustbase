@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
-# Stop hook: runs cargo xtask validate when Rust files
-# have been modified.
+# Stop hook: runs a fast-path subset of validate when
+# Rust files have been modified -- clippy + tests only.
+#
+# Coverage and duplication are intentionally skipped:
+# coverage alone adds ~15s per invocation on a small
+# codebase, and the Stop hook fires often enough during
+# interactive work that the cost compounds. Full
+# `cargo xtask validate` still runs from /commit and
+# is available manually for explicit pre-flight checks.
+#
+# fmt-check is also skipped -- formatting is virtually
+# always correct in interactive flows, and /commit's
+# full validate catches any drift before a commit lands.
 #
 # Exit codes:
 #   0 -- all checks passed (or nothing to check)
@@ -31,7 +42,7 @@ if [ -z "$changed_rs" ]; then
 fi
 
 # --- Run checks ------------------------------------------
-output=$(cargo xtask validate 2>&1) || {
+output=$(cargo xtask clippy 2>&1 && cargo xtask test 2>&1) || {
   echo "$output" >&2
   exit 2
 }

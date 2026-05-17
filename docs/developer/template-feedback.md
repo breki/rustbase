@@ -73,6 +73,23 @@ individual projects.
 
 ## Resolved
 
+### 2026-05-17 -- Stop hook ran full `cargo xtask validate`, including ~15s coverage step
+
+Surfaced from kozmotic's template feedback (2026-05-04).
+The Stop hook ran `cargo xtask validate` -- fmt +
+clippy + tests + coverage + duplication + frontend
+check -- on every stop where Rust files had changed.
+Coverage alone adds ~15s on a small codebase, and the
+Stop hook fires often enough during interactive work
+that the cost compounded. **Fix:** Stop hook now runs
+`cargo xtask clippy && cargo xtask test` only,
+skipping coverage, duplication, fmt-check, and the
+frontend type check. Full validate still runs from
+`/commit` (and is available manually) so coverage and
+duplication signal is preserved at the commit gate;
+the Stop hook is positioned purely as a fast
+interactive safety net for lint + test regressions.
+
 ### 2026-05-17 -- `scripts/` shipped 5 trivial one-line cargo wrappers redundant with xtask
 
 Surfaced from kozmotic's template feedback (2026-05-04).
