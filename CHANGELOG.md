@@ -12,6 +12,22 @@ and this project adheres to
 
 ### Added
 
+- `cargo xtask clean-cache` empties
+  `target/{debug,release}/incremental/` while keeping
+  the directories themselves. Reports bytes freed per
+  directory plus a total. Manual invocation only --
+  never auto-wired. Symlinks and Windows directory
+  junctions are unlinked rather than followed
+  (prevents accidental deletion outside the
+  workspace); per-entry failures are collected and
+  reported at the end rather than aborting (the AV-
+  and rust-analyzer-resilience use case the tool
+  exists for).
+- `helpers::dir_size` and `helpers::fmt_bytes` general
+  utilities; `helpers::temp_scratch` shared test-only
+  scratch-directory helper (PID + thread id + atomic
+  counter for parallel-test isolation without a
+  `tempfile` dependency).
 - `[profile.release]` defaults `incremental = true,
   codegen-units = 256` for faster iteration on
   personal-use deployments (override for

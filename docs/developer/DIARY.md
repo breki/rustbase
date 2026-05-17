@@ -7,6 +7,52 @@ reverse chronological order.
 
 ### 2026-05-17
 
+- Apply ledgerstone template improvements (Batch B, clean-cache) (v0.7.0)
+
+    Ported Ledgerstone's `cargo xtask clean-cache`
+    command. Empties `target/{debug,release}/
+    incremental/` (preserves the directories themselves
+    so cargo refills them on next build), reports bytes
+    freed per directory and a total. Manual invocation
+    only -- never auto-wired into builds or deploys
+    since auto-cleanup defeats incremental caching. The
+    original motivation was Ledgerstone's 32.8 GB of
+    stale `incremental/` content accumulating across
+    months of cargo invocations on Windows.
+
+    The port hardened two aspects beyond the
+    Ledgerstone original:
+
+    1. **Symlink/junction safety.** The original used
+       `path.is_dir()` + `fs::remove_dir_all`, both of
+       which follow symlinks. A directory junction
+       under `incremental/` (more common on Windows
+       than people realise) could redirect deletion
+       outside the workspace. The port uses
+       `DirEntry::file_type()` (no traversal) and
+       routes symlinks through `remove_file` /
+       `remove_dir` so the link itself unlinks but the
+       target survives. Regression test plants a
+       symlink-to-outside and asserts the target's
+       contents remain.
+
+    2. **Continue-on-error.** The original `?`-aborted
+       on the first failed deletion. Since the tool
+       exists specifically to clean caches that
+       Windows AV and rust-analyzer transiently lock,
+       aborting on a single locked file defeated the
+       purpose. `clear_dir_contents` now returns
+       `(bytes_freed, Vec<String> errors)`,
+       accumulates per-entry failures, and continues.
+       `clean_cache` prints the error list after the
+       totals and returns a final `Err` with the
+       count.
+
+    Shared utilities (`dir_size`, `fmt_bytes`,
+    `temp_scratch`) live in `helpers.rs` so future
+    "disk-usage" or "clean" commands can reuse them
+    instead of copy-paste.
+
 - Apply ledgerstone template improvements (Batch A) (v0.6.0)
 
     Three suggestions from

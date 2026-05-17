@@ -5,6 +5,37 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-039 -- `clean-cache` mid-loop `?` abort defeated its Windows-AV use case
+
+- **Date:** 2026-05-17
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.7.0 ledgerstone improvements Batch B (clean-cache)
+- **Resolution:** `clear_dir_contents` now returns
+  `(bytes_freed, Vec<String> errors)`. Each entry's
+  deletion failure is captured into the vec and the loop
+  continues; both incremental directories are walked
+  even if one entry in the first dir is locked.
+  `clean_cache` prints the error list after the totals
+  and returns `Err(format!("{N} deletion error(s)"))`
+  so the user sees a clear count and the affected paths.
+
+### RT-038 -- `clean-cache` could follow symlinks/junctions outside the workspace
+
+- **Date:** 2026-05-17
+- **Category:** Correctness / Security (Medium)
+- **Commit context:** v0.7.0 ledgerstone improvements Batch B (clean-cache)
+- **Resolution:** Switched the deletion path from
+  `path.is_dir()` + `fs::remove_dir_all` (both follow
+  symlinks) to using `entry.file_type()` from the
+  `DirEntry` (no traversal) and dispatching: symlinks
+  go through `remove_file` on Unix and `remove_dir`
+  with `remove_file` fallback on Windows so directory
+  junctions get unlinked rather than recursed into.
+  Added a regression test that plants a symlink to an
+  outside tree inside the scratch incremental dir,
+  runs the cleaner, and asserts the symlink target's
+  contents survive.
+
 ### RT-037 -- `[profile.release]` defaults risky for a template (cross-confirmed with AQ-031)
 
 - **Date:** 2026-05-17

@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::Instant;
 
@@ -43,6 +44,79 @@ pub fn step_output(
 pub fn elapsed_str(start: Instant) -> String {
     let secs = start.elapsed().as_secs_f64();
     format!("{secs:.1}s")
+}
+
+/// Format a byte count as a human-readable string with
+/// a binary unit suffix (`B`, `KiB`, `MiB`, `GiB`,
+/// `TiB`). One decimal place above `B`.
+pub fn fmt_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KiB", "MiB", "GiB", "TiB"];
+    // Cache sizes routinely sum into the tens-of-GB
+    // range, well under f64's 2^52 mantissa headroom,
+    // so precision loss is not a real concern here.
+    #[allow(clippy::cast_precision_loss)]
+    let mut v = bytes as f64;
+    let mut idx = 0;
+    while v >= 1024.0 && idx + 1 < UNITS.len() {
+        v /= 1024.0;
+        idx += 1;
+    }
+    if idx == 0 {
+        format!("{bytes} {}", UNITS[0])
+    } else {
+        format!("{v:.1} {}", UNITS[idx])
+    }
+}
+
+/// Recursive byte sum for a path. Symlinks are not
+/// followed and contribute zero bytes -- defends
+/// against symlink-loop stack blow-up and against
+/// attributing symlink-target sizes to the source.
+///
+/// Errors at every level carry the failing path so
+/// downstream warnings can name the actual culprit
+/// rather than the top-level entry being walked.
+pub fn dir_size(path: &Path) -> Result<u64, String> {
+    let meta = fs::symlink_metadata(path)
+        .map_err(|e| format!("symlink_metadata {}: {e}", path.display()))?;
+    if meta.file_type().is_symlink() {
+        return Ok(0);
+    }
+    if meta.is_file() {
+        return Ok(meta.len());
+    }
+    let mut total = 0u64;
+    let entries = fs::read_dir(path)
+        .map_err(|e| format!("read_dir {}: {e}", path.display()))?;
+    for entry in entries {
+        let entry = entry
+            .map_err(|e| format!("entry under {}: {e}", path.display()))?;
+        match dir_size(&entry.path()) {
+            Ok(n) => total += n,
+            Err(e) => eprintln!("warning: {e} (skipping)"),
+        }
+    }
+    Ok(total)
+}
+
+/// Per-test scratch directory under the system temp.
+/// PID + thread id + atomic counter keep parallel test
+/// runs from colliding without adding a `tempfile`
+/// dependency. Cleanup is the caller's responsibility
+/// (best-effort `remove_dir_all` at end of test).
+#[cfg(test)]
+pub(crate) fn temp_scratch(label: &str) -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let seq = SEQ.fetch_add(1, Ordering::SeqCst);
+    let pid = std::process::id();
+    let tid = format!("{:?}", std::thread::current().id());
+    let tid_clean: String =
+        tid.chars().filter(char::is_ascii_alphanumeric).collect();
+    let dir = std::env::temp_dir()
+        .join(format!("rustbase-xtask-{label}-{pid}-{tid_clean}-{seq}"));
+    fs::create_dir_all(&dir).unwrap();
+    dir
 }
 
 /// Resolve the cargo binary path. Prefers the `CARGO`
@@ -125,6 +199,21 @@ mod tests {
             "workspace root should contain Cargo.toml: {}",
             root.display()
         );
+    }
+
+    #[test]
+    fn fmt_bytes_under_kib() {
+        assert_eq!(fmt_bytes(0), "0 B");
+        assert_eq!(fmt_bytes(512), "512 B");
+        assert_eq!(fmt_bytes(1023), "1023 B");
+    }
+
+    #[test]
+    fn fmt_bytes_scaling() {
+        assert_eq!(fmt_bytes(1024), "1.0 KiB");
+        assert_eq!(fmt_bytes(1536), "1.5 KiB");
+        assert_eq!(fmt_bytes(1024 * 1024), "1.0 MiB");
+        assert_eq!(fmt_bytes(3 * 1024 * 1024 * 1024), "3.0 GiB");
     }
 
     #[test]

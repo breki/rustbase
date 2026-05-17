@@ -1,4 +1,5 @@
 mod check;
+mod clean_cache;
 mod clippy_cmd;
 mod coverage;
 mod deploy;
@@ -48,6 +49,9 @@ enum XCommand {
     Deploy,
     /// One-time remote provisioning (user, dirs, service)
     DeploySetup,
+    /// Empty `target/{debug,release}/incremental/` while
+    /// keeping the dirs themselves (manual invocation only)
+    CleanCache,
 }
 
 fn main() {
@@ -65,6 +69,7 @@ fn main() {
         XCommand::Dupes => dupes::dupes(),
         XCommand::Deploy => deploy::deploy(),
         XCommand::DeploySetup => deploy_setup::deploy_setup(),
+        XCommand::CleanCache => clean_cache::clean_cache(),
     };
 
     if let Err(e) = result {

@@ -6,6 +6,42 @@ findings.
 
 ---
 
+### AQ-034 -- `temp_scratch` test helper belongs in shared `helpers`
+
+- **Date:** 2026-05-17
+- **Category:** Abstraction Boundaries (Low)
+- **Commit context:** v0.7.0 ledgerstone improvements Batch B (clean-cache)
+- **Resolution:** Moved `temp_scratch` from
+  `clean_cache.rs` tests into `helpers.rs` as
+  `#[cfg(test)] pub(crate) fn temp_scratch`. Future
+  xtask modules with file-I/O tests can reuse the same
+  pid+tid+seq-isolated scratch helper instead of
+  re-implementing it.
+
+### AQ-033 -- `dir_size` is a generic FS utility, not cache-specific
+
+- **Date:** 2026-05-17
+- **Category:** Abstraction Boundaries (Low)
+- **Commit context:** v0.7.0 ledgerstone improvements Batch B (clean-cache)
+- **Resolution:** Moved `dir_size` to `helpers.rs`
+  alongside `fmt_bytes`. `clean_cache.rs` now imports
+  the helper. Future "disk-usage" / "clean" commands
+  can reuse it without copy-paste.
+
+### AQ-032 -- `dir_size` recursion dropped failing-entry path
+
+- **Date:** 2026-05-17
+- **Category:** Error Handling & Messages (Medium)
+- **Commit context:** v0.7.0 ledgerstone improvements Batch B (clean-cache)
+- **Resolution:** Changed `dir_size`'s return type to
+  `Result<u64, String>`. `fs::read_dir(path)?` and
+  `entry?` now wrap into `format!("read_dir {path}: {e}")`
+  and `format!("entry under {path}: {e}")` at the
+  failure site. The recursive callers print the wrapped
+  message verbatim, so warnings now name the specific
+  failing path instead of the top-level entry being
+  walked.
+
 ### AQ-031 -- `[profile.release]` template semantics under-documented (cross-confirmed with RT-037)
 
 - **Date:** 2026-05-17

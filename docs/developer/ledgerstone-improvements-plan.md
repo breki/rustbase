@@ -98,15 +98,19 @@ the eventual commit message(s) so the trail is preserved.
 - **Scope:** ~75 LOC implementation + ~90 LOC tests in a new
   `xtask/src/clean_cache.rs` module, plus wiring in
   `xtask/src/main.rs` / command enum.
-- **Status:** todo
+- **Status:** **done** -- v0.7.0. Two hardenings beyond
+  the Ledgerstone original: symlink/junction safety
+  (RT-038, regression test included) and continue-on-
+  error per-entry deletion (RT-039). Shared utilities
+  (`dir_size`, `fmt_bytes`, `temp_scratch`) live in
+  `helpers.rs`.
 - **Target:** `xtask/src/clean_cache.rs` (new),
-  `xtask/src/main.rs`, `xtask/src/lib.rs` (if present).
+  `xtask/src/helpers.rs`, `xtask/src/main.rs`.
 - **Notes:** Walks `target/debug/incremental/` and
   `target/release/incremental/`, deletes contents (preserves
   the dirs themselves), reports bytes freed. Manual invocation
   only -- never auto-wired. Ledgerstone freed 32.8 GB on first
-  run. Port the existing impl from
-  `D:\src\ledgerstone\main\xtask\src\clean_cache.rs`.
+  run.
 
 ### 7. Auto-print coverage detail on validate failure
 
