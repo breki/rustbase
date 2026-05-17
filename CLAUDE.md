@@ -271,6 +271,50 @@ remain `unsafe`-forbidden. Document the scoped
 exception with a comment near the use site so reviewers
 can verify the unsafe block is genuinely necessary.
 
+## Coverage exceptions for hardware-bound code
+
+The 90% coverage gate (see Acceptance Criteria) assumes
+every code path can run under `cargo llvm-cov` in CI.
+Real projects routinely have I/O paths that can't:
+audio playback, network calls against external
+services, native API calls (Win32, CoreAudio, ALSA),
+GPIO on embedded targets. The recipe for keeping the
+gate honest without weakening it:
+
+1. **Extract the hardware-bound code into a sibling
+   submodule.** Given `foo.rs` that contains both
+   business logic and an I/O call, split into `foo.rs`
+   (the orchestrator) and `foo/bar.rs` (the I/O leaf).
+   The leaf module should be as small as possible --
+   ideally just the unmockable call plus its
+   immediate error mapping.
+2. **Add the leaf submodule to the coverage
+   `IGNORE_REGEX`** in `xtask/src/coverage.rs`. The
+   existing default excludes `src/main.rs` only; extend
+   it with the new path. The leaf module is exempted
+   from the gate; the orchestrator is not.
+3. **Add a `*_TEST_*` env-var escape hatch in the
+   excluded module.** For example, `RUSTBASE_TEST_AUDIO`
+   short-circuits the real native call and returns a
+   fixed `Ok`/`Err` shape. This keeps the parent
+   module's post-call success and error branches
+   testable -- they're the parts that actually carry
+   business logic, and they remain inside the 90% gate.
+
+What this gets you: the orchestrator is fully covered
+(including both branches of its `match
+play_audio_native() { Ok => ..., Err => ... }`), the
+leaf is honestly acknowledged as untested in CI, and
+there's no `#[cfg(test)]` test-only branch leaking into
+production code paths.
+
+When NOT to use this recipe: if the I/O can be faked
+with a trait + dependency injection at the call site
+without contortions, do that instead. The submodule-
+plus-ignore-regex pattern is for cases where the
+indirection itself would obscure the code more than it
+reveals.
+
 ## Edition-2024 migration notes
 
 The template ships on Rust edition 2024. Projects

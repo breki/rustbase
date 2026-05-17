@@ -73,6 +73,22 @@ individual projects.
 
 ## Resolved
 
+### 2026-05-17 -- No documented pattern for hardware-bound code under the 90% coverage gate
+
+Surfaced from kozmotic's template feedback (2026-05-04).
+The 90% coverage gate assumes everything is testable,
+but real CLI projects have I/O paths (audio, network,
+native APIs) that can't run in CI. Kozmotic's working
+recipe -- extract the hardware-bound call into a
+sibling submodule, add the submodule to the coverage
+`IGNORE_REGEX`, and add a `*_TEST_*` env-var escape
+hatch so the parent module's success/error branches
+remain in the gate -- was undocumented. **Fix:** added
+a "Coverage exceptions for hardware-bound code" section
+to `CLAUDE.md` next to the existing workspace-lints
+override recipe, describing the three-step pattern and
+the explicit "use a fake trait if you can" caveat.
+
 ### 2026-04-16 -- `@eslint/js` pin in `frontend/package.json` was unresolvable
 
 The template shipped `"@eslint/js": "^10.2.0"`, but

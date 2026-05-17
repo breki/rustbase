@@ -77,6 +77,13 @@ and this project adheres to
 
 ### Changed (docs)
 
+- `CLAUDE.md` gains a "Coverage exceptions for
+  hardware-bound code" section documenting the
+  extract-to-submodule + ignore-regex + `*_TEST_*`
+  env-hatch recipe for I/O paths that can't run under
+  llvm-cov in CI. Sourced from kozmotic's template
+  feedback (the gate previously assumed everything was
+  testable; real CLI projects routinely aren't).
 - `CLAUDE.md` gains three new sections: "Workspace
   lints and xtask overrides" (the local-override
   recipe for derived projects that need OS-API code in
