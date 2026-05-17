@@ -40,6 +40,14 @@ and this project adheres to
 
 ### Changed (workflow)
 
+- Workflow retrospective extracted into a standalone
+  `/retrospect` skill so it can be invoked manually
+  mid-session (not just after a commit). `/commit`
+  step 12 now delegates to `/retrospect` rather than
+  inlining the rules; the recursive-skip carve-out
+  for workflow-only diffs lives in the skill and
+  applies only to auto-invocations, not when the
+  user runs `/retrospect` directly.
 - `/template-sync` step 5 now cross-references
   `template-feedback.md`'s **Open divergences**
   section. Incoming template changes that conflict

@@ -1,6 +1,6 @@
 ---
 description: Commit current changes following project conventions
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(cargo xtask validate*), Bash(cargo xtask fmt*), Bash(cargo generate-lockfile*), Bash(scripts/e2e.sh*), Read, Edit, Agent, AskUserQuestion
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(cargo xtask validate*), Bash(cargo xtask fmt*), Bash(cargo generate-lockfile*), Bash(scripts/e2e.sh*), Read, Edit, Agent, AskUserQuestion, Skill(retrospect)
 ---
 
 Commit the current changes following the project's git commit
@@ -265,58 +265,23 @@ EOF
 )"
 ```
 
-12. **Workflow retrospective** (runs *after* the
-    commit lands so it cannot block shipping).
+12. **Workflow retrospective** -- delegate to
+    `/retrospect` (runs *after* the commit lands so
+    it cannot block shipping).
 
-    **Skip when:** the diff is entirely under
-    `.claude/**` or `CLAUDE.md` -- a workflow-only
-    commit is one where the *work itself was authoring
-    the workflow rules*, so any "improvements" loop
-    back to the same files just committed. Other
-    markdown commits (`docs/**`, `README.md`, etc.)
-    should still run the retrospective because those
-    sessions usually involve real research / tool
-    work worth reflecting on.
+    The `/retrospect` skill owns the full set of
+    rules: the three buckets (Efficiency / Quality
+    / Speed), `[trivial]` vs `[propose]` tagging,
+    the offer to auto-apply trivial findings, and
+    the recursive-skip carve-out for workflow-only
+    diffs (`.claude/**` / `CLAUDE.md` only). See
+    `.claude/commands/retrospect.md` for the full
+    contract.
 
-    Walk the session and surface findings in three
-    buckets:
-    - **Efficiency**: tool calls that wasted budget
-      (redundant reads, full validate when
-      quick-validate would have caught the same
-      thing, repeated round-trips on a fixable
-      pattern, `cd subdir && ...` patterns).
-    - **Quality**: process shortcomings the code
-      reviewers don't catch (premature commit, missed
-      cross-reference, undocumented decision).
-    - **Speed**: wall-time delays caused by ordering
-      (could a slow step have run in the background?
-      did serial agent calls cost a parallel
-      opportunity?).
-
-    For each finding:
-    - Give it a short ID `<N>-<slug>` (e.g.
-      `2-redundant-validates`) so the user can reply
-      "apply 1, 3" or "skip 2".
-    - Tag `[trivial]` if it can be applied with a
-      single tool call right now (e.g. add a clause
-      to a doc, append a permission to settings).
-    - Tag `[propose]` if it needs user input,
-      cross-cuts multiple files, or implies a policy
-      decision.
-
-    End the retrospective by asking the user whether
-    to apply the `[trivial]` items immediately. The
-    `[propose]` items are surfaced for awareness and
-    stay ephemeral unless the user asks to escalate
-    them into a real RT/AQ finding, TODO, or doc
-    edit. Keeps step 12 cheap to run every commit
-    rather than "when I remember."
-
-    Empirically (Ledgerstone): applying this step
-    surfaced ~5 process improvements within two
-    sessions, three of them auto-fixable. The
-    recursive-skip carve-out is what makes the step
-    cheap enough to run *every* non-workflow commit.
+    From here, simply invoke `/retrospect`. If the
+    just-committed diff would trigger the recursive
+    skip, `/retrospect` no-ops silently. Otherwise
+    it produces the report inline.
 
 ## Rules
 
