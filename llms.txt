@@ -16,13 +16,56 @@ Frontend: Svelte 5 + Vite in `frontend/` (optional).
 ## Build Commands
 
 ```
-cargo xtask validate          # fmt + clippy + tests + coverage + dupes
+cargo xtask validate          # fmt + clippy + tests + coverage + dupes + frontend
+cargo xtask check             # fast compile-only check (no tests)
 cargo xtask test [filter]     # tests only
 cargo xtask clippy            # lint only
 cargo xtask fmt               # format code
-cargo xtask coverage          # coverage check (>=90%)
+cargo xtask coverage          # coverage check (>=90% workspace, >=85% per module)
 cargo xtask dupes             # code duplication check (<=6%)
+cargo xtask deploy            # build + sync + restart on remote Linux+systemd host
+cargo xtask deploy-setup      # one-time remote provisioning (user, dirs, service)
+cargo xtask clean-cache       # drop stale target/{debug,release}/incremental/ content
 ```
+
+`cargo xtask validate` is the canonical quality gate;
+all PRs and the Stop hook run it. Coverage failures
+include uncovered-line ranges per failing module, so
+diagnosis doesn't need a separate detail command.
+
+## Claude Code Skills
+
+Slash commands shipped under `.claude/commands/`:
+
+| Skill | Purpose |
+|-------|---------|
+| `/check` | Fast compile-only check (`cargo xtask check`) |
+| `/test` | Run tests with agent-friendly output |
+| `/validate` | Full quality pipeline with stepwise progress |
+| `/commit` | Commit with versioning, diary, CHANGELOG, parallel Red Team + Artisan code reviews (with cross-confirmed-finding detection), and a post-commit workflow retrospective |
+| `/retrospect` | Workflow retrospective on the session (Efficiency / Quality / Speed). Invoked automatically by `/commit`; also callable manually mid-session |
+| `/todo` | Capture a work item with a generated slug into `docs/todo.md` (capture only) |
+| `/implement` | Plan + execute a captured item. Phase 1 writes `docs/issues/<slug>.md`; Phase 2 codes with TDD; Phase 3 finalises and hands off to `/commit` |
+| `/template-sync` | Pull improvements from the upstream rustbase template into derived projects; cross-references open divergences from `template-feedback.md` so documented differences aren't re-proposed |
+| `/template-improve` | Log template feedback into one of three lifecycle sections (Open divergences / Resolved / Suggestions to flow back) |
+| `/architect` | Project overview and architecture guide |
+| `/web-dev` | Axum + Svelte 5 + Vite + Playwright patterns |
+
+Code-review findings logged in
+`docs/developer/redteam-{log,resolved}.md` and
+`artisan-{log,resolved}.md` (open / resolved pair,
+reverse-chronological).
+
+## Template Sync
+
+The repo tracks its template origin in
+`.template-sync.toml`. Derived projects use
+`/template-sync` to pull selected improvements
+upstream-to-downstream while preserving local
+customisations. The sync command consults the
+project's own `template-feedback.md` "Open
+divergences" section and auto-skips incoming changes
+that conflict with a documented divergence.
 
 ## Web Server
 
@@ -42,7 +85,7 @@ Options:
 
 | Method | Path           | Description            |
 |--------|----------------|------------------------|
-| GET    | /health        | Health check ("OK")    |
+| GET    | /health        | Health check (JSON `{"status":"ok"}`) |
 | GET    | /api/status    | Version and status     |
 | GET    | /api/greeting  | Sample greeting        |
 
@@ -53,17 +96,34 @@ client-side routing.
 
 - `#[deny(warnings)]`, `#[forbid(unsafe_code)]`
 - Clippy pedantic + perf
-- 90% line coverage minimum (85% per module)
+- 90% line coverage minimum, 85% per module
 - Code duplication <= 6% (production code, tests excluded)
 - `cargo fmt` enforced
+- Frontend: ESLint + Prettier + svelte-check, plus
+  Vitest unit/component tests and Playwright E2E
+
+## Build Profile
+
+`[profile.release]` ships with `incremental = true`
+and `codegen-units = 256`, tuned for fast iteration
+on personal-use deployments. Override these for
+performance-critical targets — see the comment block
+in the workspace `Cargo.toml` for the trade-off
+analysis and override recipe.
 
 ## Conventions
 
 - Conventional Commits (`feat`, `fix`, `chore`, etc.)
-- Semantic Versioning (version in `crates/rustbase/Cargo.toml`)
+  with AI-Generated footer
+- Semantic Versioning (version in
+  `crates/rustbase/Cargo.toml`)
 - Keep a Changelog format in `CHANGELOG.md`
+- Development diary in `docs/developer/DIARY.md`
 - LF line endings, 80-char line width
-- AI-Generated footer in commit messages
+- TDD: behaviour changes follow strict red/green;
+  structural additions (new self-contained modules)
+  may land test + impl together. See CLAUDE.md
+  "Test-Driven Development" for the full rule.
 
 ## Removing the Web App
 

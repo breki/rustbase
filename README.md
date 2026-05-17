@@ -9,20 +9,57 @@ integration, quality gates, and CI/CD.
 - **Optional web app**: Axum backend + Svelte 5/Vite
   frontend (delete if not needed)
 - **Claude Code** configuration:
-  - `CLAUDE.md` project guidance
+  - `CLAUDE.md` project guidance, including a
+    behaviour-change-vs-structural-addition refinement
+    of the TDD rule, an edition-2024 migration
+    appendix, the workspace-vs-xtask `unsafe_code`
+    override recipe, and a version-source-of-truth
+    convention
   - Stop hook running validation on modified Rust files
-  - `/commit` skill with Red Team + Artisan code review
-  - `/todo` skill captures work into `docs/todo.md`
-  - `/implement` skill plans + executes captured items
-    (writes `docs/issues/<slug>.md`)
+  - `/commit` -- versioning, diary, CHANGELOG, parallel
+    Red Team + Artisan code reviews with **cross-
+    confirmed-finding** detection, and a post-commit
+    workflow retrospective
+  - `/retrospect` -- standalone workflow retrospective
+    (Efficiency / Quality / Speed buckets,
+    `[trivial]`/`[propose]` tags, auto-apply offer for
+    trivial fixes). Invoked automatically by `/commit`;
+    also callable manually mid-session
+  - `/todo` -- capture work items with generated slugs
+    into `docs/todo.md` (capture only, never
+    implements)
+  - `/implement` -- plan + execute a captured item.
+    Phase 1 writes a planning doc at
+    `docs/issues/<slug>.md`; Phase 2 codes with TDD;
+    Phase 3 validates and hands off to `/commit`
+  - `/template-sync` -- pull improvements from the
+    upstream rustbase template into a derived
+    project; cross-references the project's open
+    divergences in `template-feedback.md` so
+    documented differences aren't re-proposed every
+    sync
+  - `/template-improve` -- log feedback about the
+    upstream template (open / resolved / suggestions
+    to flow back -- three-section lifecycle)
   - `/architect` and `/web-dev` domain skills
 - **xtask** build automation:
   - `cargo xtask validate` (fmt + clippy + tests +
-    coverage)
-  - `cargo xtask test [filter]`
-  - `cargo xtask clippy`
-  - `cargo xtask fmt`
-  - `cargo xtask coverage` (90% threshold)
+    coverage + duplication + frontend type-check;
+    coverage failures include uncovered-line ranges
+    per failing module)
+  - `cargo xtask test [filter]`, `clippy`, `fmt`,
+    `check` (fast compile-only)
+  - `cargo xtask coverage` (90% workspace floor, 85%
+    per module; structured failure reporting via
+    `CoverageFailure` enum)
+  - `cargo xtask dupes` (6% threshold)
+  - `cargo xtask deploy` / `deploy-setup` -- one-shot
+    deployment to a remote Linux + systemd host with
+    sandboxed service unit, frontend bundling, and
+    input-validated config
+  - `cargo xtask clean-cache` -- drop stale
+    `target/{debug,release}/incremental/` content
+    (symlink-safe; continues past locked files)
 - **GitHub Actions**:
   - CI: fmt, clippy, tests on Linux/Windows/macOS
   - Release: 5-target builds (both CLI + web binaries)
@@ -32,12 +69,19 @@ integration, quality gates, and CI/CD.
   - Clippy pedantic + perf
   - 90% line coverage minimum
   - Per-module 85% coverage floor
+  - Code duplication <= 6% (production code only)
+- **Build profile defaults**:
+  - `[profile.release]` tuned for iteration speed
+    (`incremental = true`, `codegen-units = 256`).
+    Documented override guidance for performance-
+    critical targets
 - **Conventions**:
   - Conventional Commits with AI-Generated footer
   - Semantic Versioning
   - Keep a Changelog format
   - Development diary for tracking changes
-  - Code review finding logs (Red Team + Artisan)
+  - Code review finding logs (Red Team + Artisan,
+    open + resolved pair)
   - LF line endings enforced
   - 80-char line width (code and markdown)
 
