@@ -3,13 +3,23 @@ use crate::helpers::{run_cargo_capture, run_cargo_stream};
 /// Maximum failure detail lines per test.
 const MAX_DETAIL_LINES: usize = 5;
 
+/// Test invocation scope.
+#[derive(Clone, Copy)]
+enum Scope {
+    /// `--workspace` -- every crate in the workspace.
+    Workspace,
+    /// `-p xtask` -- only the xtask crate. Used by
+    /// validate's Test step (see module docs there).
+    XtaskOnly,
+}
+
 /// Run tests with concise output.
 ///
 /// Prints `Test OK` on success. On failure, shows only
 /// the failing test names and assertion details.
 /// With `verbose`, streams raw cargo test output.
 pub fn test(filter: Option<&str>, verbose: bool) -> Result<(), String> {
-    let args = build_args(filter)?;
+    let args = build_args(Scope::Workspace, filter)?;
 
     if verbose {
         return run_cargo_stream(&args);
@@ -24,6 +34,39 @@ pub fn test(filter: Option<&str>, verbose: bool) -> Result<(), String> {
         return Ok(());
     }
 
+    report_failure(&stdout, &stderr)
+}
+
+/// Run only xtask's own tests quietly.
+///
+/// Used by validate's Test step. Coverage runs the
+/// workspace test suite under llvm-cov instrumentation
+/// (with `--exclude xtask`), so running the full
+/// workspace tests separately in Test would duplicate
+/// the same passes. Restricting Test to `-p xtask`
+/// keeps xtask covered without re-running every other
+/// crate.
+///
+/// On failure, prints the same rich diagnostics as
+/// `test()` to stderr (failing names, assertion
+/// details, or compile errors) before returning.
+pub fn test_check_xtask() -> Result<(), String> {
+    let args = build_args(Scope::XtaskOnly, None)?;
+    let output = run_cargo_capture(&args)?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    report_failure(&stdout, &stderr)
+}
+
+/// Print failure diagnostics to stderr and return the
+/// corresponding error string. Shared between `test()`
+/// and `test_check_xtask()`.
+fn report_failure(stdout: &str, stderr: &str) -> Result<(), String> {
     // Compilation error -- show first error lines.
     if stderr.contains("could not compile") {
         let errors: Vec<&str> = stderr
@@ -39,8 +82,8 @@ pub fn test(filter: Option<&str>, verbose: bool) -> Result<(), String> {
     }
 
     // Test failures -- show failing names + details.
-    let failed_names = extract_failed_names(&stdout);
-    let failures = extract_failure_details(&stdout, &stderr);
+    let failed_names = extract_failed_names(stdout);
+    let failures = extract_failure_details(stdout, stderr);
 
     eprintln!("FAILED\n");
     if failures.is_empty() {
@@ -58,27 +101,21 @@ pub fn test(filter: Option<&str>, verbose: bool) -> Result<(), String> {
     Err("test(s) failed".into())
 }
 
-/// Run tests quietly, returning Ok/Err based on exit
-/// code. Used by the validate module.
-pub fn test_check(filter: Option<&str>) -> Result<(), String> {
-    let args = build_args(filter)?;
-    let output = run_cargo_capture(&args)?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.contains("could not compile") {
-            Err("compilation failed".into())
-        } else {
-            Err("test(s) failed".into())
+/// Build the cargo test argument list.
+///
+/// Centralised so both the CLI `test` command and
+/// validate's xtask-only test step go through the
+/// same arg-construction path. Add new shared flags
+/// (e.g. `--locked`, `--no-fail-fast`) here.
+fn build_args(scope: Scope, filter: Option<&str>) -> Result<Vec<&str>, String> {
+    let mut args = vec!["test"];
+    match scope {
+        Scope::Workspace => args.push("--workspace"),
+        Scope::XtaskOnly => {
+            args.push("-p");
+            args.push("xtask");
         }
     }
-}
-
-/// Build the cargo test argument list.
-fn build_args(filter: Option<&str>) -> Result<Vec<&str>, String> {
-    let mut args = vec!["test", "--workspace"];
     if let Some(f) = filter {
         if f.is_empty() {
             return Err("test filter must not be empty".into());
@@ -209,5 +246,29 @@ failures:
                 .any(|d| d.starts_with("thread '")),
             "should not contain thread line"
         );
+    }
+
+    #[test]
+    fn build_args_workspace_no_filter() {
+        let args = build_args(Scope::Workspace, None).unwrap();
+        assert_eq!(args, vec!["test", "--workspace"]);
+    }
+
+    #[test]
+    fn build_args_xtask_only() {
+        let args = build_args(Scope::XtaskOnly, None).unwrap();
+        assert_eq!(args, vec!["test", "-p", "xtask"]);
+    }
+
+    #[test]
+    fn build_args_with_filter() {
+        let args = build_args(Scope::Workspace, Some("foo")).unwrap();
+        assert_eq!(args, vec!["test", "--workspace", "--", "foo"]);
+    }
+
+    #[test]
+    fn build_args_empty_filter_errors() {
+        let err = build_args(Scope::Workspace, Some("")).unwrap_err();
+        assert!(err.contains("must not be empty"));
     }
 }

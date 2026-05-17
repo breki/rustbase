@@ -19,3 +19,34 @@ module_name_repetitions = "allow"
 
 [profile.test]
 opt-level = 1
+
+# Personal-use webapp default: trade release-build
+# optimisation headroom for iteration speed. This is
+# NOT a standard release profile -- it intentionally
+# diverges from cargo defaults (`incremental = false`,
+# `codegen-units = 16`).
+#
+# Tradeoffs you are accepting by inheriting these:
+# - `incremental = true` in release is non-default and
+#   the cargo book documents that incremental compilation
+#   can degrade optimisation quality.
+#   <https://doc.rust-lang.org/cargo/reference/profiles.html#incremental>
+# - `codegen-units = 256` (vs default 16) splits the
+#   crate into many small units, which limits LLVM's
+#   cross-unit inlining and other interprocedural
+#   optimisations. Hot loops, allocator-heavy code, and
+#   monomorphisation-rich generic code are most
+#   affected. Empirical runtime cost in one rustbase-
+#   derived webapp (Ledgerstone) was <5%, but workloads
+#   vary -- benchmark before relying on the number.
+#
+# When to override (set `incremental = false` and
+# `codegen-units = 16` or remove this block entirely):
+# - CPU-bound services where p99 latency matters
+# - Any project shipping a binary to multiple users
+# - Projects using `cargo install` or publishing to a
+#   registry where consumers expect a well-optimised
+#   build
+[profile.release]
+incremental = true
+codegen-units = 256

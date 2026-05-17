@@ -5,6 +5,41 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-037 -- `[profile.release]` defaults risky for a template (cross-confirmed with AQ-031)
+
+- **Date:** 2026-05-17
+- **Category:** Project Configuration (Medium)
+- **Commit context:** v0.6.0 ledgerstone improvements Batch A
+- **Resolution:** Kept the `incremental = true,
+  codegen-units = 256` defaults but expanded the comment
+  block to document the non-default nature, the specific
+  workloads that pay the optimisation cost (hot loops,
+  allocator-heavy, monomorphisation-rich code), and
+  explicit override guidance for CPU-bound services,
+  multi-user binaries, and `cargo install` consumers.
+  Replaced the unsubstantiated "<5%" claim with an
+  attribution to Ledgerstone's single data point.
+
+### RT-036 -- `test_check_xtask` regressed failure diagnostics (cross-confirmed with AQ-030)
+
+- **Date:** 2026-05-17
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.6.0 ledgerstone improvements Batch A
+- **Resolution:** Extracted `report_failure(stdout, stderr)`
+  from `test()` and reused it from both `test()` and
+  `test_check_xtask()`. Validate's Test step now prints
+  failing test names + assertion details to stderr the
+  same way `cargo xtask test` does.
+
+### RT-035 -- "Test OK" step output misleading after scope narrow
+
+- **Date:** 2026-05-17
+- **Category:** Correctness (Low)
+- **Commit context:** v0.6.0 ledgerstone improvements Batch A
+- **Resolution:** Renamed validate step label from `Test`
+  to `Test (xtask only)` so the success line cannot be
+  read as covering the whole workspace.
+
 ### RT-034 -- `parse_port` did not handle `--port=N` equals form
 
 - **Date:** 2026-05-17

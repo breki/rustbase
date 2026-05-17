@@ -22,8 +22,8 @@ pub fn validate() -> Result<(), String> {
     // 2. Clippy
     run_step(2, "Clippy", run_clippy)?;
 
-    // 3. Test
-    run_step(3, "Test", run_test)?;
+    // 3. Test (xtask only -- see run_test below)
+    run_step(3, "Test (xtask only)", run_test)?;
 
     // 4. Coverage
     run_step(4, "Coverage", run_coverage)?;
@@ -83,9 +83,16 @@ fn run_clippy() -> Result<String, String> {
     }
 }
 
-/// Test step -- returns empty detail on success.
+/// Test step -- runs xtask's own tests only.
+///
+/// Coverage (step 4) runs `--workspace --exclude xtask`
+/// under llvm-cov instrumentation, which executes every
+/// non-xtask test. Running the full workspace tests
+/// here too would duplicate that work. Restricting to
+/// `-p xtask` keeps validate a full quality gate
+/// without paying the duplication cost.
 fn run_test() -> Result<String, String> {
-    test_cmd::test_check(None)?;
+    test_cmd::test_check_xtask()?;
     Ok(String::new())
 }
 

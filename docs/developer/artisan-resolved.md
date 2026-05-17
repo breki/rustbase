@@ -6,6 +6,36 @@ findings.
 
 ---
 
+### AQ-031 -- `[profile.release]` template semantics under-documented (cross-confirmed with RT-037)
+
+- **Date:** 2026-05-17
+- **Category:** API Design (Medium)
+- **Commit context:** v0.6.0 ledgerstone improvements Batch A
+- **Resolution:** See RT-037. Expanded the profile comment
+  to explicitly call out the optimisation tradeoffs that
+  derived projects will inherit.
+
+### AQ-030 -- `test_check_xtask` swallowed failure diagnostics (cross-confirmed with RT-036)
+
+- **Date:** 2026-05-17
+- **Category:** Error Handling & Messages (Medium)
+- **Commit context:** v0.6.0 ledgerstone improvements Batch A
+- **Resolution:** See RT-036. Extracted shared
+  `report_failure` helper so both the CLI `test` command
+  and validate's xtask-only step produce identical rich
+  diagnostics on failure.
+
+### AQ-029 -- Parallel argument-building paths in `test_cmd.rs`
+
+- **Date:** 2026-05-17
+- **Category:** API Design (Low)
+- **Commit context:** v0.6.0 ledgerstone improvements Batch A
+- **Resolution:** Added a `Scope` enum (`Workspace` /
+  `XtaskOnly`) to `build_args` so both `test()` and
+  `test_check_xtask()` go through the same arg-construction
+  path. Future shared flags can be added once. New unit
+  tests cover both scopes and the empty-filter error.
+
 ### AQ-028 -- `build.ps1` help block column widths drifted
 
 - **Date:** 2026-05-17

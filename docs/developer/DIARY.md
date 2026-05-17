@@ -7,6 +7,40 @@ reverse chronological order.
 
 ### 2026-05-17
 
+- Apply ledgerstone template improvements (Batch A) (v0.6.0)
+
+    Three suggestions from
+    `docs/developer/ledgerstone-improvements-plan.md`
+    Batch A landed; two were skipped as not applicable.
+
+    `Cargo.toml` gains a `[profile.release]` block with
+    `incremental = true, codegen-units = 256`. The
+    comment block documents the non-default nature and
+    spells out when derived projects should override
+    (CPU-bound services, multi-user binaries, `cargo
+    install` targets). Empirical data is attributed to
+    Ledgerstone rather than asserted as universal.
+
+    `frontend/package.json` gains `npm run fix`
+    (prettier + eslint --fix) and `npm run check:all`
+    (check, lint, format:check, test, build) as
+    discoverable aggregator scripts.
+
+    `cargo xtask validate`'s Test step now runs
+    `cargo test -p xtask` only, since the Coverage step
+    runs every non-xtask test under llvm-cov
+    instrumentation. Refactor introduces a `Scope`
+    enum so `test()` and `test_check_xtask()` share
+    `build_args`, and a `report_failure` helper so both
+    produce identical rich diagnostics. Step label
+    renamed to `Test (xtask only)` to avoid misleading
+    "Test OK" output. Validate wall time drops to ~10s
+    on a warm tree.
+
+    Skipped: deploy-prod `Tee-Object` (deploy is xtask
+    now, streams natively) and jscpd stale-dir cleanup
+    (rustbase uses `code-dupes`, not jscpd).
+
 - Add deploy-as-xtask + sort helper from hoard (v0.5.0)
 
     Ported hoard's deploy/deploy-setup `xtask`

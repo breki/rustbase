@@ -10,6 +10,30 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- `[profile.release]` defaults `incremental = true,
+  codegen-units = 256` for faster iteration on
+  personal-use deployments (override for
+  performance-critical targets)
+- `frontend/package.json` aggregator scripts
+  `npm run fix` (prettier + eslint --fix) and
+  `npm run check:all` (check, lint, format:check,
+  test, build)
+
+### Changed
+
+- `cargo xtask validate` Test step now runs only
+  `cargo test -p xtask` and prints as
+  `Test (xtask only)`. Coverage already executes every
+  non-xtask test under llvm-cov instrumentation, so the
+  previous `--workspace` test pass was duplicated work.
+  Net effect: validate is faster with no loss of signal.
+- Validate's Test step now emits the same rich
+  diagnostics (failing test names + assertion details)
+  as `cargo xtask test` when failures occur, via a
+  shared `report_failure` helper.
+
 ## [0.5.0] - 2026-05-17
 
 ### Added
