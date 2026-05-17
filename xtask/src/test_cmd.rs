@@ -13,15 +13,28 @@ enum Scope {
     XtaskOnly,
 }
 
+/// Options for [`test`]. Grouped so adding the next flag
+/// (`--locked`, `--no-fail-fast`, ...) doesn't widen the
+/// function signature.
+#[derive(Clone, Copy, Default)]
+pub struct TestOptions<'a> {
+    pub filter: Option<&'a str>,
+    pub verbose: bool,
+    pub ignored: bool,
+}
+
 /// Run tests with concise output.
 ///
 /// Prints `Test OK` on success. On failure, shows only
 /// the failing test names and assertion details.
 /// With `verbose`, streams raw cargo test output.
-pub fn test(filter: Option<&str>, verbose: bool) -> Result<(), String> {
-    let args = build_args(Scope::Workspace, filter)?;
+/// With `ignored`, runs `#[ignore]`-tagged tests instead
+/// of the default set.
+pub fn test(opts: TestOptions<'_>) -> Result<(), String> {
+    let args =
+        build_args(Scope::Workspace, opts.filter, opts.ignored)?;
 
-    if verbose {
+    if opts.verbose {
         return run_cargo_stream(&args);
     }
 
@@ -51,7 +64,7 @@ pub fn test(filter: Option<&str>, verbose: bool) -> Result<(), String> {
 /// `test()` to stderr (failing names, assertion
 /// details, or compile errors) before returning.
 pub fn test_check_xtask() -> Result<(), String> {
-    let args = build_args(Scope::XtaskOnly, None)?;
+    let args = build_args(Scope::XtaskOnly, None, false)?;
     let output = run_cargo_capture(&args)?;
 
     if output.status.success() {
@@ -107,7 +120,11 @@ fn report_failure(stdout: &str, stderr: &str) -> Result<(), String> {
 /// validate's xtask-only test step go through the
 /// same arg-construction path. Add new shared flags
 /// (e.g. `--locked`, `--no-fail-fast`) here.
-fn build_args(scope: Scope, filter: Option<&str>) -> Result<Vec<&str>, String> {
+fn build_args(
+    scope: Scope,
+    filter: Option<&str>,
+    ignored: bool,
+) -> Result<Vec<&str>, String> {
     let mut args = vec!["test"];
     match scope {
         Scope::Workspace => args.push("--workspace"),
@@ -116,12 +133,21 @@ fn build_args(scope: Scope, filter: Option<&str>) -> Result<Vec<&str>, String> {
             args.push("xtask");
         }
     }
+    // Everything after `--` is forwarded to the test
+    // harness. Both `--ignored` and a positional filter
+    // must live there, so emit the separator if either
+    // is set.
+    if filter.is_some() || ignored {
+        args.push("--");
+    }
     if let Some(f) = filter {
         if f.is_empty() {
             return Err("test filter must not be empty".into());
         }
-        args.push("--");
         args.push(f);
+    }
+    if ignored {
+        args.push("--ignored");
     }
     Ok(args)
 }
@@ -250,25 +276,60 @@ failures:
 
     #[test]
     fn build_args_workspace_no_filter() {
-        let args = build_args(Scope::Workspace, None).unwrap();
+        let args =
+            build_args(Scope::Workspace, None, false).unwrap();
         assert_eq!(args, vec!["test", "--workspace"]);
     }
 
     #[test]
     fn build_args_xtask_only() {
-        let args = build_args(Scope::XtaskOnly, None).unwrap();
+        let args =
+            build_args(Scope::XtaskOnly, None, false).unwrap();
         assert_eq!(args, vec!["test", "-p", "xtask"]);
     }
 
     #[test]
     fn build_args_with_filter() {
-        let args = build_args(Scope::Workspace, Some("foo")).unwrap();
-        assert_eq!(args, vec!["test", "--workspace", "--", "foo"]);
+        let args =
+            build_args(Scope::Workspace, Some("foo"), false)
+                .unwrap();
+        assert_eq!(
+            args,
+            vec!["test", "--workspace", "--", "foo"]
+        );
     }
 
     #[test]
     fn build_args_empty_filter_errors() {
-        let err = build_args(Scope::Workspace, Some("")).unwrap_err();
+        let err = build_args(Scope::Workspace, Some(""), false)
+            .unwrap_err();
         assert!(err.contains("must not be empty"));
+    }
+
+    #[test]
+    fn build_args_ignored_no_filter() {
+        let args =
+            build_args(Scope::Workspace, None, true).unwrap();
+        assert_eq!(
+            args,
+            vec!["test", "--workspace", "--", "--ignored"]
+        );
+    }
+
+    #[test]
+    fn build_args_ignored_with_filter() {
+        let args =
+            build_args(Scope::Workspace, Some("foo"), true)
+                .unwrap();
+        assert_eq!(
+            args,
+            vec![
+                "test",
+                "--workspace",
+                "--",
+                "foo",
+                "--ignored",
+            ]
+        );
     }
 }

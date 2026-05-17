@@ -35,6 +35,7 @@ members.
 cargo xtask check             # fast compile check
 cargo xtask validate          # fmt + clippy + tests + coverage
 cargo xtask test [filter]     # tests only
+cargo xtask test --ignored    # run #[ignore]-tagged tests
 cargo xtask clippy            # lint only
 cargo xtask coverage          # coverage only (>=90%)
 cargo xtask fmt               # format code

@@ -136,8 +136,23 @@ conventions.
    > 2. **Why it matters**: impact on maintainability
    > 3. **Better approach**: specific code change
 
-   Pass the full `git diff` output to both agents and
-   tell them to read the relevant source files.
+   **How to hand the diff to the subagents:** do NOT
+   capture the diff to a file and pass the path. Tell
+   each subagent that its first step is to run
+   `git diff --cached` itself (both agents have Bash).
+   This avoids the recurring failure mode of writing
+   the diff to `/tmp/...` (which on Windows + Git Bash
+   resolves outside the workspace and is invisible to
+   the user). If for some reason a file is needed,
+   write to a git-ignored workspace-local path under
+   `target/` -- never `/tmp`.
+
+   In each subagent prompt also include: a one-line
+   description of what the PR does, a reminder to use
+   the six labeled bullet fields (ID, Source, Category,
+   Description, Impact / Why it matters, Suggested fix)
+   when reporting findings, and the category list for
+   that reviewer (Red Team or Artisan).
 
    **Cross-confirmed findings:**
    Before presenting findings, scan both reviewers'
@@ -204,7 +219,21 @@ conventions.
      Increment "Next ID".
    - For findings the user chose to **fix**, remove
      from the open log and insert at the **top** of
-     the resolved log with the fix date and resolution
+     the resolved log using this terse format (one
+     entry per finding):
+
+     ```
+     ### <ID> -- <one-line title>
+
+     **Category:** <category>
+
+     **Resolution:** <YYYY-MM-DD> -- <how it was fixed,
+     1-3 sentences>
+     ```
+
+     Do not preserve the original Description / Impact
+     / Suggested-fix body in the resolved entry -- the
+     code change itself is the authoritative record.
    - Include all changed log files in staged files
    - **Threshold warning:** if 10 or more findings
      are open in either log, tell the user that a
@@ -228,12 +257,22 @@ conventions.
    - Skip diary update for: docs, style, test, refactor,
      minor chores
 
-7. **Update CHANGELOG.md** (for user-visible changes):
-   - If the commit adds features, fixes bugs, changes
-     behaviour, or removes functionality, add a bullet to
-     the `[Unreleased]` section under the appropriate
-     heading (`Added`, `Changed`, `Fixed`, or `Removed`)
-   - Skip for: chore, ci, style, docs-only changes
+7. **Update CHANGELOG.md** (for user-observable
+   changes):
+   - The trigger is the **observable effect**, not the
+     commit type. If a user of the software would see
+     a difference (new feature, fixed bug, changed
+     default, removed flag, new config knob, port
+     change, new env var, ...), add a bullet to the
+     `[Unreleased]` section under the appropriate
+     heading (`Added`, `Changed`, `Fixed`, or
+     `Removed`) -- **even if the commit type is
+     `chore`** (e.g., a `chore:` that changes a default
+     port still needs a `Changed` entry).
+   - Skip only for commits with no user-observable
+     effect: pure refactors, internal tooling, test-
+     only changes, CI/lint config tweaks invisible to
+     users, docs-only edits.
 
 8. **E2E tests** -- Run `scripts/e2e.sh` to verify the
    full stack works end-to-end. The script kills stale

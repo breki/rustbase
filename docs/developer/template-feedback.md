@@ -73,6 +73,92 @@ individual projects.
 
 ## Resolved
 
+### 2026-05-17 -- `.gitignore` only hid root-anchored `/target/`
+
+Surfaced from trmnl-bellwether's template feedback
+(2026-04-19). The template's `.gitignore` had
+`/target/`, so any nested `target/` (e.g.
+`crates/<name>/target/` created when cargo was invoked
+from inside a crate directory) showed up as untracked
+and was easy to accidentally `git add .` into a commit.
+**Fix:** replaced `/target/` with `target/` plus
+`**/target/` for belt-and-braces, so any `target/`
+directory at any depth is ignored.
+
+### 2026-05-17 -- `cargo xtask test` had no `--ignored` forwarding
+
+Surfaced from trmnl-bellwether's template feedback
+(2026-04-19). CLAUDE.md forbids raw `cargo test`, but
+the `xtask test` wrapper had no way to run
+`#[ignore]`-tagged tests (the standard Rust idiom for
+"manual tool" tests that shouldn't run in
+`validate`), so projects using `#[ignore]` for manual
+tools hit a dead end. **Fix:** added a `--ignored`
+flag to `XCommand::Test`, introduced
+`TestOptions<'a> { filter, verbose, ignored }` so the
+signature stays readable as flags accrete, threaded
+`--ignored` through `build_args` after an explicit
+`--` separator, and added two `build_args` unit tests
+covering ignored-alone and ignored-plus-filter.
+CLAUDE.md's Build Commands table updated to advertise
+`cargo xtask test --ignored`.
+
+### 2026-05-17 -- `/commit` skill ambiguous about how to hand the diff to review subagents
+
+Surfaced from trmnl-bellwether's template feedback
+(2026-04-17). The previous wording ("Pass the full
+`git diff` output to both agents and tell them to
+read the relevant source files") didn't prescribe a
+mechanism, so models reflexively reached for
+`tokio::fs::write("/tmp/foo-diff.txt", ...)` or
+`git diff --cached > /tmp/foo-diff.txt`. On Windows
+with Git Bash, `/tmp` maps outside the workspace,
+isn't git-ignored, and is invisible to the user.
+**Fix:** the skill now explicitly tells each subagent
+to run `git diff --cached` itself as its first step
+(both agents have Bash), forbids `/tmp` paths, and if
+a file is genuinely needed prescribes a
+git-ignored workspace-local path under `target/`. The
+mechanism is also reusable: any future
+"capture-output-and-hand-to-subagent" pattern in the
+skill should prefer subagent-runs-the-command or
+`target/`-local files.
+
+### 2026-05-17 -- `/commit` resolved-log entry format was unspecified
+
+Surfaced from trmnl-bellwether's template feedback
+(2026-04-17). The skill said "remove from the open
+log and insert at the top of the resolved log with
+the fix date and resolution" but was ambiguous about
+whether to preserve the original Description / Impact
+/ Suggested-fix body or replace it with a terse
+resolution-only entry. Different agents picked
+different formats across sessions, causing cross-PR
+inconsistency in the same project's resolved log.
+**Fix:** the skill now prescribes a terse format
+(`### <ID> -- <title>` heading + `**Category:**` line
++ `**Resolution:**` line with the fix date and a 1-3
+sentence note) and explicitly says not to preserve
+the original body in the resolved entry.
+
+### 2026-05-17 -- `/commit` CHANGELOG rule keyed on commit type, not observable effect
+
+Surfaced from trmnl-bellwether's template feedback
+(2026-04-17). The skill said "Skip [CHANGELOG] for:
+chore, ci, style, docs-only changes." But chores
+routinely contain user-visible behaviour changes
+(e.g., a default port change committed as `chore:`)
+where a CHANGELOG entry is genuinely needed. **Fix:**
+the rule now keys on user-observable effect, not
+commit type: add a `[Unreleased]` entry whenever a
+user of the software would see a difference (new
+feature, fixed bug, changed default, removed flag,
+new config knob, port change, new env var, ...) --
+even if the commit type is `chore`. Skip only for
+commits with no user-observable effect (pure
+refactors, internal tooling, test-only changes,
+docs-only edits, CI/lint tweaks invisible to users).
+
 ### 2026-05-17 -- Stop hook ran full `cargo xtask validate`, including ~15s coverage step
 
 Surfaced from kozmotic's template feedback (2026-05-04).
