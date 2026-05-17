@@ -10,6 +10,17 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Removed
+
+- `scripts/build.sh`, `scripts/clippy.sh`,
+  `scripts/test.sh`, `scripts/fmt.sh`,
+  `scripts/validate.sh` -- five one-line `cargo ...`
+  wrappers redundant with `cargo xtask`. CLAUDE.md
+  already steers users to xtask. `scripts/e2e.sh` and
+  `scripts/kill-servers.sh` remain (non-trivial
+  process-cleanup logic on Windows + Unix). Sourced
+  from kozmotic's template feedback.
+
 ### Added
 
 - New `/implement` skill plans + executes a captured

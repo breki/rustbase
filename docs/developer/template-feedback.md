@@ -73,6 +73,21 @@ individual projects.
 
 ## Resolved
 
+### 2026-05-17 -- `scripts/` shipped 5 trivial one-line cargo wrappers redundant with xtask
+
+Surfaced from kozmotic's template feedback (2026-05-04).
+The template shipped `scripts/build.sh`, `clippy.sh`,
+`test.sh`, `fmt.sh`, `validate.sh` -- each a one-line
+`cargo ...` wrapper. CLAUDE.md already steers users to
+`cargo xtask` ("Never use raw `cargo test`"), so the
+shell wrappers added discoverability noise without
+adding capability. **Fix:** deleted the 5 trivial
+wrappers. Kept `scripts/e2e.sh` and
+`scripts/kill-servers.sh` -- both contain non-trivial
+process-cleanup logic (PowerShell `Get-CimInstance`
+filtering, pkill patterns) that doesn't fit naturally
+as an xtask subcommand.
+
 ### 2026-05-17 -- No documented pattern for hardware-bound code under the 90% coverage gate
 
 Surfaced from kozmotic's template feedback (2026-05-04).
