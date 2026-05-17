@@ -10,6 +10,27 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed (docs)
+
+- `CLAUDE.md` gains three new sections: "Workspace
+  lints and xtask overrides" (the local-override
+  recipe for derived projects that need OS-API code in
+  xtask), "Edition-2024 migration notes" (the four
+  mechanical fixes), and "Version source of truth"
+  (sentinel + CARGO_PKG_VERSION conventions).
+- `.template-sync.toml` header expanded into a
+  ~15-line comment block describing the file's role,
+  the managing skill, and cross-references to
+  `template-feedback.md` and `/template-improve`.
+- `docs/developer/template-feedback.md` restructured
+  into three lifecycle sections (Open divergences /
+  Resolved / Suggestions to flow back). Existing
+  entries reclassified; section header explains how
+  template-repo semantics map to derived-project
+  semantics.
+- `.claude/commands/template-improve.md` updated to
+  route new entries by section.
+
 ### Added
 
 - Coverage failures now include uncovered-line ranges

@@ -205,3 +205,80 @@ Examples of what to log:
 
 This feedback will be used to improve the template for
 future projects.
+
+The file uses three sections (see its header for
+section semantics): **Open divergences** (gaps the
+project intentionally keeps), **Resolved** (gaps closed
+by retrofit work), and **Suggestions to flow back to
+the template**. `/template-improve` routes new entries
+into the appropriate section.
+
+## Workspace lints and xtask overrides
+
+The workspace forbids `unsafe_code` via
+`[workspace.lints.rust]` so production crates inherit
+the policy by default. If a derived project needs OS-
+specific code in `xtask/` (for example, calling Win32
+APIs for process management on Windows -- the canonical
+case being `OpenProcess` / `TerminateProcess` /
+`CreateToolhelp32Snapshot` for stale-server cleanup),
+the recipe is to redefine the lints block locally for
+`xtask` only rather than weakening the workspace policy:
+
+```toml
+# xtask/Cargo.toml
+[lints.rust]
+warnings = "deny"
+unsafe_code = "allow"   # xtask is build tooling, scoped exception
+
+[lints.clippy]
+# inherit the workspace clippy block by re-declaring
+# or by overriding selectively
+```
+
+Production crates keep `[lints] workspace = true` and
+remain `unsafe`-forbidden. Document the scoped
+exception with a comment near the use site so reviewers
+can verify the unsafe block is genuinely necessary.
+
+## Edition-2024 migration notes
+
+The template ships on Rust edition 2024. Projects
+inheriting from an older snapshot of the template (or
+upgrading from edition 2021) routinely hit a small set
+of mechanical fixes that `cargo fix --edition` either
+applies automatically or flags:
+
+- **Unsafe extern blocks**: `extern "C" { fn foo(); }`
+  must become `unsafe extern "C" { fn foo(); }`. Each
+  declaration inside is still individually `unsafe fn`.
+- **Match ergonomics tightening**: bare `ref` patterns
+  inside a binding that already implies a reference
+  must be dropped. `match x { Some(ref y) => ... }`
+  becomes `match x { Some(y) => ... }` when the outer
+  match already produces a reference.
+- **`gen` is reserved**: any identifier called `gen`
+  (variables, function names, struct fields) needs the
+  raw-identifier form `r#gen` or a rename.
+- **Nested `if let` -> let chains**: clippy's autofix
+  collapses `if x { if y { ... } }` into
+  `if x && y { ... }` once `let`-chains are stable.
+  This is a clippy fix rather than an edition fix, but
+  it lands at the same time and is worth running in the
+  same pass.
+
+Run `cargo fix --edition --workspace` followed by
+`cargo xtask validate` and expect a small follow-up
+pass for the items above.
+
+## Version source of truth
+
+The project version lives in
+`crates/<name>/Cargo.toml`. Avoid putting the version
+number in README body text or other markdown — those
+copies drift silently from `Cargo.toml`. If a version
+mention is unavoidable in user-facing prose, embed it
+as a sentinel comment (`<!-- version: 0.5.0 -->`) so a
+script can rewrite both on release, or pull the value
+from `Cargo.toml` via the build (Vite supports this
+for the frontend; CLI binaries can use `env!("CARGO_PKG_VERSION")`).

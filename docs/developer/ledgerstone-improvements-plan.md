@@ -150,56 +150,63 @@ the eventual commit message(s) so the trail is preserved.
 ### 9. `.template-sync.toml` header comment linking to skill docs
 
 - **Scope:** ~3-line comment block at top of the file.
-- **Status:** todo
-- **Target:** `.template-sync.toml` (and the template-side
-  copy if `/template-sync` generates it from a template).
-- **Notes:** Trivial. Helps newcomers understand what the file
-  is for.
+- **Status:** **done** -- v0.8.x docs batch.
+- **Target:** `.template-sync.toml`.
+- **Notes:** Expanded the header into a ~15-line
+  comment block describing the file's role, the skill
+  that manages it, the cross-reference to
+  `template-feedback.md`, and the sibling
+  `/template-improve` skill.
 
 ### 10. `unsafe_code = forbid` workspace vs xtask override recipe
 
 - **Scope:** CLAUDE.md appendix or workspace lints doc.
-- **Status:** todo
-- **Target:** `CLAUDE.md` (or `docs/developer/lints.md` if a
-  new doc fits better).
-- **Notes:** Document the local-override pattern so derived
-  projects that need OS-API code in xtask don't have to
-  rediscover it.
+- **Status:** **done** -- v0.8.x docs batch.
+- **Target:** `CLAUDE.md` ("Workspace lints and xtask
+  overrides" section).
+- **Notes:** Documents the local-override recipe with
+  a concrete `xtask/Cargo.toml [lints.rust]` block
+  showing `unsafe_code = "allow"` scoped to the xtask
+  crate only.
 
 ### 11. Edition-2024 migration appendix
 
 - **Scope:** CLAUDE.md appendix.
-- **Status:** todo
-- **Target:** `CLAUDE.md`
-- **Notes:** Mechanical fixes derived projects routinely hit
-  when running `cargo fix --edition`: `unsafe extern`, dropped
-  `ref` patterns under match ergonomics, `r#gen` for the
-  reserved keyword, `if x { if y }` -> let-chain collapse.
+- **Status:** **done** -- v0.8.x docs batch.
+- **Target:** `CLAUDE.md` ("Edition-2024 migration
+  notes" section).
+- **Notes:** Lists the four mechanical fixes with
+  before/after examples: `unsafe extern` blocks,
+  dropped `ref` patterns, `r#gen` raw identifier, and
+  the let-chain collapse follow-up.
 
 ### 12. Version-source-of-truth convention for README
 
-- **Scope:** Convention note in CLAUDE.md or
-  `docs/developer/versioning.md`.
-- **Status:** todo
-- **Target:** `CLAUDE.md`, possibly README itself.
-- **Notes:** Either avoid version mentions in README body or
-  document a sentinel pattern like `<!-- vN.N.N -->` that a
-  script can rewrite. Ledgerstone's README drifted to 0.18.0
-  while Cargo.toml was 0.20.1.
+- **Scope:** Convention note in CLAUDE.md.
+- **Status:** **done** -- v0.8.x docs batch.
+- **Target:** `CLAUDE.md` ("Version source of truth"
+  section).
+- **Notes:** Documents the `<!-- version: X.Y.Z -->`
+  sentinel pattern and the `env!("CARGO_PKG_VERSION")`
+  / Vite alternatives. rustbase's README currently has
+  no version mentions, so no in-repo drift to fix --
+  this is a forward-looking convention.
 
 ### 13. Restructure `template-feedback.md` into three sections
 
 - **Scope:** Edit `template-feedback.md` scaffolding and update
   `.claude/commands/template-improve.md`.
-- **Status:** todo
-- **Target:** `docs/developer/template-feedback.md` (replace
-  current flat log with three sections: **Open divergences**,
-  **Resolved**, **Suggestions to flow back to the template**).
-  `.claude/commands/template-improve.md` -- update routing
-  instructions.
-- **Notes:** Ledgerstone's structured form has been markedly
-  easier to maintain. The flat reverse-chronological format
-  forces the reader to reconstruct the lifecycle from prose.
+- **Status:** **done** -- v0.8.x docs batch.
+- **Target:** `docs/developer/template-feedback.md`,
+  `.claude/commands/template-improve.md`.
+- **Notes:** New file shape uses three sections (Open
+  divergences / Resolved / Suggestions to flow back).
+  Existing entries reclassified: build.ps1
+  double-validate and Playwright fixture-isolation
+  remain in Open; everything else (most entries) moved
+  to Resolved with one-line resolution summaries.
+  `/template-improve` skill instructions updated to
+  route new entries by section.
 
 ---
 
