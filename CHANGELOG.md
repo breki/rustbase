@@ -10,6 +10,35 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed (workflow)
+
+- `/template-sync` step 5 now cross-references
+  `template-feedback.md`'s **Open divergences**
+  section. Incoming template changes that conflict
+  with a documented divergence are auto-flagged as
+  **skip** with the divergence title inlined as the
+  reason, instead of being re-proposed every sync.
+- `/commit` step 5 now identifies **cross-confirmed**
+  findings (same root cause flagged by both Red Team
+  and Artisan -- whether same `file:line` or same
+  defect in different vocabulary) and surfaces them
+  under a dedicated heading with a combined
+  `RT-NNN/AQ-NNN` ID. Empirically the strongest fix-
+  signal in the review output.
+- `/commit` gains step 12 -- a post-commit
+  workflow retrospective covering Efficiency /
+  Quality / Speed. Findings tagged `[trivial]` or
+  `[propose]`; trivial ones get an "apply now?"
+  prompt at the end. Skipped automatically when the
+  diff is entirely under `.claude/**` or `CLAUDE.md`
+  (recursive-skip carve-out).
+- `CLAUDE.md` TDD section refined to distinguish
+  **behaviour change** (strict red/green applies) vs
+  **structural addition** (test + impl together).
+  Removes the "write `unimplemented!()` first" theatre
+  for self-contained new modules where the unit is
+  too small to meaningfully fail-then-pass.
+
 ### Changed (docs)
 
 - `CLAUDE.md` gains three new sections: "Workspace

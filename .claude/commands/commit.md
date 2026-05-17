@@ -139,13 +139,37 @@ conventions.
    Pass the full `git diff` output to both agents and
    tell them to read the relevant source files.
 
+   **Cross-confirmed findings:**
+   Before presenting findings, scan both reviewers'
+   output for overlap. Two findings are
+   **cross-confirmed** when they describe the same
+   root cause -- either:
+   - Same `file:line` reference (or overlapping line
+     ranges in the same file), OR
+   - Same defect described in different vocabulary
+     (e.g. Red Team flags "TOCTOU on `is_dir` then
+     `remove_dir_all`" while Artisan flags "follows
+     symlinks during deletion despite `dir_size`'s
+     guard" -- both pointing at the same line)
+
+   Cross-confirmed findings are a stronger signal
+   than unique ones. When found, present them with a
+   combined ID (`RT-NNN/AQ-NNN`) under a
+   **Cross-confirmed** heading and note that both
+   reviewers flagged it independently. Empirically
+   (from sessions on this project's siblings) every
+   cross-confirmed finding has been selected for
+   fixing; unique findings have a lower hit rate.
+
    **Presenting findings to the user:**
    - Present **ALL** findings from both reviewers
      without filtering or skipping any. Do not omit
      findings based on your own priority assessment.
    - Present each finding with full detail:
-     - **ID and title** (e.g. RT-023 or AQ-001)
-     - **Source**: Red Team or Artisan
+     - **ID and title** (e.g. RT-023 or AQ-001, or
+       combined `RT-NNN/AQ-NNN` when cross-confirmed)
+     - **Source**: Red Team or Artisan (or both, when
+       cross-confirmed)
      - **Category**
      - **Description**
      - **Impact / Why it matters**
@@ -240,6 +264,59 @@ AI-Generated: Claude Code (<ModelName> <YYYY-MM-DD>)
 EOF
 )"
 ```
+
+12. **Workflow retrospective** (runs *after* the
+    commit lands so it cannot block shipping).
+
+    **Skip when:** the diff is entirely under
+    `.claude/**` or `CLAUDE.md` -- a workflow-only
+    commit is one where the *work itself was authoring
+    the workflow rules*, so any "improvements" loop
+    back to the same files just committed. Other
+    markdown commits (`docs/**`, `README.md`, etc.)
+    should still run the retrospective because those
+    sessions usually involve real research / tool
+    work worth reflecting on.
+
+    Walk the session and surface findings in three
+    buckets:
+    - **Efficiency**: tool calls that wasted budget
+      (redundant reads, full validate when
+      quick-validate would have caught the same
+      thing, repeated round-trips on a fixable
+      pattern, `cd subdir && ...` patterns).
+    - **Quality**: process shortcomings the code
+      reviewers don't catch (premature commit, missed
+      cross-reference, undocumented decision).
+    - **Speed**: wall-time delays caused by ordering
+      (could a slow step have run in the background?
+      did serial agent calls cost a parallel
+      opportunity?).
+
+    For each finding:
+    - Give it a short ID `<N>-<slug>` (e.g.
+      `2-redundant-validates`) so the user can reply
+      "apply 1, 3" or "skip 2".
+    - Tag `[trivial]` if it can be applied with a
+      single tool call right now (e.g. add a clause
+      to a doc, append a permission to settings).
+    - Tag `[propose]` if it needs user input,
+      cross-cuts multiple files, or implies a policy
+      decision.
+
+    End the retrospective by asking the user whether
+    to apply the `[trivial]` items immediately. The
+    `[propose]` items are surfaced for awareness and
+    stay ephemeral unless the user asks to escalate
+    them into a real RT/AQ finding, TODO, or doc
+    edit. Keeps step 12 cheap to run every commit
+    rather than "when I remember."
+
+    Empirically (Ledgerstone): applying this step
+    surfaced ~5 process improvements within two
+    sessions, three of them auto-fixable. The
+    recursive-skip carve-out is what makes the step
+    cheap enough to run *every* non-workflow commit.
 
 ## Rules
 

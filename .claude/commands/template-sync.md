@@ -48,12 +48,32 @@ this project.
        frontend/, e2e/
      - **Project config**: root Cargo.toml, .gitignore,
        .editorconfig
+   - **Cross-reference declared divergences.** Read
+     `docs/developer/template-feedback.md` and parse
+     its **Open divergences** section. For each
+     incoming template change, check whether it would
+     reintroduce or conflict with a documented
+     divergence:
+     - Substring match on file paths mentioned in the
+       divergence body
+     - Substring match on key topics (e.g. a
+       divergence about `unsafe_code = forbid` should
+       flag any incoming workspace-lints change)
+     If a conflict is detected, set the recommendation
+     to **skip** and include the divergence title in
+     the `description` column as the reason
+     (`conflicts with Open divergence: <title>`).
+     This reduces churn at review time -- the project
+     no longer needs to re-decide on a change it has
+     already chosen to differ on.
    - Present a summary table to the user:
      file | category | description | recommendation
    - Recommendation is one of:
      - **apply** -- safe, universally useful
      - **review** -- likely useful but needs inspection
-     - **skip** -- boilerplate unlikely to apply
+     - **skip** -- boilerplate unlikely to apply, OR
+       conflicts with a documented Open divergence
+       (reason inlined in `description`)
 
 6. **Ask the user** which changes to apply. Accept:
    - "all" -- apply everything recommended
@@ -138,3 +158,8 @@ When `.template-sync.toml` does not exist:
 - Adapt `rustbase` references to the project's actual
   name when applying template changes
 - All text files must use LF line endings
+- The divergence cross-reference in step 5 is
+  best-effort substring matching, not a parser. If a
+  divergence title is ambiguous, prefer surfacing the
+  change as **review** rather than **skip** so the
+  user makes the call

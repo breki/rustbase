@@ -218,10 +218,13 @@ the eventual commit message(s) so the trail is preserved.
   `template-feedback.md`, parse **Open divergences**, flag
   conflicting incoming changes as `skip` with the divergence
   reason inline.
-- **Status:** todo
+- **Status:** **done** -- Batch D.
 - **Target:** `.claude/commands/template-sync.md`
-- **Notes:** Reduces churn at review time. Ledgerstone's local
-  copy already has this enhancement -- port the diff.
+- **Notes:** Added a "Cross-reference declared
+  divergences" sub-bullet to step 5 with substring-
+  match heuristics on file paths and topics. New rule
+  notes that ambiguous matches should fall through
+  to **review** rather than **skip**.
 
 ### 15. Workflow retrospective as final `/commit` step
 
@@ -229,34 +232,48 @@ the eventual commit message(s) so the trail is preserved.
   commit retrospective with Efficiency / Quality / Speed
   buckets, findings tagged `[trivial]` / `[propose]`, recursive-
   skip carve-out for workflow-only commits.
-- **Status:** todo
+- **Status:** **done** -- Batch D.
 - **Target:** `.claude/commands/commit.md`
-- **Notes:** Runs *after* commit lands so it can't block
-  shipping. Findings ephemeral by default. Ledgerstone applied
-  this and surfaced 5 process improvements in 2 sessions.
+- **Notes:** Added as step 12. Recursive-skip
+  triggers when the diff is entirely under
+  `.claude/**` or `CLAUDE.md`. `docs/**` and
+  `README.md` still run the retrospective.
+  `[trivial]` items get an "apply now?" offer at the
+  end; `[propose]` items stay ephemeral unless
+  escalated.
 
 ### 16. Cross-reviewer agreement signal in `/commit`
 
 - **Scope:** In step 5 of `/commit`, scan Red Team and Artisan
   reports for findings on same file:line or root cause; surface
   under a `Cross-confirmed` heading.
-- **Status:** todo
+- **Status:** **done** -- Batch D.
 - **Target:** `.claude/commands/commit.md`
-- **Notes:** Empirical signal: cross-confirmed findings had a
-  higher fix-rate than unique findings in Ledgerstone sessions.
+- **Notes:** Added "Cross-confirmed findings" block
+  before "Presenting findings to the user". Combined
+  IDs use the form `RT-NNN/AQ-NNN`. Matches by same
+  `file:line` (or overlapping line ranges) OR same
+  root cause expressed in different vocabulary.
+  Validated against the empirical pattern from this
+  conversation (RT-2/AQ-2, RT-3/AQ-3, RT-038/AQ-033,
+  RT-040/AQ-038 all cross-confirmed, all selected for
+  fixing).
 
 ### 17. `/implement` Phase 2 TDD strictness refinement
 
-- **Scope:** Refine Phase 2 rule in `.claude/commands/
-  implement.md` (if such a command exists in rustbase) to
-  distinguish **behaviour change** (strict TDD applies) vs
+- **Scope:** Refine the TDD rule to distinguish
+  **behaviour change** (strict TDD applies) vs
   **structural addition** (test + impl together).
-- **Status:** todo (verify command exists)
-- **Target:** `.claude/commands/implement.md` -- confirm
-  presence first. rustbase may not ship this command.
-- **Notes:** Strict TDD on `xtask/src/clean_cache.rs`-shaped
-  additions is theatre. Self-contained module + unit tests
-  written together is the correct pattern.
+- **Status:** **done** -- Batch D (applied to CLAUDE.md
+  TDD section, since rustbase has no `/implement`
+  command).
+- **Target:** `CLAUDE.md` -- "Test-Driven Development"
+  section.
+- **Notes:** rustbase has no `/implement` skill, so
+  the TDD rule lives in CLAUDE.md instead. Refactored
+  that section to spell out both cases with concrete
+  examples and a "when in doubt, default to behaviour-
+  change discipline" tiebreaker.
 
 ---
 

@@ -111,17 +111,45 @@ verify code correctness, not feature correctness.
 
 ## Test-Driven Development
 
-Follow red/green TDD for all functional changes:
+TDD is the default discipline for functional changes,
+but the strict red/green ceremony applies only where
+it actually produces signal. Distinguish two cases:
 
-1. **Red** -- write a failing test that describes the
-   expected behaviour
-2. **Green** -- write the minimal code to make the test
-   pass
-3. **Refactor** -- clean up while keeping tests green
+**Behaviour change** -- new logic in existing code, a
+bug fix in shipped code, a new state transition, an
+edge-case branch in a function whose other branches
+already have tests:
 
-Run `cargo xtask test` after each step to confirm the
-cycle. Do not skip ahead to implementation without a
-failing test first.
+1. **Red** -- write a failing test that describes
+   the expected behaviour
+2. **Green** -- write the minimal code to make the
+   test pass
+3. **Refactor** -- clean up while keeping tests
+   green
+
+Here the pre-implementation test failure is real
+signal: it proves the test actually exercises the
+new path and that the surrounding code was indeed
+not already covering it. Run `cargo xtask test`
+after each step to confirm the cycle.
+
+**Structural addition** -- a new self-contained
+module, a new helper function, a new enum variant
+with no callers yet, a new xtask subcommand with
+embedded unit tests:
+
+Write test and implementation together as a single
+unit. The whole unit lands or doesn't. Strict
+red/green here is theatre: the test and impl get
+written together regardless, because the unit is
+too small to meaningfully fail-then-pass, and the
+`unimplemented!()`-stub-first dance adds no signal.
+
+If you're unsure which case applies, default to the
+behaviour-change discipline. The cost of an
+unnecessary red step is low; the cost of skipping a
+real red step (and shipping a test that always
+passed) is high.
 
 ## Commits
 
