@@ -100,8 +100,12 @@ fn run_test() -> Result<String, String> {
 fn run_coverage() -> Result<String, String> {
     let r = coverage::coverage_check()?;
     match r.error {
-        None => Ok(format!("{:.1}% >= {}%", r.line_pct, coverage::THRESHOLD,)),
-        Some(err) => Err(err),
+        None => Ok(format!(
+            "{:.1}% >= {}%",
+            r.line_pct,
+            coverage::OVERALL_THRESHOLD,
+        )),
+        Some(failure) => Err(coverage::format_failure(&failure)),
     }
 }
 

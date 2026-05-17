@@ -12,6 +12,31 @@ and this project adheres to
 
 ### Added
 
+- Coverage failures now include uncovered-line ranges
+  for each module below `MODULE_THRESHOLD`. Saves the
+  round trip of running a separate detail command at
+  the moment a coverage failure happens. Renders as
+  `<file>: <pct>%` followed by an indented
+  `uncovered: 84-93, 209-221` line.
+- `coverage::CoverageFailure` (typed enum) and
+  `coverage::FailingModule` (public struct) expose
+  structured failure data alongside the rendered
+  string, ready for future programmatic consumers
+  (JSON output, sort-by-worst, CI annotations).
+
+### Changed
+
+- `coverage::THRESHOLD` renamed to
+  `coverage::OVERALL_THRESHOLD` for naming symmetry
+  with `MODULE_THRESHOLD`.
+- llvm-cov segment parsing now goes through a typed
+  `Segment` struct (custom `Deserialize` from a
+  6-element tuple). Shape mismatches with older
+  llvm-cov versions surface as a hard parse error
+  instead of silently misclassifying gap regions.
+
+### Added (earlier in this cycle)
+
 - `cargo xtask clean-cache` empties
   `target/{debug,release}/incremental/` while keeping
   the directories themselves. Reports bytes freed per

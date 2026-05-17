@@ -6,6 +6,52 @@ findings.
 
 ---
 
+### AQ-038 -- `windows(2)` segment scan lost trailing uncovered segment (cross-confirmed with RT-040)
+
+- **Date:** 2026-05-17
+- **Category:** Correctness / Reporting (Medium)
+- **Commit context:** v0.8.0 ledgerstone improvements Batch B (coverage detail)
+- **Resolution:** See RT-040. Explicit trailing-segment
+  branch closes the windowed-iteration gap.
+
+### AQ-037 -- `CoverageResult.error: Option<String>` discarded structured failure data
+
+- **Date:** 2026-05-17
+- **Category:** API Design (Medium)
+- **Commit context:** v0.8.0 ledgerstone improvements Batch B (coverage detail)
+- **Resolution:** Introduced `pub enum CoverageFailure`
+  with `Overall { pct, threshold }` and
+  `Modules(Vec<FailingModule>)` variants; made
+  `FailingModule` `pub`. `coverage_check` now returns
+  the structured failure; presentation moves to
+  `pub fn format_failure(&CoverageFailure) -> String`,
+  shared by validate and the standalone `coverage`
+  command. Future consumers (CI annotations,
+  sort-by-worst tooling, JSON export) can introspect
+  failures directly without re-parsing the message.
+
+### AQ-036 -- `coverage::THRESHOLD` vs `MODULE_THRESHOLD` naming asymmetry
+
+- **Date:** 2026-05-17
+- **Category:** API Design (Low)
+- **Commit context:** v0.8.0 ledgerstone improvements Batch B (coverage detail)
+- **Resolution:** Renamed `THRESHOLD` to
+  `OVERALL_THRESHOLD`. Touched the one external call
+  site in `xtask/src/validate.rs` and the success
+  message in `coverage::coverage()`.
+
+### AQ-035 -- Magic numeric indices `seg.get(0/2/3/5)` in coverage segment parser
+
+- **Date:** 2026-05-17
+- **Category:** Type Safety (Medium)
+- **Commit context:** v0.8.0 ledgerstone improvements Batch B (coverage detail)
+- **Resolution:** Subsumed by RT-041 -- the typed
+  `Segment` struct replaces positional indices with
+  named fields (`line`, `col`, `count`, `has_count`,
+  `is_region_entry`, `is_gap`), exposed via an
+  `is_uncovered()` predicate so the call site reads
+  symbolically.
+
 ### AQ-034 -- `temp_scratch` test helper belongs in shared `helpers`
 
 - **Date:** 2026-05-17

@@ -5,6 +5,36 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-041 -- llvm-cov segment `is_gap_region` index assumption swallowed shape mismatches
+
+- **Date:** 2026-05-17
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.8.0 ledgerstone improvements Batch B (coverage detail)
+- **Resolution:** Replaced positional `seg.get(N)`
+  access with a typed `Segment` struct deserialised
+  from a 6-element JSON tuple via a custom
+  `Deserialize` impl. Older `llvm-tools-preview`
+  versions that emit 5-element segments now surface
+  as a hard "shape mismatch" parse error from
+  `parse_segments`, rather than silently treating
+  intentionally-skipped (gap) regions as uncovered.
+  Regression test covers both the accepted 6-element
+  shape and the rejected 5-element legacy shape.
+
+### RT-040 -- `windows(2)` segment scan dropped the trailing uncovered segment (cross-confirmed with AQ-038)
+
+- **Date:** 2026-05-17
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.8.0 ledgerstone improvements Batch B (coverage detail)
+- **Resolution:** Added an explicit trailing-segment
+  branch after the `windows(2)` loop in
+  `uncovered_ranges`: if the final segment is itself
+  an uncovered, non-gap region, it now contributes a
+  `(line, line)` entry to the raw range list before
+  `merge_ranges` consolidates. Tests cover the
+  single-segment file, the two-segment trailing-
+  uncovered case, and the original mid-stream case.
+
 ### RT-039 -- `clean-cache` mid-loop `?` abort defeated its Windows-AV use case
 
 - **Date:** 2026-05-17

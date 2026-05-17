@@ -114,15 +114,23 @@ the eventual commit message(s) so the trail is preserved.
 
 ### 7. Auto-print coverage detail on validate failure
 
-- **Scope:** Medium change in `xtask/src/coverage.rs::run_check()`:
-  parse cobertura XML for failing modules' uncovered-line ranges
-  and append to the error message.
-- **Status:** todo
-- **Target:** `xtask/src/coverage.rs`
-- **Notes:** Saves the round-trip `coverage-report --module X
-  --detail` after a coverage failure. Concrete output shape is
-  in the source feedback. Cobertura XML is on disk before
-  `cleanup()` runs, so the data is already available.
+- **Scope:** Medium change in `xtask/src/coverage.rs`:
+  parse llvm-cov JSON segments (rustbase uses JSON, not
+  cobertura XML like Ledgerstone) for failing modules'
+  uncovered-line ranges and append to the error.
+- **Status:** **done** -- v0.8.0. Implemented as a
+  typed Segment struct + structured CoverageFailure
+  enum; presentation lives in `format_failure`. Four
+  review findings (RT-040/041 cross-confirmed, AQ-035/036/037/038)
+  fixed pre-commit.
+- **Target:** `xtask/src/coverage.rs`,
+  `xtask/src/validate.rs`, `xtask/Cargo.toml` (serde
+  derive).
+- **Notes:** Output shape matches the Ledgerstone
+  suggestion: `module: pct%` then indented
+  `uncovered: <ranges>`. Range computation handles
+  trailing segment explicitly to avoid the
+  `windows(2)` drop.
 
 ### 8. `cargo xtask validate` unified-with-flags pattern
 

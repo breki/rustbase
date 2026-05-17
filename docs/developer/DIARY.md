@@ -7,6 +7,49 @@ reverse chronological order.
 
 ### 2026-05-17
 
+- Coverage failures now include uncovered-line ranges (v0.8.0)
+
+    Implements item 7 of the ledgerstone improvements
+    plan. When `cargo xtask validate`'s Coverage step
+    fails because a module dropped below
+    `MODULE_THRESHOLD` (85%), the error message now
+    includes the actual uncovered line ranges per
+    failing module:
+
+    ```
+    modules below coverage threshold:
+        api/routes.rs: 72.5%
+          uncovered: 84-93, 209-221
+        api/dto.rs: 60.0%
+          uncovered: 12, 45-60
+    ```
+
+    Saves the round trip of running a separate detail
+    command at the exact moment a coverage failure
+    happens. Implementation drops `--summary-only` from
+    the existing `cargo llvm-cov --json` call so the
+    per-file `segments` array survives into the output,
+    then parses segments into a typed `Segment` struct
+    (custom `Deserialize` from a 6-element JSON tuple,
+    so older `llvm-tools-preview` versions that emit
+    5-element segments surface as a hard parse error
+    rather than silently misclassifying gap regions).
+    `uncovered_ranges` walks the segment list,
+    explicitly handles the trailing segment (windowed
+    iteration would otherwise drop end-of-file
+    uncovered spans), and merges adjacent ranges.
+
+    Public API: `coverage::CoverageFailure` enum
+    (`Overall { pct, threshold }` /
+    `Modules(Vec<FailingModule>)`) and
+    `coverage::format_failure(&CoverageFailure) ->
+    String` separate the structured data from the
+    rendering so future consumers (CI annotations,
+    JSON export) can introspect failures directly.
+    `coverage::THRESHOLD` renamed to
+    `OVERALL_THRESHOLD` for symmetry with the existing
+    `MODULE_THRESHOLD`.
+
 - Apply ledgerstone template improvements (Batch B, clean-cache) (v0.7.0)
 
     Ported Ledgerstone's `cargo xtask clean-cache`
