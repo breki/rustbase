@@ -12,6 +12,24 @@ and this project adheres to
 
 ### Changed
 
+- `cargo xtask check` now prints the tail of stderr
+  when cargo exits non-zero with no rustc-style error
+  lines (manifest parse failures, corrupted
+  `Cargo.lock`, network errors). Previously surfaced
+  as `FAILED: 0 compilation error(s)` with no body.
+  Also tightened the `aborting` filter so user errors
+  whose message contains "aborting" are no longer
+  silently dropped. Sourced from rustwerk's template
+  feedback.
+- `/template-sync` slash command tightened: removed
+  the `Bash(git checkout:*)` permission it never
+  used, hard-coded the upstream URL
+  (`https://github.com/breki/rustbase`) with optional
+  `.git` / trailing-slash normalization, and removed
+  the "all" bulk-apply option (per-file or
+  per-category opt-in only) to keep upstream
+  diff content gated by user review. Sourced from
+  rustwerk's template feedback.
 - Stop hook (`.claude/hooks/stop-check.sh`) now runs a
   fast-path subset -- `cargo xtask clippy && cargo
   xtask test` -- instead of full `cargo xtask validate`.

@@ -6,6 +6,17 @@ findings.
 
 ---
 
+### AQ-039 -- `stderr_tail` allocated twice on the cold error path
+
+**Category:** Type Safety
+
+**Resolution:** 2026-05-17 -- Replaced
+`lines[start..].to_vec()` with `lines.drain(..start)`
++ return `lines`, dropping the redundant second
+allocation while keeping the same `Vec<&str>` return
+type. Cold path so cosmetic, but the original pattern
+read as accidental rather than deliberate.
+
 ### AQ-038 -- `windows(2)` segment scan lost trailing uncovered segment (cross-confirmed with RT-040)
 
 - **Date:** 2026-05-17

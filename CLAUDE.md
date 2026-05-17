@@ -24,10 +24,39 @@ they require manual approval every time.**
 | `crates/rustbase-web` | Axum web server (optional) |
 | `xtask` | Build automation |
 
-The web crate is optional. To remove it: delete
-`crates/rustbase-web/`, `frontend/`, and remove
-`"crates/rustbase-web"` from `Cargo.toml` workspace
-members.
+The web crate is optional. For a CLI-only project,
+follow these steps in order -- the ordering matters
+because intermediate states leave the workspace
+broken if reversed:
+
+1. **Edit `Cargo.toml`** -- remove
+   `"crates/rustbase-web"` from the workspace
+   members list. Do this *first* so the next
+   `cargo` invocation doesn't see a dangling member.
+2. **Edit `xtask/src/validate.rs`** (and any wiring
+   in `xtask/src/main.rs`) -- drop the
+   `svelte-check` step and any other
+   frontend/E2E-specific steps from `xtask
+   validate`. Adjust the step counter
+   (`[N/M] ...`) so the progress output stays
+   accurate.
+3. **Edit `build.ps1`** -- prune the `frontend`
+   and `e2e` subcommands plus any helpers they
+   call.
+4. **Delete the now-unreferenced files**:
+   - `crates/rustbase-web/`
+   - `frontend/`
+   - `e2e/`, `playwright.config.*`, `.ports`,
+     `.ports.sample`
+   - `scripts/e2e.sh`
+   - `.mise.toml` (toolchain pin for Node /
+     Playwright)
+5. **Run `cargo xtask validate`** to confirm the
+   workspace still builds and tests pass.
+
+`/template-sync` will then default these paths to
+"skip" on future syncs since they no longer exist
+locally.
 
 ## Build Commands
 
@@ -315,6 +344,58 @@ without contortions, do that instead. The submodule-
 plus-ignore-regex pattern is for cases where the
 indirection itself would obscure the code more than it
 reveals.
+
+## Shell wrappers: bash and PowerShell twins
+
+This template targets Windows, Linux, and macOS as
+first-class platforms. The convention for cross-shell
+tooling is: **non-trivial logic lives in `cargo
+xtask`; shell files (`scripts/*.sh`, `*.ps1`) are
+thin wrappers only.** This keeps a bugfix from having
+to land twice in two languages whose semantics drift
+(quoting, exit codes, error handling).
+
+The canonical wrapper shapes are:
+
+```bash
+# scripts/foo.sh
+#!/usr/bin/env bash
+set -euo pipefail
+exec cargo xtask foo -- "$@"
+```
+
+```powershell
+# scripts/foo.ps1
+$ErrorActionPreference = 'Stop'
+& cargo xtask foo -- @args
+exit $LASTEXITCODE
+```
+
+Exceptions are allowed where the logic genuinely
+can't live in Rust without contortion -- e.g.
+process-cleanup that pokes `Get-CimInstance` or
+`pkill` directly, or bootstrap scripts that run
+*before* `cargo` is available. Document such
+exceptions inline so the next reader knows why the
+file is not a wrapper.
+
+## Lints: `doc_markdown` allowlist via `clippy.toml`
+
+The workspace runs clippy with pedantic lints enabled
+where practical. `clippy::doc_markdown` flags
+identifiers like `PowerShell`, `JSON`, `FFI`,
+`WebSocket`, `macOS`, `GitHub` in doc comments,
+forcing every occurrence to be backticked even when
+the prose reads naturally without backticks.
+
+The template ships a `clippy.toml` at workspace root
+with a curated `doc-valid-idents` allowlist of
+infrastructure terms. The list extends clippy's
+defaults (via the `".."` sentinel as the first entry)
+rather than replacing them. Derived projects should
+**append** their own domain-specific identifiers
+(product names, acronyms, external systems) to that
+file rather than redefining the list.
 
 ## Edition-2024 migration notes
 

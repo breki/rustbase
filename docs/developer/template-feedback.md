@@ -73,6 +73,130 @@ individual projects.
 
 ## Resolved
 
+### 2026-05-17 -- `xtask check` "aborting" filter dropped legitimate user errors
+
+Surfaced from rustwerk's template feedback (2026-04-19,
+fixed there locally). `extract_error_lines` in
+`xtask/src/check.rs` used `!l.contains("aborting")` to
+strip rustc's `error: aborting due to N previous errors`
+summary line. Any legitimate user error whose message
+contained the substring "aborting" (e.g.
+`compile_error!("aborting: feature X required")`) was
+also silently filtered out, producing `FAILED: 0
+compilation error(s)` with no body. **Fix:** anchored
+the filter to the exact summary prefix
+(`!l.starts_with("error: aborting due to")`) and added
+a regression test (`keeps_user_errors_mentioning_aborting`).
+
+### 2026-05-17 -- `xtask check` reported "0 compilation error(s)" for non-rustc failures
+
+Surfaced from rustwerk's template feedback (2026-04-19).
+When cargo exited non-zero for reasons other than
+compile errors (manifest parse failure, corrupted
+`Cargo.lock`, missing registry network, unsupported
+flag on older cargo), the first diagnostic line did
+not match the `error[`/`error:` prefix filter, so the
+output became `FAILED: 0 compilation error(s)` with
+nothing to diagnose. **Fix:** when `errors.is_empty()`
+but the process exited non-zero, `check()` now prints
+the last ~20 non-empty stderr lines verbatim under a
+`FAILED: cargo exited non-zero with no matched error
+lines` banner so the user sees an actionable signal.
+
+### 2026-05-17 -- `clippy::pedantic` `doc_markdown` flagged common infra identifiers
+
+Surfaced from rustwerk's template feedback (2026-04-21).
+Writing doc comments that mention `PowerShell`, `FFI`,
+`JSON`, `WebSocket`, `macOS`, `GitHub` and similar
+well-known terms required each occurrence to be
+backticked under `clippy::doc_markdown`, producing
+prose with unnecessary backticks for the reader.
+**Fix:** added a workspace-root `clippy.toml` with a
+curated `doc-valid-idents` allowlist that extends
+clippy's defaults via the `".."` sentinel. Documented
+in CLAUDE.md under "Lints: `doc_markdown` allowlist
+via `clippy.toml`" with a note that derived projects
+should append, not redefine.
+
+### 2026-05-17 -- `/template-sync` granted `Bash(git checkout:*)` it never used
+
+Surfaced from rustwerk's template feedback (2026-04-19).
+The slash command's `allowed-tools` front-matter
+included `Bash(git checkout:*)`, but the documented
+workflow only used `git diff`, `show`, `log`,
+`rev-parse`, `fetch`, and `status` for reading, plus
+`Edit` / `Write` for applying. The glob permitted
+destructive variants (`checkout -f <ref>`,
+`checkout -- .`, `checkout -- <path>`) that can
+destroy uncommitted work or move HEAD onto an
+untrusted template ref whose `.gitattributes` /
+hooks could activate on the next git command --
+combined with diff content being LLM input, that's
+an escape vector. **Fix:** removed
+`Bash(git checkout:*)` from the allowed-tools list
+in `.claude/commands/template-sync.md`.
+
+### 2026-05-17 -- `/template-sync` trusted upstream URL from `.template-sync.toml`
+
+Surfaced from rustwerk's template feedback (2026-04-19).
+Step 3 of the workflow read `repo` from
+`.template-sync.toml` and fed it to
+`git remote add template <url>`. A malicious PR
+changing that field (or a typo-squat lookalike)
+would silently redirect future syncs; `git remote
+add` also historically accepted hostile URL forms
+(`ext::sh`, `--upload-pack=...`). **Fix:**
+hard-coded the expected upstream
+(`https://github.com/breki/rustbase`) in the slash
+command. The command now asserts the
+`.template-sync.toml` value matches exactly before
+proceeding, refuses anything outside the
+`https://github.com/breki/` prefix, and verifies any
+pre-existing `template` remote URL also matches.
+Bootstrap flow updated to use the same hard-coded
+URL.
+
+### 2026-05-17 -- `/template-sync` "all" option bypassed per-file review
+
+Surfaced from rustwerk's template feedback (2026-04-19).
+Step 6 accepted "all" to apply every recommended
+change in bulk. Because the agent reads raw upstream
+commit messages and diff bodies during step 5
+categorization, a single compromised upstream commit
+could smuggle an instruction that bulk-apply would
+honour. **Fix:** removed "all" as an accepted answer.
+Users must opt in by category name or specific file
+path; "none" still works as a no-op marker update.
+
+### 2026-05-17 -- No pwsh-twin convention for `.sh` scripts
+
+Surfaced from rustwerk's template feedback (2026-04-21).
+The template targeted Windows as a first-class
+platform but had no convention for how `scripts/*.sh`
+should reach Windows users -- ad-hoc `.ps1` ports
+risked duplicating bash logic that then drifted on
+bugfixes. **Fix:** added a "Shell wrappers" section
+to CLAUDE.md prescribing "non-trivial logic lives in
+`cargo xtask`; shell files are thin wrappers only,"
+with canonical bash and pwsh wrapper shapes and an
+explicit carve-out for cases that can't live in Rust
+(process cleanup, pre-cargo bootstrap).
+
+### 2026-05-17 -- CLI-only downstream had no documented "safe to delete" list
+
+Surfaced from rustwerk's template feedback (2026-04-19,
+`N/A for rustwerk` note). The template's full-stack
+shape meant CLI-only downstreams had to discover by
+trial which directories were safe to remove. **Fix:**
+CLAUDE.md's "Workspace Crates" section now lists the
+full set safe to delete for a CLI-only project
+(`crates/rustbase-web/`, `frontend/`, `e2e/`,
+`.mise.toml`, `playwright.config.*`, `.ports*`,
+`scripts/e2e.sh`) along with the corresponding
+`Cargo.toml`, `xtask validate`, and `build.ps1`
+pruning steps, and notes that `/template-sync` will
+auto-skip those paths once they no longer exist.
+
 ### 2026-05-17 -- `.gitignore` only hid root-anchored `/target/`
 
 Surfaced from trmnl-bellwether's template feedback

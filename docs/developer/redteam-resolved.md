@@ -5,6 +5,32 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-043 -- CLI-only deletion list lacked ordering, leaving workspace transiently broken
+
+**Category:** Correctness
+
+**Resolution:** 2026-05-17 -- Re-ordered the CLI-only
+"safe to delete" guidance in `CLAUDE.md` into a
+numbered five-step procedure (edit `Cargo.toml`
+members first, then `xtask validate`, then
+`build.ps1`, then delete the now-unreferenced files,
+then re-run `cargo xtask validate`) so the workspace
+is never in a state where a member is gone but still
+listed.
+
+### RT-042 -- `/template-sync` upstream-URL match was too literal
+
+**Category:** Security / Operational
+
+**Resolution:** 2026-05-17 -- `/template-sync` now
+normalizes the `.template-sync.toml` `repo` value by
+stripping an optional trailing `/` and/or `.git`
+suffix before comparing to the hard-coded canonical
+upstream. The abort message names the canonical form
+so users of pre-existing downstreams know what to
+edit. Avoids breaking projects whose TOMLs were
+written with the cargo-conventional `.git` suffix.
+
 ### RT-041 -- llvm-cov segment `is_gap_region` index assumption swallowed shape mismatches
 
 - **Date:** 2026-05-17

@@ -31,8 +31,7 @@ pub struct TestOptions<'a> {
 /// With `ignored`, runs `#[ignore]`-tagged tests instead
 /// of the default set.
 pub fn test(opts: TestOptions<'_>) -> Result<(), String> {
-    let args =
-        build_args(Scope::Workspace, opts.filter, opts.ignored)?;
+    let args = build_args(Scope::Workspace, opts.filter, opts.ignored)?;
 
     if opts.verbose {
         return run_cargo_stream(&args);
@@ -276,60 +275,40 @@ failures:
 
     #[test]
     fn build_args_workspace_no_filter() {
-        let args =
-            build_args(Scope::Workspace, None, false).unwrap();
+        let args = build_args(Scope::Workspace, None, false).unwrap();
         assert_eq!(args, vec!["test", "--workspace"]);
     }
 
     #[test]
     fn build_args_xtask_only() {
-        let args =
-            build_args(Scope::XtaskOnly, None, false).unwrap();
+        let args = build_args(Scope::XtaskOnly, None, false).unwrap();
         assert_eq!(args, vec!["test", "-p", "xtask"]);
     }
 
     #[test]
     fn build_args_with_filter() {
-        let args =
-            build_args(Scope::Workspace, Some("foo"), false)
-                .unwrap();
-        assert_eq!(
-            args,
-            vec!["test", "--workspace", "--", "foo"]
-        );
+        let args = build_args(Scope::Workspace, Some("foo"), false).unwrap();
+        assert_eq!(args, vec!["test", "--workspace", "--", "foo"]);
     }
 
     #[test]
     fn build_args_empty_filter_errors() {
-        let err = build_args(Scope::Workspace, Some(""), false)
-            .unwrap_err();
+        let err = build_args(Scope::Workspace, Some(""), false).unwrap_err();
         assert!(err.contains("must not be empty"));
     }
 
     #[test]
     fn build_args_ignored_no_filter() {
-        let args =
-            build_args(Scope::Workspace, None, true).unwrap();
-        assert_eq!(
-            args,
-            vec!["test", "--workspace", "--", "--ignored"]
-        );
+        let args = build_args(Scope::Workspace, None, true).unwrap();
+        assert_eq!(args, vec!["test", "--workspace", "--", "--ignored"]);
     }
 
     #[test]
     fn build_args_ignored_with_filter() {
-        let args =
-            build_args(Scope::Workspace, Some("foo"), true)
-                .unwrap();
+        let args = build_args(Scope::Workspace, Some("foo"), true).unwrap();
         assert_eq!(
             args,
-            vec![
-                "test",
-                "--workspace",
-                "--",
-                "foo",
-                "--ignored",
-            ]
+            vec!["test", "--workspace", "--", "foo", "--ignored",]
         );
     }
 }
