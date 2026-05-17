@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::time::Instant;
 
@@ -49,6 +50,15 @@ pub fn elapsed_str(start: Instant) -> String {
 /// PATH lookup.
 pub fn cargo_bin() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".into())
+}
+
+/// Resolve the workspace root (the parent of the xtask
+/// crate directory).
+pub fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask crate always lives under workspace root")
+        .to_path_buf()
 }
 
 /// Run a cargo command and capture its output.
@@ -105,6 +115,16 @@ mod tests {
     fn format_step_long_name_no_overflow() {
         let result = format_step(1, 1, "VeryLongStepName", "OK", "");
         assert_eq!(result, "[1/1] VeryLongStepName OK");
+    }
+
+    #[test]
+    fn workspace_root_contains_cargo_toml() {
+        let root = workspace_root();
+        assert!(
+            root.join("Cargo.toml").is_file(),
+            "workspace root should contain Cargo.toml: {}",
+            root.display()
+        );
     }
 
     #[test]

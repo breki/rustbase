@@ -5,6 +5,46 @@ reverse chronological order.
 
 ---
 
+### 2026-05-17
+
+- Add deploy-as-xtask + sort helper from hoard (v0.5.0)
+
+    Ported hoard's deploy/deploy-setup `xtask`
+    subcommands into the template, generalized for any
+    Linux+systemd target. Four new xtask modules
+    (`deploy`, `deploy_config`, `deploy_remote`,
+    `deploy_setup`), a sandboxed `rustbase-web.service`
+    unit, `.deploy.sample` config template, and
+    `docs/deployment.md`. Wrapped by `build.ps1 deploy`
+    and `build.ps1 deploy-setup`.
+
+    The `deploy_config` loader validates `rpi_host`,
+    `rpi_user`, and `deploy_path` against a strict
+    allowlist before any value reaches an SSH command
+    string. `REQUIRED_DEPLOY_PATH = "/opt/rustbase"` is
+    threaded into the remote bash tripwire as `$2`, so
+    the literal and the constant cannot drift.
+
+    Deploy is restructured into "stage everything, then
+    stop / swap / start": frontend dist is scp'd to a
+    remote staging dir before the service is stopped, and
+    any failure during the swap window now attempts
+    `systemctl start` as a rollback rather than leaving
+    the service down. Frontend install is a real
+    POSIX-atomic rename swap (the path is never absent).
+
+    Service unit binds `127.0.0.1` by default (paired
+    with a header note on reverse-proxy / TLS),
+    `MemoryHigh=256M` + `MemoryMax=1G` instead of a
+    single hard 256M cap that would OOM-kill under
+    modest load.
+
+    Added `frontend/src/lib/sort.ts` with
+    `Intl.Collator`-backed `compareNames` / `compareIds`
+    (case-insensitive; `compareIds` is numeric-aware so
+    `CAB-2` precedes `CAB-10`). Accepts an optional
+    `locale` argument; default uses runtime locale.
+
 ### 2026-04-16
 
 - Add `build.ps1 dev` command + frontend TypeScript (v0.4.0)

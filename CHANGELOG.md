@@ -10,6 +10,29 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-17
+
+### Added
+
+- `cargo xtask deploy` / `cargo xtask deploy-setup` for
+  one-shot and one-time deployment to a remote Linux
+  host running systemd, with input-validated `.deploy`
+  config and ssh/scp wrappers that avoid shell parsing
+- Sandboxed `deploy/rustbase-web.service` systemd unit
+  (binds `127.0.0.1` by default; `ProtectSystem=strict`,
+  `MemoryHigh=256M` + `MemoryMax=1G`, full syscall
+  filter)
+- `.deploy.sample` config template and `.deploy`
+  gitignored
+- `docs/deployment.md` deployment guide
+- `frontend/src/lib/sort.ts` with `Intl.Collator`-backed
+  `compareNames` / `compareIds` helpers (case-insensitive;
+  `compareIds` is numeric-aware; optional locale arg)
+- `build.ps1 deploy` and `build.ps1 deploy-setup`
+  wrappers
+- `xtask/src/helpers.rs` gained a `workspace_root()`
+  helper
+
 ## [0.4.0] - 2026-04-16
 
 ### Added

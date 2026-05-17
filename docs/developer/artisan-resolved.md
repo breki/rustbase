@@ -6,6 +6,99 @@ findings.
 
 ---
 
+### AQ-028 -- `build.ps1` help block column widths drifted
+
+- **Date:** 2026-05-17
+- **Category:** Style (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Normalized all help-row gaps to 14
+  columns; new and old commands now line up.
+
+### AQ-027 -- `sort.ts` hardcoded locale to "en"
+
+- **Date:** 2026-05-17
+- **Category:** API Design (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** `compareNames` / `compareIds` now accept
+  an optional `locale` argument; the default uses the
+  runtime default locale (`Intl.Collator(undefined, …)`).
+
+### AQ-026 -- `INSTALL_FRONTEND` tripwire could drift from the constant
+
+- **Date:** 2026-05-17
+- **Category:** Type Safety (Medium)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** The bash script now compares `$1`
+  against `$2`, and `$2` is supplied by the caller as
+  `deploy_config::REQUIRED_DEPLOY_PATH`. The literal
+  and the constant cannot drift independently.
+
+### AQ-025 -- `parse_port` returned `Option<String>`
+
+- **Date:** 2026-05-17
+- **Category:** Type Safety (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Now `Option<u16>` with range
+  validation via `.parse()`; out-of-range values return
+  `None`.
+
+### AQ-024 -- `print_final_message` returned `Result` for a cosmetic step
+
+- **Date:** 2026-05-17
+- **Category:** API Design (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Made the function infallible: on read
+  failure it falls through to a `?` placeholder. The
+  remote is fully provisioned by this point, so the
+  banner should never fail the command.
+
+### AQ-023 -- `prompt_enter` and `ssh_test` were dead code with `#[allow(dead_code)]`
+
+- **Date:** 2026-05-17
+- **Category:** YAGNI (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Deleted both. Templates shouldn't ship
+  unused "extension hooks"; if a future feature needs
+  them, write them with a real call site and test.
+
+### AQ-022 -- `DeployConfig::remote()` allocated on every call
+
+- **Date:** 2026-05-17
+- **Category:** Performance (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Precomputed `remote: String` once in
+  `load()`; getter returns `&str`.
+
+### AQ-021 -- `DeployConfig` fields were `pub String` (bypassed validation)
+
+- **Date:** 2026-05-17
+- **Category:** Encapsulation (Medium)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Privatized fields, exposed `rpi_host()`,
+  `deploy_path()`, `remote()` getters returning `&str`.
+  Dropped the unused `rpi_user` field (callers only need
+  the precomputed `remote`).
+
+### AQ-020 -- `RemoteError::NonZeroExit { cmd: &'static str }` was inflexible
+
+- **Date:** 2026-05-17
+- **Category:** API Design (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Changed `cmd` to `String`; added a
+  `label: &str` parameter to `ssh_run`/`ssh_capture`/
+  `ssh_bash`/`scp_to` so error messages disambiguate
+  which call site failed.
+
+### AQ-019 -- `StdError::source` impl on `RemoteError` was dead infrastructure
+
+- **Date:** 2026-05-17
+- **Category:** Dead Code (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Dropped the `source()` impl and its
+  tests. Nothing at the `Result<(), String>` boundary
+  walks the source chain, and `Display` already includes
+  the inner `io::Error` for the variants that have one.
+
 ### AQ-018 -- tsconfig.json redeclared @tsconfig/svelte defaults
 
 - **Date:** 2026-04-16

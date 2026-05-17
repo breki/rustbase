@@ -1,14 +1,15 @@
 #!/usr/bin/env pwsh
 # build.ps1 - Full build with quality checks
 # Exit codes: 0=success, 1=test failure, 2=clippy failure,
-#   3=coverage failure, 4=build failure, 5=e2e failure
+#   3=coverage failure, 4=build failure, 5=e2e failure,
+#   6=deploy failure
 
 param(
     [Parameter(Position = 0)]
     [ValidateSet(
-        "build", "build-only", "dev", "test", "clippy",
-        "coverage", "validate", "e2e", "frontend",
-        "clean", "help"
+        "build", "build-only", "deploy", "deploy-setup",
+        "dev", "test", "clippy", "coverage", "validate",
+        "e2e", "frontend", "clean", "help"
     )]
     [string]$Command = "build",
     [switch]$Help
@@ -19,17 +20,19 @@ if ($Help -or $Command -eq "help") {
 Usage: .\build.ps1 [command]
 
 Commands:
-  build       Full build with all quality checks (default)
-  build-only  Build release binaries only
-  dev         Start backend + frontend dev servers
-  test        Run all Rust tests
-  clippy      Run clippy linter
-  coverage    Generate HTML coverage report
-  validate    Run cargo xtask validate
-  e2e         Run Playwright end-to-end tests
-  frontend    Build frontend (npm run build)
-  clean       Clean build artifacts
-  help        Show this help
+  build         Full build with all quality checks (default)
+  build-only    Build release binaries only
+  deploy        Deploy to remote (build, sync, restart)
+  deploy-setup  First-time remote setup (user, dirs, service)
+  dev           Start backend + frontend dev servers
+  test          Run all Rust tests
+  clippy        Run clippy linter
+  coverage      Generate HTML coverage report
+  validate      Run cargo xtask validate
+  e2e           Run Playwright end-to-end tests
+  frontend      Build frontend (npm run build)
+  clean         Clean build artifacts
+  help          Show this help
 "@
     exit 0
 }
@@ -103,6 +106,16 @@ function Invoke-Dev {
     }
 }
 
+function Invoke-Deploy {
+    cargo xtask deploy
+    if ($LASTEXITCODE -ne 0) { exit 6 }
+}
+
+function Invoke-DeploySetup {
+    cargo xtask deploy-setup
+    if ($LASTEXITCODE -ne 0) { exit 6 }
+}
+
 function Invoke-Test {
     cargo xtask test
     if ($LASTEXITCODE -ne 0) { exit 1 }
@@ -154,14 +167,16 @@ function Invoke-Clean {
 }
 
 switch ($Command) {
-    "build"      { Invoke-Build }
-    "build-only" { Invoke-BuildOnly }
-    "dev"        { Invoke-Dev }
-    "test"       { Invoke-Test }
-    "clippy"     { Invoke-Clippy }
-    "coverage"   { Invoke-Coverage }
-    "validate"   { Invoke-Validate }
-    "e2e"        { Invoke-E2E }
-    "frontend"   { Invoke-Frontend }
-    "clean"      { Invoke-Clean }
+    "build"        { Invoke-Build }
+    "build-only"   { Invoke-BuildOnly }
+    "deploy"       { Invoke-Deploy }
+    "deploy-setup" { Invoke-DeploySetup }
+    "dev"          { Invoke-Dev }
+    "test"         { Invoke-Test }
+    "clippy"       { Invoke-Clippy }
+    "coverage"     { Invoke-Coverage }
+    "validate"     { Invoke-Validate }
+    "e2e"          { Invoke-E2E }
+    "frontend"     { Invoke-Frontend }
+    "clean"        { Invoke-Clean }
 }

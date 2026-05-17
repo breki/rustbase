@@ -5,6 +5,72 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-034 -- `parse_port` did not handle `--port=N` equals form
+
+- **Date:** 2026-05-17
+- **Category:** Correctness (Low / cosmetic)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** `parse_port` now skips an optional `=`
+  after the `--port` token; also tightened to return
+  `Option<u16>` with range validation via `.parse()`.
+
+### RT-033 -- service unit `--bind 0.0.0.0` exposed by default
+
+- **Date:** 2026-05-17
+- **Category:** Deployment (Medium)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Default `--bind 127.0.0.1` in the systemd
+  unit; updated the security-note header to point users at
+  the reverse proxy / `IPAddressAllow=` path.
+
+### RT-032 -- `MemoryMax=256M` hard cap would OOM-kill under modest load
+
+- **Date:** 2026-05-17
+- **Category:** Deployment (Medium)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Replaced single hard cap with soft
+  `MemoryHigh=256M` + hard `MemoryMax=1G`; aligns with
+  cgroups v2 best practice.
+
+### RT-031 -- failed install left service stopped indefinitely
+
+- **Date:** 2026-05-17
+- **Category:** Correctness / Availability (High)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Pre-staged frontend before the stop
+  window; on any failure during stop/swap/start the
+  deploy now attempts `systemctl start` as a rollback
+  before propagating the error.
+
+### RT-030 -- "atomic swap" comment was inaccurate
+
+- **Date:** 2026-05-17
+- **Category:** Correctness (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Replaced `rm -rf`-then-`mv` with a real
+  POSIX-atomic swap (`mv current → old`, `mv new →
+  current`, then `rm -rf old`). The path is never absent.
+
+### RT-029 -- stale `frontend-dist-new` could nest files wrong
+
+- **Date:** 2026-05-17
+- **Category:** Correctness (Medium)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** INSTALL_FRONTEND now `rm -rf`'s any
+  stale `frontend-dist-new`/`frontend-dist-old` before
+  copying. Added a unit test asserting the cleanup line
+  is present.
+
+### RT-028 -- `poll_active_status` returned a garbled status string
+
+- **Date:** 2026-05-17
+- **Category:** Correctness (Low)
+- **Commit context:** v0.5.0 deploy-as-xtask port
+- **Resolution:** Switched the remote command to
+  `... || true` and took only the first stdout line,
+  so the returned token is always a clean systemd state
+  word.
+
 ### RT-027 -- CHANGELOG not updated for 0.4.0
 
 - **Date:** 2026-04-16

@@ -1,0 +1,15 @@
+# Deploy Configuration
+# Copy this file to .deploy and customize.
+# .deploy is gitignored.
+#
+# Format: key=value (no quotes)
+
+# Remote hostname or IP address
+rpi_host=raspberrypi.local
+
+# SSH user on the remote host (must have sudo access)
+rpi_user=pi
+
+# Deploy path on the remote (must be /opt/rustbase --
+# the systemd unit file hardcodes this path)
+deploy_path=/opt/rustbase

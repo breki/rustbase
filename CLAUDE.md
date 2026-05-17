@@ -39,6 +39,8 @@ cargo xtask clippy            # lint only
 cargo xtask coverage          # coverage only (>=90%)
 cargo xtask fmt               # format code
 cargo xtask dupes             # code duplication check
+cargo xtask deploy            # deploy to remote (see docs/deployment.md)
+cargo xtask deploy-setup      # one-time remote provisioning
 ```
 
 Never use raw `cargo test` or `cargo clippy` -- always
@@ -84,12 +86,14 @@ verify code correctness, not feature correctness.
 ### PowerShell Build Script
 
 ```powershell
-.\build.ps1 validate    # cargo xtask validate
-.\build.ps1 test        # tests only
-.\build.ps1 e2e         # Playwright E2E tests
-.\build.ps1 frontend    # npm build
-.\build.ps1 build       # full build with all checks
-.\build.ps1 clean       # clean artifacts
+.\build.ps1 validate      # cargo xtask validate
+.\build.ps1 test          # tests only
+.\build.ps1 e2e           # Playwright E2E tests
+.\build.ps1 frontend      # npm build
+.\build.ps1 build         # full build with all checks
+.\build.ps1 deploy        # deploy to remote host
+.\build.ps1 deploy-setup  # first-time remote provisioning
+.\build.ps1 clean         # clean artifacts
 ```
 
 ## Coding Standards

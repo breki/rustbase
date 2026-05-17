@@ -33,6 +33,9 @@ coverage.json
 # Port config (local override)
 .ports
 
+# Deploy config (local override; .deploy.sample is committed)
+.deploy
+
 # Playwright
 /test-results/
 /playwright-report/
