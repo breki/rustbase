@@ -176,6 +176,23 @@ conventions.
    cross-confirmed finding has been selected for
    fixing; unique findings have a lower hit rate.
 
+   **Truncated reviewer output:**
+   Before presenting findings, scan each reviewer's
+   reply for finding IDs that appear in its summary
+   or cross-references but whose full bodies (the
+   six labeled-bullet fields) are not present in the
+   returned text. Subagent replies are occasionally
+   truncated and a summary line like "RT-001
+   (permission globs), RT-002 (test robustness)" with
+   no matching body for those IDs is a strong signal
+   the body was dropped. In that case, use
+   `SendMessage` to the same agent (its ID is in the
+   tool result) and ask it to re-emit the missing
+   findings verbatim, with the same labeled-bullet
+   structure. Do this *before* presenting to the
+   user -- otherwise findings the reviewer actually
+   raised are silently dropped.
+
    **Presenting findings to the user:**
    - Present **ALL** findings from both reviewers
      without filtering or skipping any. Do not omit
