@@ -73,6 +73,106 @@ individual projects.
 
 ## Resolved
 
+### 2026-05-18 -- `clean_cache` Windows junctions bypassed the symlink guard
+
+Surfaced from hoard's template feedback (2026-05-18).
+`delete_entry` in `xtask/src/clean_cache.rs` dispatched
+on `FileType::is_symlink()`, but on Windows that flag
+is only set for `IO_REPARSE_TAG_SYMLINK` -- directory
+junctions (`mklink /J`) returned `false` and fell into
+the `is_dir()` branch, where `remove_dir_all` would
+traverse the junction and delete the *target* tree
+outside the workspace. **Fix:** added an
+`is_reparse_or_symlink` helper that checks
+`FILE_ATTRIBUTE_REPARSE_POINT` via
+`MetadataExt::file_attributes` on Windows; reparse
+points unlink via `remove_dir` with a `remove_file`
+fallback. Added a `cmd /c mklink /J`-based regression
+test (no elevation required, unlike `symlink_dir`).
+
+### 2026-05-18 -- `[profile.release]` overrides shipped slow deployed binaries
+
+Surfaced from hoard's template feedback (2026-05-18).
+Root `Cargo.toml` set `[profile.release] incremental =
+true, codegen-units = 256`. The accompanying doc
+correctly named "any project shipping a binary to
+multiple users" as a case to skip -- but every derived
+project's `cargo build --release` (including deploy
+flows) silently inherited a measurably slower binary
+for no iteration-speed gain. **Fix:** moved the
+overrides into a new `[profile.release-fast]` that
+inherits from `release`; `[profile.release]` stays at
+cargo defaults so deployed binaries are fully
+optimised. Local fast iteration uses
+`cargo build --profile release-fast`.
+
+### 2026-05-18 -- `stop-check.sh` `&&` chain dropped earlier-stage output
+
+Surfaced from hoard's template feedback (2026-05-18).
+The hook ran `output=$(cargo fmt --check && cargo
+xtask clippy && cargo xtask test)`. On multi-stage
+failure the captured `$output` held only the
+short-circuited stage's output with no label, so when
+Claude fixed clippy the previously-masked test
+failure resurfaced looking "new" -- exactly the
+fix-loop amplification the `stop_hook_active` guard
+is meant to prevent. **Fix:** extracted a `run_stage
+"label" cmd...` helper that runs stages sequentially
+and prefixes failing output with `=== <stage> failed
+===`, so Claude sees both the stage label and the
+full failure body on the first hook run.
+
+### 2026-05-18 -- `dir_size` was a library helper that printed to stderr and undercounted silently
+
+Surfaced from hoard's template feedback (2026-05-18).
+`dir_size` in `xtask/src/helpers.rs` returned
+`Ok(total)` but called `eprintln!("warning: ...
+(skipping)")` from inside the recursive walk on
+per-entry failures, contradicting its
+`Result<u64, String>` contract ("size or error") with
+"best-effort size plus stderr side-effects." **Fix:**
+changed the signature to
+`Result<(u64, Vec<String>), String>` so per-entry
+failures populate a warnings vector and callers
+decide what to do. `clean_cache::clear_dir_contents`
+folds those warnings into its own per-entry error
+list, so warnings now surface alongside deletion
+failures in the final report instead of being dumped
+to stderr mid-loop.
+
+### 2026-05-18 -- `temp_scratch` used fragile `ThreadId` debug parsing and bare `unwrap`
+
+Surfaced from hoard's template feedback (2026-05-18).
+`temp_scratch` in `xtask/src/helpers.rs` formatted
+`thread::current().id()` via `{:?}` and filter-to-
+digits to build a unique suffix. `ThreadId`'s `Debug`
+output is unspecified by std and could change across
+Rust versions, and the process-wide `AtomicU64`
+counter is already unique across parallel test
+threads, so the thread-id component was redundant.
+The trailing `fs::create_dir_all(&dir).unwrap()` also
+gave a generic panic that misled CI diagnostics.
+**Fix:** dropped the `ThreadId` parsing (kept
+`pid + AtomicU64`) and replaced `unwrap` with
+`unwrap_or_else` carrying a descriptive panic that
+names the failing path.
+
+### 2026-05-18 -- `/template-sync` didn't document the Windows `git show <rev>:<path>` failure
+
+Surfaced from hoard's template feedback (2026-05-18).
+On Windows shells the `:` separator in `git show
+template/main:crates/rustbase/Cargo.toml` (and
+similar `revspec:path` forms) can be mangled into a
+`;` separator, producing an "ambiguous argument"
+error with no obvious workaround. **Fix:** added a
+"Windows note" to step 9 of
+`.claude/commands/template-sync.md` prescribing the
+cross-platform `git show <rev> -- <path>` /
+`git diff <rev> -- <path>` form, which keeps the
+path as a separate argument and sidesteps the colon
+mangling. The note also covers any step-7 site that
+reads upstream files via `revspec:path`.
+
 ### 2026-05-17 -- `xtask check` "aborting" filter dropped legitimate user errors
 
 Surfaced from rustwerk's template feedback (2026-04-19,

@@ -10,6 +10,45 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- `cargo xtask clean-cache` no longer follows Windows
+  directory junctions (`mklink /J`) under
+  `target/incremental/`. A junction previously fell
+  through `FileType::is_symlink()` (which on Windows
+  is only set for `IO_REPARSE_TAG_SYMLINK`, not
+  junctions) and was removed via `remove_dir_all`,
+  which traversed the junction and deleted the
+  *target* tree outside the workspace. The same
+  blind spot also affected size reporting -- `dir_size`
+  walked through junctions and inflated the "freed"
+  byte count with the target tree's contents. Both
+  sites now share an `is_reparse_or_symlink_meta`
+  helper that checks `FILE_ATTRIBUTE_REPARSE_POINT`.
+- `.claude/hooks/stop-check.sh` now labels which
+  stage failed and includes its full output. The
+  previous `cargo fmt --check && cargo xtask clippy
+  && cargo xtask test` short-circuit captured only
+  the first failing stage's output with no label, so
+  when Claude fixed one stage the next-stage failure
+  would resurface on the following hook run looking
+  "new" -- defeating the `stop_hook_active` guard
+  and amplifying fix loops.
+
+### Changed
+
+- `[profile.release]` reverted to cargo defaults so
+  `cargo build --release` (and deploy flows) produce
+  fully-optimised binaries. The previous
+  `incremental = true` / `codegen-units = 256`
+  overrides moved into a new
+  `[profile.release-fast]`. Local fast iteration
+  uses `cargo build --profile release-fast`;
+  deployed binaries get cargo's standard
+  `release` shape. Existing derived projects that
+  relied on the old overrides should switch their
+  iteration scripts to `--profile release-fast`.
+
 ## [0.10.0] - 2026-05-18
 
 ### Added

@@ -6,6 +6,82 @@ findings.
 
 ---
 
+### AQ-042 -- `clean_cache` double-prefixed `dir_size` warning paths
+
+**Category:** Error Handling & Messages
+
+**Resolution:** 2026-05-18 -- `clear_dir_contents`
+wrapped each warning from `dir_size` with
+`format!("size {}: {w}", path.display())`, but the
+warning string already contained its own (deeper)
+failing path. Operators saw two paths per message and
+the first one named a parent rather than the actual
+culprit -- the exact failure mode the `dir_size`
+refactor was meant to fix. Now pushed verbatim via
+`DirSizeWarning::to_string`.
+
+### AQ-043 -- `dir_size` warnings were stringly typed
+
+**Category:** API Design
+
+**Resolution:** 2026-05-18 -- Replaced
+`Vec<String>` warnings channel with a new
+`DirSizeWarning { path: PathBuf, message: String }`
+struct that implements `Display`. Callers that just
+want the legacy format use `to_string()`; future
+callers can filter/transform on the structured
+`path` field.
+
+### AQ-044 -- `dir_size` had two error channels with no semantic distinction
+
+**Category:** API Design
+
+**Resolution:** 2026-05-18 -- The previous signature
+`Result<(u64, Vec<String>), String>` bifurcated
+top-level failure (hard `Err`) from per-entry
+failures (warnings), but the only caller funneled
+both into the same error vector. Collapsed to
+`(u64, Vec<DirSizeWarning>)` -- root-level failures
+are now first entries in the warnings vector with
+`path: <root>` and a zero total, removing API
+complexity that paid no behaviour.
+
+### AQ-045 -- `FILE_ATTRIBUTE_REPARSE_POINT` was a hand-typed Win32 constant
+
+**Category:** Type Safety
+
+**Resolution:** 2026-05-18 -- Replaced the inline
+`const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400`
+with the canonical
+`windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT`.
+Added `windows-sys` as a `cfg(windows)`-only
+dependency in `xtask/Cargo.toml`; it's compile-time
+free on non-Windows platforms.
+
+### AQ-046 -- `delete_entry` doc-comment claimed "no extra syscall" after the junction fix
+
+**Category:** Error Handling & Messages
+
+**Resolution:** 2026-05-18 -- The original comment
+described the pre-fix behaviour. The junction guard
+now does one `symlink_metadata` per Windows entry
+that's not already flagged as a symlink. Doc-comment
+updated to say so explicitly; Unix path still
+short-circuits on `file_type.is_symlink()` and pays
+no extra syscall.
+
+### AQ-047 -- `temp_scratch` panic message duplicated the function-name prefix
+
+**Category:** Error Handling & Messages
+
+**Resolution:** 2026-05-18 -- `panic!("temp_scratch:
+create_dir_all({}) failed: {e}", ...)` duplicated
+the location info that `panic!` already attaches.
+Simplified to `panic!("failed to create scratch dir
+{}: {e}", dir.display())` -- reads as a sentence,
+gives the path and cause, and lets the panic
+location identify the function for free.
+
 ### AQ-040 -- See RT-044 (cross-confirmed)
 
 **Category:** CHANGELOG structure

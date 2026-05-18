@@ -7,6 +7,35 @@ reverse chronological order.
 
 ### 2026-05-18
 
+- Port hoard template feedback: junction guard, release-fast profile, dir_size warnings, Stop-hook stage labels (v0.10.1)
+
+    Backfed eight items from hoard's
+    `docs/developer/template-feedback.md`. Highest-
+    impact fix: `xtask clean-cache` would follow
+    Windows directory junctions (`mklink /J`) under
+    `target/incremental/` and `remove_dir_all` the
+    target tree -- now guarded via a new
+    `is_reparse_or_symlink_meta` helper that checks
+    `FILE_ATTRIBUTE_REPARSE_POINT` (pulled from
+    `windows-sys`), applied in both `dir_size` (so the
+    "freed" report no longer walks target trees) and
+    `delete_entry`. `[profile.release]` reverted to
+    cargo defaults so deployed binaries are fully
+    optimised; the previous
+    `incremental = true / codegen-units = 256`
+    overrides moved into a new
+    `[profile.release-fast]` for local iteration.
+    `stop-check.sh` now runs stages via a `run_stage`
+    helper that labels which one failed instead of
+    masking earlier output via `&&` short-circuit.
+    `dir_size` returns a structured
+    `Vec<DirSizeWarning>` (was an inline-stderr
+    `eprintln!` side-effect); `temp_scratch` dropped
+    fragile `ThreadId` debug-string parsing.
+    `/template-sync` now documents the Windows
+    `git show <rev>:<path>` colon-mangling failure
+    mode.
+
 - Port rustwerk template feedback + add /template-backfeed + Stop-hook fmt-check (v0.10.0)
 
     Rolls up the multi-commit session that ported

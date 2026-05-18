@@ -27,9 +27,12 @@
 //!   are still cleaned.
 
 use std::fs;
+use std::io;
 use std::path::Path;
 
-use crate::helpers::{dir_size, fmt_bytes, workspace_root};
+use crate::helpers::{
+    dir_size, fmt_bytes, is_reparse_or_symlink_meta, workspace_root,
+};
 
 /// Incremental cache subdirectories under `target/`.
 const INCREMENTAL_DIRS: &[&str] =
@@ -117,17 +120,15 @@ fn clear_dir_contents(dir: &Path) -> Result<(u64, Vec<String>), String> {
             }
         };
 
-        let size = match dir_size(&path) {
-            Ok(n) => n,
-            Err(e) => {
-                eprintln!(
-                    "warning: could not size {}: {e} \
-                     (treating as 0; deletion still proceeds)",
-                    path.display()
-                );
-                0
-            }
-        };
+        let (size, size_warnings) = dir_size(&path);
+        for w in size_warnings {
+            // DirSizeWarning carries its own failing
+            // path -- push verbatim rather than
+            // re-prefixing with `path`, which would
+            // misleadingly name a parent when the real
+            // culprit was deeper in the walk.
+            errors.push(w.to_string());
+        }
 
         let outcome = delete_entry(&path, file_type);
 
@@ -140,23 +141,37 @@ fn clear_dir_contents(dir: &Path) -> Result<(u64, Vec<String>), String> {
     Ok((freed, errors))
 }
 
-/// Remove a single entry without following symlinks.
+/// Remove a single entry without following symlinks
+/// or Windows directory junctions.
 ///
-/// `file_type` is captured from the `DirEntry` (no
-/// extra syscall, no symlink traversal). The dispatch
-/// is: symlink -> unlink the link itself; regular dir
-/// -> `remove_dir_all`; otherwise -> `remove_file`.
+/// `file_type` is captured from the `DirEntry` and
+/// covers the common case (regular file / regular
+/// dir / true symlink) with no extra syscall. On
+/// Windows, when `file_type.is_symlink()` is false we
+/// pay one extra `symlink_metadata` to inspect
+/// `FILE_ATTRIBUTE_REPARSE_POINT` -- this is required
+/// because `is_symlink()` is only set for
+/// `IO_REPARSE_TAG_SYMLINK`, not directory junctions
+/// (`mklink /J`), and without the check a junction
+/// would fall into the `is_dir()` branch and
+/// `remove_dir_all` would traverse it and delete the
+/// *target* tree. On Unix the helper short-circuits
+/// on `is_symlink()` alone, so no extra syscall.
 ///
-/// On Windows, directory symlinks/junctions cannot be
+/// Dispatch: reparse point / symlink -> unlink the
+/// link itself; regular dir -> `remove_dir_all`;
+/// otherwise -> `remove_file`.
+///
+/// On Windows, directory reparse points cannot be
 /// removed via `remove_file`, so we try `remove_dir`
 /// first and fall back to `remove_file` for file-style
-/// symlinks. On Unix, all symlinks unlink with
+/// links. On Unix, all symlinks unlink with
 /// `remove_file`.
 fn delete_entry(
     path: &Path,
     file_type: std::fs::FileType,
-) -> Result<(), std::io::Error> {
-    if file_type.is_symlink() {
+) -> Result<(), io::Error> {
+    if is_reparse_or_symlink_path(path, file_type)? {
         #[cfg(windows)]
         {
             fs::remove_dir(path).or_else(|_| fs::remove_file(path))
@@ -169,6 +184,29 @@ fn delete_entry(
         fs::remove_dir_all(path)
     } else {
         fs::remove_file(path)
+    }
+}
+
+/// Path-based wrapper over `is_reparse_or_symlink_meta`
+/// used by deletion. Avoids the extra
+/// `symlink_metadata` call on Unix by short-circuiting
+/// on `file_type.is_symlink()` directly.
+fn is_reparse_or_symlink_path(
+    path: &Path,
+    file_type: std::fs::FileType,
+) -> Result<bool, io::Error> {
+    if file_type.is_symlink() {
+        return Ok(true);
+    }
+    #[cfg(windows)]
+    {
+        let meta = fs::symlink_metadata(path)?;
+        Ok(is_reparse_or_symlink_meta(&meta))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Ok(false)
     }
 }
 
@@ -307,5 +345,103 @@ mod tests {
     #[cfg(not(any(unix, windows)))]
     fn create_dir_symlink(_src: &Path, _dst: &Path) -> bool {
         false
+    }
+
+    /// Windows-only regression test: a directory
+    /// junction (`mklink /J`) is a reparse point but
+    /// not a true symlink, so `FileType::is_symlink()`
+    /// returns `false` for it. Without the
+    /// `is_reparse_or_symlink` guard the cleaner would
+    /// fall into the `is_dir()` branch and
+    /// `remove_dir_all` would traverse the junction
+    /// and delete the target tree.
+    ///
+    /// Junctions, unlike symlinks, do not require
+    /// elevation or developer mode to create on
+    /// Windows, so this test runs unconditionally on
+    /// Windows CI.
+    #[cfg(windows)]
+    #[test]
+    fn clear_dir_contents_does_not_follow_junctions() {
+        use std::process::Command;
+
+        let temp = temp_scratch("clean-cache-junction");
+        let inc = temp.join("incremental");
+        fs::create_dir_all(&inc).unwrap();
+
+        let outside = temp.join("outside-tree");
+        fs::create_dir_all(&outside).unwrap();
+        // Use a payload bigger than the junction
+        // entry's plausible metadata size so the
+        // `freed` upper-bound assertion below can
+        // catch a regression that walks the target.
+        File::create(outside.join("must-survive.bin"))
+            .unwrap()
+            .write_all(&vec![0u8; 65536])
+            .unwrap();
+
+        let junction = inc.join("junction-to-outside");
+
+        // Guard against BatBadBut (CVE-2024-24576): the
+        // `cmd /c` re-parser is sensitive to a handful
+        // of metacharacters in args. `temp_dir()` is
+        // user-controllable via `TMP`/`TEMP`, so refuse
+        // to invoke `mklink` if either path embeds one.
+        let unsafe_chars = ['&', '|', '<', '>', '^', '"', '%', '\n', '\r'];
+        let safe = |p: &Path| {
+            p.to_str()
+                .is_some_and(|s| !s.chars().any(|c| unsafe_chars.contains(&c)))
+        };
+        if !(safe(&junction) && safe(&outside)) {
+            let _ = fs::remove_dir_all(&temp);
+            return;
+        }
+
+        let status = Command::new("cmd")
+            .args([
+                "/c",
+                "mklink",
+                "/J",
+                junction.to_str().unwrap(),
+                outside.to_str().unwrap(),
+            ])
+            .status();
+        let junction_ok = matches!(status, Ok(s) if s.success());
+        if !junction_ok {
+            // mklink unavailable in this environment;
+            // bail without failing.
+            let _ = fs::remove_dir_all(&temp);
+            return;
+        }
+
+        let (freed, errors) = clear_dir_contents(&inc).unwrap();
+        assert!(
+            errors.is_empty(),
+            "junction unlink should succeed cleanly: {errors:?}"
+        );
+        assert!(
+            outside.join("must-survive.bin").exists(),
+            "files behind the junction must NOT be deleted"
+        );
+        // `Path::exists` follows reparse points, so an
+        // existing-but-broken link would also report
+        // false. `symlink_metadata` reports the link
+        // entry directly: `Err` here means the entry
+        // itself is gone.
+        assert!(
+            fs::symlink_metadata(&junction).is_err(),
+            "the junction entry itself should be gone"
+        );
+        // If `dir_size` regressed and traversed the
+        // junction, `freed` would include the 64 KiB
+        // payload behind the target. Bound it well
+        // below that.
+        assert!(
+            freed < 4096,
+            "junction sizing must not walk the target \
+             tree (freed = {freed})"
+        );
+
+        let _ = fs::remove_dir_all(temp);
     }
 }

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -68,54 +69,143 @@ pub fn fmt_bytes(bytes: u64) -> String {
     }
 }
 
-/// Recursive byte sum for a path. Symlinks are not
-/// followed and contribute zero bytes -- defends
-/// against symlink-loop stack blow-up and against
-/// attributing symlink-target sizes to the source.
-///
-/// Errors at every level carry the failing path so
-/// downstream warnings can name the actual culprit
-/// rather than the top-level entry being walked.
-pub fn dir_size(path: &Path) -> Result<u64, String> {
-    let meta = fs::symlink_metadata(path)
-        .map_err(|e| format!("symlink_metadata {}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() {
-        return Ok(0);
+/// A non-fatal problem encountered while walking a
+/// directory tree for `dir_size`. The struct carries
+/// the failing path separately from the message so
+/// callers can filter or re-present without re-parsing
+/// strings. `Display` produces `<path>: <message>`
+/// which is the form users see in tool output.
+#[derive(Debug, Clone)]
+pub struct DirSizeWarning {
+    pub path: PathBuf,
+    pub message: String,
+}
+
+impl fmt::Display for DirSizeWarning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.path.display(), self.message)
     }
-    if meta.is_file() {
-        return Ok(meta.len());
-    }
-    let mut total = 0u64;
-    let entries = fs::read_dir(path)
-        .map_err(|e| format!("read_dir {}: {e}", path.display()))?;
-    for entry in entries {
-        let entry = entry
-            .map_err(|e| format!("entry under {}: {e}", path.display()))?;
-        match dir_size(&entry.path()) {
-            Ok(n) => total += n,
-            Err(e) => eprintln!("warning: {e} (skipping)"),
+}
+
+impl DirSizeWarning {
+    fn new(path: &Path, message: impl Into<String>) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            message: message.into(),
         }
     }
-    Ok(total)
+}
+
+/// Return `true` if `meta` describes a symlink (any
+/// platform) or a Windows reparse point of any kind
+/// (symlink or directory junction).
+///
+/// On non-Windows, `meta.file_type().is_symlink()` is
+/// the authoritative answer. On Windows that flag is
+/// only set for `IO_REPARSE_TAG_SYMLINK`, so directory
+/// junctions (`IO_REPARSE_TAG_MOUNT_POINT`, created by
+/// `mklink /J`) need the `FILE_ATTRIBUTE_REPARSE_POINT`
+/// bit checked explicitly. Without this guard a
+/// junction below `target/` could redirect a tree
+/// walk or `remove_dir_all` outside the workspace.
+pub fn is_reparse_or_symlink_meta(meta: &fs::Metadata) -> bool {
+    if meta.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+        meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+/// Recursive byte sum for a path. Symlinks and Windows
+/// reparse points (directory junctions) are not
+/// followed and contribute zero bytes -- defends
+/// against symlink-loop stack blow-up, against
+/// attributing target sizes to the source, and against
+/// walking arbitrary external trees behind a
+/// `mklink /J`.
+///
+/// Returns `(total_bytes, warnings)`. Every failure
+/// (including a failed `symlink_metadata` or
+/// `read_dir` on `path` itself) is folded into the
+/// warnings vector with its specific failing path
+/// attached; this is the only error channel, so
+/// callers handle warnings uniformly regardless of
+/// recursion depth. Bytes from successfully walked
+/// entries are still summed.
+pub fn dir_size(path: &Path) -> (u64, Vec<DirSizeWarning>) {
+    let mut warnings: Vec<DirSizeWarning> = Vec::new();
+
+    let meta = match fs::symlink_metadata(path) {
+        Ok(m) => m,
+        Err(e) => {
+            warnings.push(DirSizeWarning::new(
+                path,
+                format!("symlink_metadata: {e}"),
+            ));
+            return (0, warnings);
+        }
+    };
+
+    if is_reparse_or_symlink_meta(&meta) {
+        return (0, warnings);
+    }
+    if meta.is_file() {
+        return (meta.len(), warnings);
+    }
+
+    let entries = match fs::read_dir(path) {
+        Ok(e) => e,
+        Err(e) => {
+            warnings.push(DirSizeWarning::new(path, format!("read_dir: {e}")));
+            return (0, warnings);
+        }
+    };
+
+    let mut total = 0u64;
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                warnings.push(DirSizeWarning::new(
+                    path,
+                    format!("read_dir entry: {e}"),
+                ));
+                continue;
+            }
+        };
+        let (n, mut child_warnings) = dir_size(&entry.path());
+        total += n;
+        warnings.append(&mut child_warnings);
+    }
+    (total, warnings)
 }
 
 /// Per-test scratch directory under the system temp.
-/// PID + thread id + atomic counter keep parallel test
-/// runs from colliding without adding a `tempfile`
-/// dependency. Cleanup is the caller's responsibility
-/// (best-effort `remove_dir_all` at end of test).
+/// PID + a process-wide atomic counter keep parallel
+/// test runs from colliding without adding a
+/// `tempfile` dependency. The counter is shared across
+/// threads, so no per-thread id is needed. Cleanup is
+/// the caller's responsibility (best-effort
+/// `remove_dir_all` at end of test).
 #[cfg(test)]
 pub(crate) fn temp_scratch(label: &str) -> PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let seq = SEQ.fetch_add(1, Ordering::SeqCst);
     let pid = std::process::id();
-    let tid = format!("{:?}", std::thread::current().id());
-    let tid_clean: String =
-        tid.chars().filter(char::is_ascii_alphanumeric).collect();
     let dir = std::env::temp_dir()
-        .join(format!("rustbase-xtask-{label}-{pid}-{tid_clean}-{seq}"));
-    fs::create_dir_all(&dir).unwrap();
+        .join(format!("rustbase-xtask-{label}-{pid}-{seq}"));
+    fs::create_dir_all(&dir).unwrap_or_else(|e| {
+        panic!("failed to create scratch dir {}: {e}", dir.display())
+    });
     dir
 }
 

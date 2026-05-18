@@ -147,7 +147,18 @@ this project.
    - Set `last-synced-version` to the version from the
      template's `crates/rustbase/Cargo.toml` at that SHA
      (use `git show template/main:crates/rustbase/Cargo.toml`
-     to read it)
+     to read it).
+     **Windows note:** the `<rev>:<path>` form of
+     `git show` can fail on Windows shells that mangle
+     the `:` separator (the error surfaces with a `;`
+     in place of the `:`). If that happens, fall back
+     to `git show template/main -- crates/rustbase/Cargo.toml`
+     or use `git diff template/main -- <path>` to read
+     the file at the tip; both keep the path as a
+     separate argument and sidestep the colon
+     mangling. The same workaround applies anywhere
+     step 7 (apply changes) uses the `revspec:path`
+     form to read an upstream file.
 
 10. **Summary** -- Show:
     - Files applied

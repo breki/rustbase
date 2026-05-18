@@ -5,6 +5,65 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-048 -- `dir_size` still traversed Windows directory junctions after the `delete_entry` fix
+
+**Category:** Correctness
+
+**Resolution:** 2026-05-18 -- The hoard backfeed
+patched the junction blind spot in `delete_entry` but
+not in `dir_size`, which is called one line earlier in
+`clear_dir_contents`. On Windows, `dir_size` recursed
+through any junction in `target/incremental/`, summed
+the target tree's bytes (inflating the "freed" report
+and walking arbitrary external trees), and hit
+unrelated `read_dir` errors. Fix moved the reparse-
+point check into a shared `is_reparse_or_symlink_meta`
+helper in `helpers.rs`, called from `dir_size`, and
+hardened the regression test with a `freed < 4096`
+assertion that would catch a future regression of the
+same shape.
+
+### RT-049 -- Junction regression test used `Path::exists`, which follows reparse points
+
+**Category:** Correctness
+
+**Resolution:** 2026-05-18 -- `assert!(!junction.exists())`
+in the new junction test returns false for both "link
+gone" and "link present but target unreachable",
+so the test would falsely pass on a regression that
+left a broken junction entry. Replaced with
+`assert!(fs::symlink_metadata(&junction).is_err())`
+which inspects the link entry directly.
+
+### RT-050 -- `cmd /c mklink` in junction test was BatBadBut-exposed via `TMP`
+
+**Category:** Security
+
+**Resolution:** 2026-05-18 -- `cmd.exe`'s argument
+re-parser (CVE-2024-24576 / BatBadBut) treats `&`,
+`|`, `<`, `>`, `^`, `"`, `%` as metacharacters
+regardless of how Rust's `Command::args` escapes them.
+The test built its `mklink` invocation from
+`temp_dir()` paths, which are user-controllable via
+`TMP`/`TEMP`. Added an upfront check that refuses to
+invoke `mklink` if either argument path contains a
+cmd metacharacter; the test skips silently in that
+case.
+
+### RT-051 -- `[profile.release-fast]` shape was unpinned
+
+**Category:** Project Configuration
+
+**Resolution:** 2026-05-18 -- The new profile only
+overrode `incremental` and `codegen-units`, leaving
+`lto`, `debug`, `strip` to inherit whatever cargo
+defaults in `[profile.release]`. The <5% runtime-cost
+figure in the surrounding doc-comment was measured at
+specific upstream defaults, so silent shifts in
+cargo's release defaults would invalidate the claim.
+Pinned `lto = false`, `debug = false`, `strip =
+"none"` explicitly and noted the pin's intent.
+
 ### RT-044/AQ-040 -- `[Unreleased]` was a 4-version accumulator; v0.10.0 cut would have inherited 0.6-0.9 work (cross-confirmed)
 
 **Category:** CHANGELOG correctness / release hygiene

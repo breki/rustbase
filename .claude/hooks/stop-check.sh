@@ -46,7 +46,26 @@ if [ -z "$changed_rs" ]; then
 fi
 
 # --- Run checks ------------------------------------------
-output=$(cargo fmt --all -- --check 2>&1 && cargo xtask clippy 2>&1 && cargo xtask test 2>&1) || {
-  echo "$output" >&2
-  exit 2
+# Stages run sequentially. A `cmd1 && cmd2 && cmd3`
+# chain captured into a single `$output` would, on
+# multi-stage failures, only contain the first failing
+# stage's output AND drop the label of which stage
+# failed -- so when Claude fixed clippy the test
+# failure would resurface looking "new" on the next
+# hook run, defeating the `stop_hook_active` guard
+# above.
+run_stage() {
+  local label="$1"
+  shift
+  local stage_output
+  if ! stage_output=$("$@" 2>&1); then
+    printf '=== %s failed ===\n%s\n' "$label" "$stage_output" >&2
+    return 1
+  fi
+  return 0
 }
+
+run_stage "cargo fmt --check" cargo fmt --all -- --check \
+  && run_stage "cargo xtask clippy" cargo xtask clippy \
+  && run_stage "cargo xtask test" cargo xtask test \
+  || exit 2
