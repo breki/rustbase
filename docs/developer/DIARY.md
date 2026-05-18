@@ -5,6 +5,36 @@ reverse chronological order.
 
 ---
 
+### 2026-05-18
+
+- Port rustwerk template feedback + add /template-backfeed + Stop-hook fmt-check (v0.10.0)
+
+    Rolls up the multi-commit session that ported
+    rustwerk's template-feedback items, hardened
+    `/template-sync`, fixed the `xtask check`
+    "aborting" filter and added a stderr fallback for
+    non-rustc failures, shipped a workspace
+    `clippy.toml` doc-valid-idents allowlist, added
+    the new `/template-backfeed` slash command
+    (inverse of `/template-sync`: pulls
+    downstream-logged template improvements back into
+    this template repo), and expanded the Stop hook
+    to include `cargo fmt --check` so fmt drift can't
+    bypass `/commit`'s validate gate on `chore:`
+    commits.
+
+    Release-bookkeeping cleanup: the CHANGELOG had
+    been treating `[Unreleased]` as a rolling
+    accumulator since v0.5.0, so v0.6.0, v0.7.0,
+    v0.8.0, and v0.9.0 were all bumped in
+    `Cargo.toml` without ever cutting their CHANGELOG
+    sections. This release retroactively splits the
+    accumulated block into proper `[0.6.0]`,
+    `[0.7.0]`, `[0.8.0]`, `[0.9.0]`, and `[0.10.0]`
+    headings, attributing each bullet to its real
+    release using DIARY entries and the git log
+    between version tags as ground truth.
+
 ### 2026-05-17
 
 - Coverage failures now include uncovered-line ranges (v0.8.0)

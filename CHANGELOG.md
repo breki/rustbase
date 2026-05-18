@@ -10,6 +10,34 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-18
+
+### Added
+
+- `/template-backfeed` slash command -- inverse of
+  `/template-sync`. Pulls template-improvement entries
+  from a downstream rustbase-derived project's
+  `docs/developer/template-feedback.md` back into this
+  template repo. Validates the downstream is
+  rustbase-based via its `.template-sync.toml`
+  (normalized the same way as `/template-sync`),
+  categorizes entries by rustwerk's `[Fixed locally]` /
+  `[Logged, not fixed locally]` / `[N/A for]` tag
+  convention, cross-references this template's own
+  Resolved section to skip already-applied entries,
+  treats downstream feedback as untrusted input (no
+  bulk-apply), and logs each applied entry as a
+  Resolved item before handing off to `/commit`.
+  Aborts unless run from the template repo.
+- Workspace `clippy.toml` with a curated
+  `doc-valid-idents` allowlist (extending clippy's
+  defaults via `".."`) so common Rust-infra terms
+  (`PowerShell`, `JSON`, `FFI`, `WebSocket`, `macOS`,
+  `GitHub`, `Tokio`, `Axum`, ...) don't trigger
+  `clippy::doc_markdown` in doc comments. Derived
+  projects append domain-specific identifiers rather
+  than redefining the list.
+
 ### Changed
 
 - `cargo xtask check` now prints the tail of stderr
@@ -42,6 +70,29 @@ and this project adheres to
   commits so coverage and duplication signal is
   preserved at that gate. Sourced from kozmotic's
   template feedback.
+- Workflow retrospective extracted into a standalone
+  `/retrospect` skill so it can be invoked manually
+  mid-session (not just after a commit). `/commit`
+  step 12 now delegates to `/retrospect` rather than
+  inlining the rules; the recursive-skip carve-out
+  for workflow-only diffs lives in the skill and
+  applies only to auto-invocations, not when the
+  user runs `/retrospect` directly.
+- `/commit` step 5 now scans reviewer replies for
+  truncated finding bodies (IDs referenced in a
+  summary but with no labeled-bullet body present)
+  and uses `SendMessage` to re-fetch them before
+  presenting to the user. Closes a real drop observed
+  in the prior session where two red-team findings
+  were silently lost. Sourced from rustwerk's
+  template feedback.
+- `CLAUDE.md` gains a "Coverage exceptions for
+  hardware-bound code" section documenting the
+  extract-to-submodule + ignore-regex + `*_TEST_*`
+  env-hatch recipe for I/O paths that can't run under
+  llvm-cov in CI. Sourced from kozmotic's template
+  feedback (the gate previously assumed everything was
+  testable; real CLI projects routinely aren't).
 
 ### Removed
 
@@ -53,6 +104,8 @@ and this project adheres to
   `scripts/kill-servers.sh` remain (non-trivial
   process-cleanup logic on Windows + Unix). Sourced
   from kozmotic's template feedback.
+
+## [0.9.0] - 2026-05-17
 
 ### Added
 
@@ -81,17 +134,6 @@ and this project adheres to
   (`- **<slug>** -- summary`) is now part of the
   captured format so `/implement <slug>` can locate
   items unambiguously.
-
-### Changed (workflow)
-
-- Workflow retrospective extracted into a standalone
-  `/retrospect` skill so it can be invoked manually
-  mid-session (not just after a commit). `/commit`
-  step 12 now delegates to `/retrospect` rather than
-  inlining the rules; the recursive-skip carve-out
-  for workflow-only diffs lives in the skill and
-  applies only to auto-invocations, not when the
-  user runs `/retrospect` directly.
 - `/template-sync` step 5 now cross-references
   `template-feedback.md`'s **Open divergences**
   section. Incoming template changes that conflict
@@ -118,22 +160,12 @@ and this project adheres to
   Removes the "write `unimplemented!()` first" theatre
   for self-contained new modules where the unit is
   too small to meaningfully fail-then-pass.
-
-### Changed (docs)
-
-- `CLAUDE.md` gains a "Coverage exceptions for
-  hardware-bound code" section documenting the
-  extract-to-submodule + ignore-regex + `*_TEST_*`
-  env-hatch recipe for I/O paths that can't run under
-  llvm-cov in CI. Sourced from kozmotic's template
-  feedback (the gate previously assumed everything was
-  testable; real CLI projects routinely aren't).
 - `CLAUDE.md` gains three new sections: "Workspace
   lints and xtask overrides" (the local-override
   recipe for derived projects that need OS-API code in
   xtask), "Edition-2024 migration notes" (the four
   mechanical fixes), and "Version source of truth"
-  (sentinel + CARGO_PKG_VERSION conventions).
+  (sentinel + `CARGO_PKG_VERSION` conventions).
 - `.template-sync.toml` header expanded into a
   ~15-line comment block describing the file's role,
   the managing skill, and cross-references to
@@ -146,6 +178,8 @@ and this project adheres to
   semantics.
 - `.claude/commands/template-improve.md` updated to
   route new entries by section.
+
+## [0.8.0] - 2026-05-17
 
 ### Added
 
@@ -172,7 +206,9 @@ and this project adheres to
   llvm-cov versions surface as a hard parse error
   instead of silently misclassifying gap regions.
 
-### Added (earlier in this cycle)
+## [0.7.0] - 2026-05-17
+
+### Added
 
 - `cargo xtask clean-cache` empties
   `target/{debug,release}/incremental/` while keeping
@@ -190,14 +226,19 @@ and this project adheres to
   scratch-directory helper (PID + thread id + atomic
   counter for parallel-test isolation without a
   `tempfile` dependency).
+
+## [0.6.0] - 2026-05-17
+
+### Added
+
 - `[profile.release]` defaults `incremental = true,
   codegen-units = 256` for faster iteration on
   personal-use deployments (override for
-  performance-critical targets)
+  performance-critical targets).
 - `frontend/package.json` aggregator scripts
   `npm run fix` (prettier + eslint --fix) and
   `npm run check:all` (check, lint, format:check,
-  test, build)
+  test, build).
 
 ### Changed
 

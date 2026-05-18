@@ -5,6 +5,42 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-044/AQ-040 -- `[Unreleased]` was a 4-version accumulator; v0.10.0 cut would have inherited 0.6-0.9 work (cross-confirmed)
+
+**Category:** CHANGELOG correctness / release hygiene
+
+**Resolution:** 2026-05-18 -- Retroactively split the
+accumulated block into proper `[0.10.0]`, `[0.9.0]`,
+`[0.8.0]`, `[0.7.0]`, and `[0.6.0]` sections,
+attributing each bullet to its actual release via
+DIARY entries and the git log between version tags.
+The release commit now correctly attributes only the
+post-0.9.0 work (rustwerk port, /template-backfeed,
+clippy.toml, Stop-hook fmt-check, /retrospect
+extraction, hardware-bound coverage docs, 5
+script-wrapper removals) to v0.10.0.
+
+### RT-045 -- Cargo.lock release-commit included an unrelated `tower-http` transitive bump
+
+**Category:** Release hygiene
+
+**Resolution:** 2026-05-18 -- `cargo generate-lockfile`
+picked up a `tower-http 0.6.10 -> 0.6.11` registry
+refresh unrelated to the version bump. Reverted the
+lockfile to upstream HEAD and patched only the
+rustbase package version line so the lockfile diff is
+exactly one line.
+
+### RT-046/AQ-041 -- DIARY entry title duplicated the version (cross-confirmed)
+
+**Category:** DIARY formatting
+
+**Resolution:** 2026-05-18 -- `Release v0.10.0 (v0.10.0)`
+breaks the established `<description> (vX.Y.Z)`
+convention. Rewrote the heading to describe the
+release contents instead of restating the version
+number.
+
 ### RT-043 -- CLI-only deletion list lacked ordering, leaving workspace transiently broken
 
 **Category:** Correctness

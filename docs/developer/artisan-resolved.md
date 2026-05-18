@@ -6,6 +6,21 @@ findings.
 
 ---
 
+### AQ-040 -- See RT-044 (cross-confirmed)
+
+**Category:** CHANGELOG structure
+
+**Resolution:** 2026-05-18 -- Same root cause as RT-044.
+The duplicate `### Changed` / `### Added` blocks within
+the would-be `[0.10.0]` section disappeared once the
+accumulator was split into per-version sections.
+
+### AQ-041 -- See RT-046 (cross-confirmed)
+
+**Category:** DIARY entry style
+
+**Resolution:** 2026-05-18 -- Same root cause as RT-046.
+
 ### AQ-039 -- `stderr_tail` allocated twice on the cold error path
 
 **Category:** Type Safety
