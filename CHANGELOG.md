@@ -31,13 +31,17 @@ and this project adheres to
   diff content gated by user review. Sourced from
   rustwerk's template feedback.
 - Stop hook (`.claude/hooks/stop-check.sh`) now runs a
-  fast-path subset -- `cargo xtask clippy && cargo
-  xtask test` -- instead of full `cargo xtask validate`.
-  Coverage (~15s), duplication, fmt-check, and
-  frontend-check are skipped in the hook. Full validate
-  still runs from `/commit` so coverage and duplication
-  signal is preserved at the commit gate. Sourced from
-  kozmotic's template feedback.
+  fast-path subset -- `cargo fmt --check && cargo xtask
+  clippy && cargo xtask test` -- instead of full
+  `cargo xtask validate`. Coverage (~15s), duplication,
+  and frontend-check are skipped in the hook. fmt-check
+  is included (~0.2s) because `/commit` only runs full
+  validate for version-bumping commits; chores would
+  otherwise let fmt drift through to CI. Full validate
+  still runs from `/commit` for `feat`/`fix`/`perf`
+  commits so coverage and duplication signal is
+  preserved at that gate. Sourced from kozmotic's
+  template feedback.
 
 ### Removed
 

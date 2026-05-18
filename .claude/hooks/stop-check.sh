@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Stop hook: runs a fast-path subset of validate when
-# Rust files have been modified -- clippy + tests only.
+# Rust files have been modified -- fmt-check + clippy
+# + tests.
 #
 # Coverage and duplication are intentionally skipped:
 # coverage alone adds ~15s per invocation on a small
@@ -9,9 +10,12 @@
 # `cargo xtask validate` still runs from /commit and
 # is available manually for explicit pre-flight checks.
 #
-# fmt-check is also skipped -- formatting is virtually
-# always correct in interactive flows, and /commit's
-# full validate catches any drift before a commit lands.
+# fmt-check is included (~0.2s) because /commit only
+# runs full validate for version-bumping commits;
+# chore / docs / refactor / test commits skip validate
+# entirely, so a fmt drift can otherwise slip through
+# both interactive gates and land in CI as a fmt-check
+# failure (see commit 9d7b3ff for a worked example).
 #
 # Exit codes:
 #   0 -- all checks passed (or nothing to check)
@@ -42,7 +46,7 @@ if [ -z "$changed_rs" ]; then
 fi
 
 # --- Run checks ------------------------------------------
-output=$(cargo xtask clippy 2>&1 && cargo xtask test 2>&1) || {
+output=$(cargo fmt --all -- --check 2>&1 && cargo xtask clippy 2>&1 && cargo xtask test 2>&1) || {
   echo "$output" >&2
   exit 2
 }
