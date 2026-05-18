@@ -236,6 +236,7 @@ Always keep an `[Unreleased]` section at the top.
 | `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |
 | `/template-improve` | Log feedback for the rustbase template |
 | `/template-sync` | Sync upstream template changes |
+| `/template-backfeed` | Apply downstream feedback back into this template (template repo only) |
 
 ## Template Sync
 
