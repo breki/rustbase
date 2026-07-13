@@ -17,10 +17,17 @@ pub const OVERALL_THRESHOLD: f64 = 90.0;
 pub const MODULE_THRESHOLD: f64 = 85.0;
 
 /// Regex passed to `llvm-cov --ignore-filename-regex`.
-/// Excludes direct `src/main.rs` entry points (thin
-/// bootstrap wrappers) on both Unix and Windows path
-/// separators.
-const IGNORE_REGEX: &str = r"src[/\\]main\.rs$";
+/// Excludes binary entry points on both Unix and Windows
+/// path separators: the direct `src/main.rs` bootstrap
+/// wrapper and every module under `src/bin/`. A real CLI
+/// is often a multi-file binary (`src/bin/<name>/main.rs`
+/// plus sibling command modules) whose outer shell --
+/// argument parsing, process output -- is exercised only
+/// by `assert_cmd` integration tests as a spawned
+/// subprocess, which llvm-cov cannot fully credit to the
+/// source. Keep the testable logic in the library crate;
+/// the binary shell is the thin entry point.
+const IGNORE_REGEX: &str = r"src[/\\](main\.rs$|bin[/\\])";
 
 /// Coverage check result for use by validate.
 pub struct CoverageResult {
@@ -65,6 +72,19 @@ pub struct FailingModule {
 
 /// Run coverage check and return structured result.
 pub fn coverage_check() -> Result<CoverageResult, String> {
+    // Stale `.profraw` files from earlier runs inflate the
+    // line denominator -- `cargo llvm-cov` merges every
+    // profile it finds under `target/llvm-cov-target/`, so
+    // leftovers from cross-crate / cross-test-binary builds
+    // fold into the totals and a real 98% can read as 70%,
+    // indistinguishable from a genuine regression. Clean
+    // first so the measurement reflects only this run.
+    let clean = run_cargo_capture(&["llvm-cov", "clean", "--workspace"])?;
+    if !clean.status.success() {
+        let stderr = String::from_utf8_lossy(&clean.stderr);
+        return Err(format!("cargo llvm-cov clean failed:\n{stderr}"));
+    }
+
     // Note: omitting `--summary-only` keeps the per-file
     // `segments` array in the JSON output, which we need
     // to compute uncovered line ranges on failure. The

@@ -12,6 +12,21 @@ and this project adheres to
 
 ### Fixed
 
+- `scripts/e2e.sh` now runs from the project root, so
+  `npx playwright test` resolves `playwright.config.ts`
+  regardless of the caller's working directory. A caller
+  in a subdirectory previously got a silent "No tests
+  found" zero-test pass instead of an error.
+- `cargo xtask coverage` now runs `cargo llvm-cov clean`
+  before measuring. Stale `.profraw` files from earlier
+  runs were merged into the totals and inflated the line
+  denominator, so a real 98% could read as ~70% --
+  indistinguishable from a genuine coverage regression.
+- `cargo xtask test <filter>` now fails when a filtered
+  run matches zero tests instead of printing `Test OK`.
+  `cargo test <filter>` exits 0 on no match, so a typo'd
+  or over-specific filter previously read as a passing
+  targeted run. Unfiltered runs are unaffected.
 - `cargo xtask clean-cache` no longer follows Windows
   directory junctions (`mklink /J`) under
   `target/incremental/`. A junction previously fell
@@ -37,6 +52,17 @@ and this project adheres to
 
 ### Changed
 
+- `scripts/kill-servers.sh` now frees the dev-server ports
+  (`:3000`, `:5173`) by stopping the process *listening* on
+  them, instead of killing by process/image name. A by-name
+  kill is machine-wide and would also terminate a production
+  instance of the same binary running on another port.
+- `cargo xtask coverage` now excludes every module under
+  `src/bin/` from the per-module coverage floor, not just
+  `src/main.rs`. Multi-file binary shells are exercised only
+  by spawned-subprocess integration tests, which llvm-cov
+  cannot fully credit; testable logic belongs in the library
+  crate.
 - `[profile.release]` reverted to cargo defaults so
   `cargo build --release` (and deploy flows) produce
   fully-optimised binaries. The previous

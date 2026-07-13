@@ -5,6 +5,31 @@ reverse chronological order.
 
 ---
 
+### 2026-07-13
+
+- Backfeed jutro template feedback, Stage 1 (v0.10.2)
+
+    First batch from jutro's
+    `docs/developer/template-feedback.md` (tracked in
+    `docs/developer/jutro-improvements-plan.md`). Six
+    diagnostic / safety fixes to tooling:
+    `scripts/kill-servers.sh` now frees the dev ports
+    (`:3000` / `:5173`) by *listener* instead of by
+    process name, so it can't kill a production instance
+    of the same binary on another port (full rewrite --
+    this template had no port-scoped helpers). `xtask
+    coverage` runs `cargo llvm-cov clean` before
+    measuring, so stale `.profraw` no longer inflates the
+    denominator and reads as a false regression, and it
+    excludes `src/bin/` (multi-file binary shells) from
+    the per-module floor. `xtask test <filter>` fails
+    instead of printing `Test OK` when a filter matches
+    zero tests. `scripts/e2e.sh` runs from the project
+    root (cwd-independent) and defaults a quieter
+    `RUST_LOG`. Item 7 (ESLint TS-in-Svelte parser) was
+    held back -- it adds npm devDeps and needs the
+    new-dependency approval.
+
 ### 2026-05-18
 
 - Port hoard template feedback: junction guard, release-fast profile, dir_size warnings, Stop-hook stage labels (v0.10.1)

@@ -6,6 +6,21 @@ findings.
 
 ---
 
+### AQ-048 -- `xtask test` zero-test guard bypassed on the `--verbose` path
+
+**Category:** API Design / behavioural consistency
+
+**Resolution:** 2026-07-13 -- The new filtered-zero-tests
+guard in `test()` sat after the `if opts.verbose { return
+run_cargo_stream(...) }` early return, so
+`cargo xtask test --verbose <typo>` still exited 0 on a
+zero-match filter while the non-verbose form errored.
+Documented the exemption at the verbose branch:
+verbose streams raw output live (the human sees
+`running 0 tests` directly) and captures no stdout to
+count, so the guard's false-green risk only applies to
+the condensed capture path that prints a bare `Test OK`.
+
 ### AQ-042 -- `clean_cache` double-prefixed `dir_size` warning paths
 
 **Category:** Error Handling & Messages

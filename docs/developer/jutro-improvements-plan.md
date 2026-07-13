@@ -41,7 +41,14 @@ and are concrete, low-judgement fixes. Best first batch.
 
 - **Scope:** Remove the by-name kill branch; keep only the
   port-scoped helpers.
-- **Status:** todo
+- **Status:** **done** (v0.10.2). This template had no
+  port-scoped helpers (jutro assumed them from its item-17
+  work), so this was a full rewrite: inline
+  `free_port_windows` (`Get-NetTCPConnection -State Listen`
+  -> `Stop-Process`) / `free_port_unix`
+  (`lsof -ti tcp:$port -sTCP:LISTEN` -> `kill`) freeing the
+  `:3000` / `:5173` dev ports. When item 17 lands, extract
+  these to `scripts/lib/port-utils.sh`.
 - **Target:** `scripts/kill-servers.sh`
 - **Notes:** A by-image-name kill (`taskkill /IM`, `pkill -x`)
   is machine-wide and will terminate a production instance of
@@ -54,7 +61,9 @@ and are concrete, low-judgement fixes. Best first batch.
 
 - **Scope:** One-line `IGNORE_REGEX` broadening + a CLAUDE.md
   sentence on the "binary shell = lib logic + thin entry" split.
-- **Status:** todo
+- **Status:** **done** (v0.10.2). Regex + doc comment
+  updated; the CLAUDE.md sentence deferred to the Stage 5
+  docs pass to keep this a code-only commit.
 - **Target:** `xtask/src/coverage.rs`, optionally `CLAUDE.md`.
 - **Notes:** Multi-file binaries (`src/bin/<name>/main.rs` plus
   sibling modules) form the app's outer shell exercised only by
@@ -67,7 +76,10 @@ and are concrete, low-judgement fixes. Best first batch.
 
 - **Scope:** One exported `RUST_LOG="${RUST_LOG:-...}"` line
   before launching Playwright.
-- **Status:** todo
+- **Status:** **done** (v0.10.2). Exported
+  `RUST_LOG="${RUST_LOG:-rustbase_web=info,tower_http=warn}"`
+  in `e2e.sh` (backend default was
+  `rustbase_web=debug,tower_http=debug`).
 - **Target:** `scripts/e2e.sh` (or `playwright.config.ts`
   `webServer.env`).
 - **Notes:** Backend `tower_http=debug` default emits a
@@ -81,7 +93,9 @@ and are concrete, low-judgement fixes. Best first batch.
 
 - **Scope:** Add `cd "$PROJECT_ROOT"` right after `PROJECT_ROOT`
   is computed.
-- **Status:** todo
+- **Status:** **done** (v0.10.2). Added `PROJECT_ROOT`
+  (parent of `SCRIPT_DIR`) + `cd "$PROJECT_ROOT"`; template's
+  `e2e.sh` did not `cd` before.
 - **Target:** `scripts/e2e.sh`
 - **Notes:** Without it, `npx playwright test` resolves
   `playwright.config.ts` from the caller's cwd; a caller in a
@@ -93,7 +107,9 @@ and are concrete, low-judgement fixes. Best first batch.
 - **Scope:** Parse the `running N tests` / `test result:`
   summary; fail (or loudly warn) when a *filtered* run executed
   zero tests.
-- **Status:** todo
+- **Status:** **done** (v0.10.2). Added `count_tests_run`
+  (sums `running N tests` lines) + a filtered-run zero-test
+  guard in `test()`; three unit tests.
 - **Target:** `xtask/src/test_cmd.rs`
 - **Notes:** `cargo test <filter>` exits 0 when the filter
   matches nothing, so a typo'd filter reads as a green pass.
@@ -105,7 +121,9 @@ and are concrete, low-judgement fixes. Best first batch.
 - **Scope:** Run `cargo llvm-cov clean` before measuring, or
   detect a stale-profraw spread and warn; add a hint to the
   failure message.
-- **Status:** todo
+- **Status:** **done** (v0.10.2). `coverage_check` now runs
+  `cargo llvm-cov clean --workspace` before the measurement
+  run and errors if the clean fails.
 - **Target:** `xtask/src/coverage.rs`
 - **Notes:** Accumulated `.profraw` inflates the line
   denominator monotonically; jutro saw 69.9% (stale) vs 98.5%
@@ -118,7 +136,12 @@ and are concrete, low-judgement fixes. Best first batch.
   `files: ["**/*.svelte"]` parserOptions block and a
   `files: ["**/*.ts"]` block; optionally bump `tsconfig` `lib`
   to ES2022.
-- **Status:** todo
+- **Status:** defer -- confirmed broken here (template's
+  `App.svelte` uses `interface StatusResponse`), but the fix
+  adds two npm devDeps (`@typescript-eslint/parser`,
+  `svelte-eslint-parser`) + a lockfile regen, which crosses
+  the `/commit` new-dependency approval gate. Held out of the
+  v0.10.2 Stage-1 batch pending that decision.
 - **Target:** `frontend/eslint.config.js`,
   `frontend/package.json`, `frontend/tsconfig.json`.
 - **Notes:** The template's own generated `App.svelte` uses

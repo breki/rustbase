@@ -34,6 +34,13 @@ pub fn test(opts: TestOptions<'_>) -> Result<(), String> {
     let args = build_args(Scope::Workspace, opts.filter, opts.ignored)?;
 
     if opts.verbose {
+        // Verbose streams raw cargo output live, so the
+        // filtered-zero-tests guard below is intentionally
+        // skipped: a human watching the stream sees
+        // `running 0 tests` directly, and the streaming
+        // path captures no stdout to count. The guard's
+        // false-green risk only bites the condensed
+        // capture path, which prints a bare `Test OK`.
         return run_cargo_stream(&args);
     }
 
@@ -42,11 +49,41 @@ pub fn test(opts: TestOptions<'_>) -> Result<(), String> {
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     if output.status.success() {
+        // `cargo test <filter>` exits 0 when the filter
+        // matches nothing, so a typo'd or over-specific
+        // filter would print "Test OK" having run nothing
+        // -- a false green. A bare (unfiltered) run can
+        // legitimately execute zero tests in an empty
+        // crate, so scope the guard to filtered runs.
+        if let Some(f) = opts.filter
+            && count_tests_run(&stdout) == 0
+        {
+            return Err(format!(
+                "filter {f:?} matched zero tests -- nothing ran"
+            ));
+        }
         println!("Test OK");
         return Ok(());
     }
 
     report_failure(&stdout, &stderr)
+}
+
+/// Sum the `running N tests` counts cargo prints, one per
+/// test binary (`running 1 test` / `running 3 tests`).
+/// Used to detect a filtered invocation that matched
+/// nothing even though cargo exited 0.
+fn count_tests_run(stdout: &str) -> u64 {
+    stdout
+        .lines()
+        .filter_map(|l| {
+            let rest = l.trim().strip_prefix("running ")?;
+            let n = rest
+                .strip_suffix(" tests")
+                .or_else(|| rest.strip_suffix(" test"))?;
+            n.trim().parse::<u64>().ok()
+        })
+        .sum()
 }
 
 /// Run only xtask's own tests quietly.
@@ -301,6 +338,29 @@ failures:
     fn build_args_ignored_no_filter() {
         let args = build_args(Scope::Workspace, None, true).unwrap();
         assert_eq!(args, vec!["test", "--workspace", "--", "--ignored"]);
+    }
+
+    #[test]
+    fn count_tests_run_sums_multiple_binaries() {
+        let stdout = "\
+running 3 tests
+test a ... ok
+running 1 test
+test b ... ok
+running 0 tests";
+        assert_eq!(count_tests_run(stdout), 4);
+    }
+
+    #[test]
+    fn count_tests_run_handles_singular_and_plural() {
+        assert_eq!(count_tests_run("running 1 test"), 1);
+        assert_eq!(count_tests_run("running 12 tests"), 12);
+    }
+
+    #[test]
+    fn count_tests_run_zero_when_nothing_ran() {
+        let stdout = "running 0 tests\n\ntest result: ok. 0 passed";
+        assert_eq!(count_tests_run(stdout), 0);
     }
 
     #[test]

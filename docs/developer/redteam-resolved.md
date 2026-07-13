@@ -5,6 +5,20 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-052 -- `cargo generate-lockfile` folded an unrelated transitive dependency refresh into a scoped fix commit
+
+**Category:** Project Configuration
+
+**Resolution:** 2026-07-13 -- The /commit
+`cargo generate-lockfile` step refreshed the whole
+dependency tree (anyhow, bytes, http, hyper, regex,
+serde_json, syn, ...), unrelated to the six Stage-1
+tooling fixes and unmentioned in CHANGELOG/DIARY --
+hard to bisect and hiding a supply-chain surface
+change. Fix restored `Cargo.lock` to HEAD and ran
+`cargo update -p rustbase`, so the only lock change is
+the `rustbase` 0.10.1 -> 0.10.2 version entry.
+
 ### RT-048 -- `dir_size` still traversed Windows directory junctions after the `delete_entry` fix
 
 **Category:** Correctness
