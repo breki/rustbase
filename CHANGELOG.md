@@ -12,6 +12,16 @@ and this project adheres to
 
 ### Fixed
 
+- Frontend ESLint now parses TypeScript inside Svelte
+  components. `eslint.config.js` had no TS-aware parser
+  for `*.svelte`, so `npm run lint` failed with a parsing
+  error on any `<script lang="ts">` using TS-only syntax
+  -- including the starter `App.svelte`, which declares
+  `interface`s, so the lint script was broken out of the
+  box. Added `@typescript-eslint/parser` +
+  `svelte-eslint-parser` and `files` blocks for `**/*.ts`
+  and `**/*.svelte`; bumped `tsconfig` `lib` to ES2022 so
+  modern APIs (e.g. `new Error(msg, { cause })`) type-check.
 - `scripts/e2e.sh` now runs from the project root, so
   `npx playwright test` resolves `playwright.config.ts`
   regardless of the caller's working directory. A caller

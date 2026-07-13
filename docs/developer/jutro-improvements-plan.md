@@ -136,12 +136,12 @@ and are concrete, low-judgement fixes. Best first batch.
   `files: ["**/*.svelte"]` parserOptions block and a
   `files: ["**/*.ts"]` block; optionally bump `tsconfig` `lib`
   to ES2022.
-- **Status:** defer -- confirmed broken here (template's
-  `App.svelte` uses `interface StatusResponse`), but the fix
-  adds two npm devDeps (`@typescript-eslint/parser`,
-  `svelte-eslint-parser`) + a lockfile regen, which crosses
-  the `/commit` new-dependency approval gate. Held out of the
-  v0.10.2 Stage-1 batch pending that decision.
+- **Status:** **done** (v0.10.3). Added
+  `@typescript-eslint/parser` `^8.0.0` +
+  `svelte-eslint-parser` `^1.6.0` and flat-config `files`
+  blocks for `**/*.ts` and `**/*.svelte`; bumped `tsconfig`
+  `lib` to ES2022. `npm run lint` and `npm run check` both
+  pass. Landed after new-dependency approval.
 - **Target:** `frontend/eslint.config.js`,
   `frontend/package.json`, `frontend/tsconfig.json`.
 - **Notes:** The template's own generated `App.svelte` uses

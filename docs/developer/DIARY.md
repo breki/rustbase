@@ -7,6 +7,20 @@ reverse chronological order.
 
 ### 2026-07-13
 
+- Backfeed jutro Stage 1 item 7: ESLint TS-in-Svelte parser (v0.10.3)
+
+    Frontend `npm run lint` was broken out of the box:
+    `eslint.config.js` registered no TypeScript parser for
+    `.svelte`, so the starter `App.svelte`'s `interface`
+    declarations tripped a parsing error. Added
+    `@typescript-eslint/parser` (`^8.0.0`) and
+    `svelte-eslint-parser` (`^1.6.0`, already resolved
+    transitively) plus flat-config `files` blocks for
+    `**/*.ts` and `**/*.svelte` (the latter delegating the
+    script body to the TS parser), and bumped `tsconfig`
+    `lib` to ES2022. Held out of the v0.10.2 batch because
+    it adds npm devDeps; landed after approval.
+
 - Backfeed jutro template feedback, Stage 1 (v0.10.2)
 
     First batch from jutro's

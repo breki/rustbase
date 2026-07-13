@@ -6,6 +6,20 @@ findings.
 
 ---
 
+### AQ-049 -- ESLint `**/*.ts` block could shadow Svelte 5 `.svelte.ts` module files
+
+**Category:** Correctness / latent footgun
+
+**Resolution:** 2026-07-13 -- The new plain-TS
+`{ files: ["**/*.ts"], parser: tsParser }` block matched
+`*.svelte.ts` too, and being later in the flat-config array
+would (last-match-wins) override the svelte parser +
+`svelte/svelte` processor that `svelte.configs.recommended`
+sets for those files -- breaking rune globals (`$state`,
+`$derived`) with false `no-undef` errors once a `.svelte.ts`
+module is added. Dormant (none exist today). Fixed by adding
+`ignores: ["**/*.svelte.ts"]` to the block.
+
 ### AQ-048 -- `xtask test` zero-test guard bypassed on the `--verbose` path
 
 **Category:** API Design / behavioural consistency
