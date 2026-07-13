@@ -1,6 +1,6 @@
 ---
 description: Commit current changes following project conventions
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(cargo xtask validate*), Bash(cargo xtask fmt*), Bash(cargo generate-lockfile*), Bash(scripts/e2e.sh*), Read, Edit, Agent, AskUserQuestion, Skill(retrospect)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(cargo xtask validate*), Bash(cargo xtask fmt*), Bash(cargo update:*), Bash(scripts/e2e.sh*), Read, Edit, Agent, AskUserQuestion, Skill(retrospect)
 ---
 
 Commit the current changes following the project's git commit
@@ -27,7 +27,14 @@ conventions.
      - `feat` -> **minor** bump (0.1.0 -> 0.2.0)
      - `fix`, `perf` -> **patch** bump (0.1.0 -> 0.1.1)
    - Edit `crates/rustbase/Cargo.toml` to update the version
-   - Run `cargo generate-lockfile` to update `Cargo.lock`
+   - Run `cargo update -p <crate>` (e.g.
+     `cargo update -p rustbase`) to sync `Cargo.lock` to the
+     new version. This updates only that package's entry.
+     Do **not** use `cargo generate-lockfile` -- it refreshes
+     every transitive dependency, folding an unrelated
+     workspace-wide dependency bump into a scoped commit
+     (hard to bisect/revert, hides a supply-chain surface
+     change from review).
    - Include both files in staged files
    - Skip version bump for: docs, test, refactor, chore, style
 
