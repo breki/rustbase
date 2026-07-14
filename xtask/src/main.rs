@@ -42,13 +42,22 @@ enum XCommand {
         ignored: bool,
     },
     /// Run fmt + clippy + tests + coverage + duplication
-    Validate,
+    Validate {
+        /// Check formatting read-only (`fmt --check`)
+        /// instead of auto-fixing it in place. Use in CI
+        /// or before partial staging.
+        #[arg(long)]
+        check: bool,
+    },
     /// Format code
     Fmt,
     /// Run coverage check (requires cargo-llvm-cov)
     Coverage,
     /// Run code duplication check (requires code-dupes)
     Dupes,
+    /// Type-check the frontend (svelte-check); skips
+    /// cleanly when there is no frontend
+    FrontendCheck,
     /// Deploy to a remote Linux host (build frontend, sync,
     /// build on remote, restart service)
     Deploy,
@@ -74,10 +83,11 @@ fn main() {
             verbose,
             ignored,
         }),
-        XCommand::Validate => validate::validate(),
+        XCommand::Validate { check } => validate::validate(check),
         XCommand::Fmt => fmt_cmd::fmt(),
         XCommand::Coverage => coverage::coverage(),
         XCommand::Dupes => dupes::dupes(),
+        XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
         XCommand::Deploy => deploy::deploy(),
         XCommand::DeploySetup => deploy_setup::deploy_setup(),
         XCommand::CleanCache => clean_cache::clean_cache(),

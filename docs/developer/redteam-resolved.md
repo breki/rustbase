@@ -5,6 +5,37 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-055 -- `run_frontend_check` doc claimed a graceful skip on missing `node_modules`
+
+**Category:** Correctness (stale doc)
+
+**Resolution:** 2026-07-14 -- The Stage-2 frontend-gate
+change made a missing `node_modules` an error, but the
+`validate.rs` doc still said it "skips gracefully" on that
+condition. Reworded to: skips only when there is no
+frontend; errors when `frontend/` exists but
+`node_modules` is not installed.
+
+### RT-054 -- `run_test` doc named the wrong Coverage step after the reorder
+
+**Category:** Correctness (stale doc)
+
+**Resolution:** 2026-07-14 -- The Stage-2 validate reorder
+moved Coverage from step 4 to step 6, but `run_test`'s doc
+still said "Coverage (step 4)". Corrected to step 6.
+
+### RT-053 -- Frontend gate hard-fails local `validate` when `node_modules` is absent
+
+**Category:** Behavior regression / DX
+
+**Resolution:** 2026-07-14 -- Kept as intended (a skip that
+exits 0 is indistinguishable from a pass); CI is unaffected
+(the `frontend` job installs first, the `test` job never
+calls the gate). Added a CLAUDE.md note that a fresh
+full-stack checkout must run `npm --prefix frontend
+install` before `validate`; the error message already names
+that command.
+
 ### RT-052 -- `cargo generate-lockfile` folded an unrelated transitive dependency refresh into a scoped fix commit
 
 **Category:** Project Configuration

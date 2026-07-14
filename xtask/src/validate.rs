@@ -13,37 +13,45 @@ const TOTAL_STEPS: usize = 6;
 
 /// Run all validation steps with concise stepwise
 /// output.
-pub fn validate() -> Result<(), String> {
+///
+/// Steps run cheap static gates first and the expensive
+/// dynamic gates (Test, Coverage) last, so a fast check's
+/// failure is not gated behind the multi-minute
+/// instrumented Coverage run. Fmt stays first because it
+/// rewrites whitespace that later checks read.
+///
+/// `check` selects fmt's mode: `false` (default) auto-fixes
+/// formatting in place; `true` runs the read-only
+/// `fmt --check` for CI or before partial staging, where
+/// an in-place rewrite would sweep unrelated drift into the
+/// working tree.
+pub fn validate(check: bool) -> Result<(), String> {
     let overall_start = Instant::now();
 
-    // 1. Fmt
-    run_step(1, "Fmt", run_fmt)?;
+    // Cheap static gates first ...
+    run_step(1, "Fmt", "fmt", || run_fmt(check))?;
+    run_step(2, "Duplication", "dupes", run_duplication)?;
+    run_step(3, "Clippy", "clippy", run_clippy)?;
+    run_step(4, "Frontend", "frontend-check", run_frontend_check)?;
 
-    // 2. Clippy
-    run_step(2, "Clippy", run_clippy)?;
-
-    // 3. Test (xtask only -- see run_test below)
-    run_step(3, "Test (xtask only)", run_test)?;
-
-    // 4. Coverage
-    run_step(4, "Coverage", run_coverage)?;
-
-    // 5. Duplication
-    run_step(5, "Duplication", run_duplication)?;
-
-    // 6. Frontend type check (skipped if no frontend)
-    run_step(6, "Frontend", run_frontend_check)?;
+    // ... expensive dynamic gates last.
+    run_step(5, "Test (xtask only)", "test", run_test)?;
+    run_step(6, "Coverage", "coverage", run_coverage)?;
 
     println!("Validate OK ({})", elapsed_str(overall_start));
     Ok(())
 }
 
 /// Run a single step, printing the `[N/T]` result line.
-fn run_step(
-    step: usize,
-    name: &str,
-    f: fn() -> Result<String, String>,
-) -> Result<(), String> {
+///
+/// `cmd` is the standalone xtask subcommand for this step;
+/// on failure it is printed as an iterate-with hint so the
+/// user re-runs the single failing gate (seconds) instead
+/// of the whole pipeline (minutes).
+fn run_step<F>(step: usize, name: &str, cmd: &str, f: F) -> Result<(), String>
+where
+    F: FnOnce() -> Result<String, String>,
+{
     let start = Instant::now();
     match f() {
         Ok(detail) => {
@@ -58,14 +66,20 @@ fn run_step(
         }
         Err(e) => {
             step_output(step, TOTAL_STEPS, name, "FAILED", "");
+            eprintln!("  -> iterate with: cargo xtask {cmd}");
             Err(e)
         }
     }
 }
 
-/// Fmt step -- returns empty detail on success.
-fn run_fmt() -> Result<String, String> {
-    fmt_cmd::fmt_check()?;
+/// Fmt step -- returns empty detail on success. Auto-fixes
+/// unless `check` selects the read-only path.
+fn run_fmt(check: bool) -> Result<String, String> {
+    if check {
+        fmt_cmd::fmt_check()?;
+    } else {
+        fmt_cmd::fmt()?;
+    }
     Ok(String::new())
 }
 
@@ -85,7 +99,7 @@ fn run_clippy() -> Result<String, String> {
 
 /// Test step -- runs xtask's own tests only.
 ///
-/// Coverage (step 4) runs `--workspace --exclude xtask`
+/// Coverage (step 6) runs `--workspace --exclude xtask`
 /// under llvm-cov instrumentation, which executes every
 /// non-xtask test. Running the full workspace tests
 /// here too would duplicate that work. Restricting to
@@ -119,8 +133,10 @@ fn run_duplication() -> Result<String, String> {
     }
 }
 
-/// Frontend type check -- skips gracefully when there is
-/// no frontend or `node_modules` to check against.
+/// Frontend type check -- skips (pass) when there is no
+/// frontend at all, but errors when a frontend exists with
+/// its `node_modules` not installed (a silent skip there
+/// would read as a pass).
 fn run_frontend_check() -> Result<String, String> {
     let r = frontend_check::frontend_check()?;
     match r.error {

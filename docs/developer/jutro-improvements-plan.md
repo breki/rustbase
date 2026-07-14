@@ -160,7 +160,10 @@ file before editing.
 ### 8. `validate` should run cheap static gates before dynamic
 
 - **Scope:** Reorder steps; keep Fmt first; fix `[N/M]` counter.
-- **Status:** todo
+- **Status:** **done** (v0.10.4). New order: Fmt,
+  Duplication, Clippy, Frontend (static) then Test, Coverage
+  (dynamic). The cheap Duplication/Frontend gates previously
+  ran *after* the expensive Coverage step.
 - **Target:** `xtask/src/validate.rs`
 - **Notes:** Run fail-fast static gates (fmt, module-size if
   present, lint, dupes, clippy) before the multi-minute
@@ -173,7 +176,12 @@ file before editing.
 - **Scope:** Capture the relinking `cargo build` output; on
   `Access is denied (os error 5)` print an actionable message
   and propagate the exit code.
-- **Status:** todo
+- **Status:** **defer -- N/A here.** This template's
+  `e2e.sh` has no `cargo build` step; the build runs inside
+  `playwright.config.ts`'s `webServer` (`cargo run -p
+  rustbase-web`). There is no relinking build in the script
+  to attach reactive detection to. Revisit if the e2e flow
+  ever builds explicitly.
 - **Target:** `scripts/e2e.sh`
 - **Notes:** A running dev server file-locks
   `target/debug/<bin>.exe`. React to the *actual* relink failure
@@ -185,7 +193,12 @@ file before editing.
 - **Scope:** Distinguish "no frontend here" (skip, exit 0) from
   "frontend exists but unreachable from cwd / missing
   `node_modules`" (error, exit non-zero, or a loud skip).
-- **Status:** todo
+- **Status:** **done** (v0.10.4). Pure `classify(has_pkg,
+  has_modules)` helper: no package.json -> Skip (Ok);
+  package.json but no node_modules -> error; both -> run.
+  Unit-tested. Kept cwd-relative (consistent with the other
+  xtask gates, which all assume workspace-root cwd) rather
+  than adding root-resolution to this one wrapper.
 - **Target:** `xtask/src/frontend_check.rs` (and any sibling
   frontend wrappers).
 - **Notes:** A persisted `cd <subdir>` made the wrapper resolve
@@ -198,7 +211,12 @@ file before editing.
   `: error:` separator (plus a `starts_with("error")`
   fallback); have the test extractor interleave `-->` lines; add
   a short-format sample to the tests.
-- **Status:** todo
+- **Status:** **done** (v0.10.4). Confirmed unfixed here:
+  `check()` runs `--message-format=short` but the extractor
+  matched only `starts_with("error[")`, and the tests used
+  long-format samples that hid it. Now matches `: error[` /
+  `: error:` separators; `test_cmd` interleaves `-->`
+  lines. Short-format regression test added.
 - **Target:** `xtask/src/check.rs`, `xtask/src/test_cmd.rs`.
 - **Notes:** `--message-format=short` lines start with the
   *path*, so a `starts_with("error[")` filter drops every
@@ -211,7 +229,10 @@ file before editing.
 - **Scope:** In `extract_warning_lines`, when the previous kept
   line was a surfaced diagnostic, also keep the following `-->`
   line.
-- **Status:** todo
+- **Status:** **done** (v0.10.4, with item 13). Confirmed
+  unfixed here -- `extract_warning_lines` kept only the
+  message line. Now pairs each diagnostic with its following
+  `-->` line.
 - **Target:** `xtask/src/clippy_cmd.rs`
 - **Notes:** A failure showed the message with no file/line,
   forcing a raw `cargo clippy` re-run. Jutro fixed 2026-06-03.
@@ -222,7 +243,11 @@ file before editing.
 - **Scope:** Also capture `error:` lines; filter the rustc/cargo
   summary lines that share the prefix; anchor the
   per-target `generated`-summary filter to `") generated "`.
-- **Status:** todo
+- **Status:** **done** (v0.10.4, with item 12). Confirmed
+  unfixed -- extractor matched only `warning:` / `error[`.
+  Now also captures bare `error:`, filters summary noise
+  (`could not compile`, `aborting due to`, `build failed`,
+  anchored `) generated `, `warnings emitted`).
 - **Target:** `xtask/src/clippy_cmd.rs`
 - **Notes:** Under `-D warnings` a denied lint is
   `error: <message>` with no `[Exxx]`, so the wrapper printed an
@@ -235,7 +260,11 @@ file before editing.
   prefix each crate's summary with its name; aggregate
   `total_lines` / `exact_duplicate_lines` across the workspace;
   hybrid threshold (workspace 6% + per-crate 12%).
-- **Status:** todo
+- **Status:** **defer.** ~120-LOC rewrite that depends on
+  `code-dupes` supporting `--format json stats` (the current
+  wrapper only maps exit status per src dir). Needs that
+  capability verified first and is bigger than a Stage-2
+  quick win -- handle deliberately in its own change.
 - **Target:** `xtask/src/dupes.rs`
 - **Notes:** Identical per-invocation output made the visible
   tail (last crate) indistinguishable, and per-crate-only
@@ -247,7 +276,10 @@ file before editing.
 - **Scope:** Add `--check` to the `Validate` subcommand; default
   runs `fmt_cmd::fmt` (auto-fix), `--check` runs
   `fmt_cmd::fmt_check` (read-only).
-- **Status:** todo
+- **Status:** **done** (v0.10.4). Added `--check` to the
+  `Validate` subcommand; `validate()` takes `check: bool`;
+  default auto-fixes, `--check` is read-only. `fmt_cmd`
+  already had both `fmt`/`fmt_check`.
 - **Target:** `xtask/src/main.rs`, `xtask/src/validate.rs`,
   `xtask/src/fmt_cmd.rs`.
 - **Notes:** Red-team caveat from jutro: auto-fmt-by-default
@@ -261,7 +293,11 @@ file before editing.
   `-> iterate with: cargo xtask <name>`; add a CLAUDE.md
   paragraph ("iterate with targeted commands; validate is the
   pre-commit gate").
-- **Status:** todo
+- **Status:** **done** (v0.10.4). `run_step` prints
+  `-> iterate with: cargo xtask <cmd>` on failure; each step
+  passes its real subcommand (a `frontend-check` subcommand
+  was added so the Frontend step's hint resolves). CLAUDE.md
+  paragraph deferred to the Stage 5 docs pass.
 - **Target:** `xtask/src/validate.rs`, `CLAUDE.md`.
 - **Notes:** ~15 LOC + one paragraph. Jutro fixed 2026-05-20.
 

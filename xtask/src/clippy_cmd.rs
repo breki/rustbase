@@ -73,18 +73,41 @@ pub fn clippy_check() -> Result<ClippyResult, String> {
     })
 }
 
-/// Extract `warning:` and `error[` lines from clippy
-/// stderr, filtering out cargo noise.
+/// Extract clippy diagnostics from stderr, filtering out
+/// cargo/rustc summary noise, and keep the `-->`
+/// source-location line that immediately follows each
+/// diagnostic.
+///
+/// Captures three diagnostic shapes: `warning:`, `error[`
+/// (coded errors), and bare `error:` -- the last is how a
+/// *denied* lint is reported under `-D warnings`
+/// (no `[Exxx]` code), so dropping it left a clippy failure
+/// with an empty body. Without the paired `-->` line a
+/// failure names the lint but not where it fired, forcing a
+/// raw `cargo clippy` re-run.
 fn extract_warning_lines(stderr: &str) -> Vec<&str> {
-    stderr
-        .lines()
-        .filter(|l| l.starts_with("warning:") || l.starts_with("error["))
-        .filter(|l| {
-            !l.contains("emitted")
-                && !l.contains("build failed")
-                && !l.contains("generated")
-        })
-        .collect()
+    crate::helpers::pair_with_locations(stderr, is_diagnostic_line)
+}
+
+/// True for a real clippy diagnostic line, false for the
+/// cargo/rustc summary lines that share the same prefix.
+fn is_diagnostic_line(line: &str) -> bool {
+    // Summary noise. `") generated "` is anchored to its
+    // grammar (`crate (target) generated N warnings`) so a
+    // real lint message merely containing the word
+    // "generated" is not dropped.
+    let is_summary = line.contains("could not compile")
+        || line.contains("aborting due to")
+        || line.contains("build failed")
+        || line.contains(") generated ")
+        || line.contains(" warning emitted")
+        || line.contains(" warnings emitted");
+    if is_summary {
+        return false;
+    }
+    line.starts_with("warning:")
+        || line.starts_with("error[")
+        || line.starts_with("error:")
 }
 
 #[cfg(test)]
@@ -103,11 +126,43 @@ warning: build failed, waiting for other jobs
 warning: 2 warnings emitted";
 
     #[test]
-    fn extracts_warnings_and_errors() {
+    fn extracts_warnings_errors_and_locations() {
         let lines = extract_warning_lines(SAMPLE_STDERR);
-        assert_eq!(lines.len(), 2);
+        // Two diagnostics, each with its `-->` location; the
+        // `) generated `, `could not compile`, `build
+        // failed`, and `warnings emitted` summary lines are
+        // filtered.
+        assert_eq!(lines.len(), 4);
         assert!(lines[0].contains("sort"));
-        assert!(lines[1].contains("E0425"));
+        assert!(lines[1].contains("--> crates/rustbase/src/lib.rs:10:9"));
+        assert!(lines[2].contains("E0425"));
+        assert!(lines[3].contains("--> crates/rustbase/src/lib.rs:10:5"));
+    }
+
+    #[test]
+    fn keeps_denied_lint_bare_error_with_location() {
+        // A denied lint under `-D warnings` is reported as a
+        // bare `error:` with no `[Exxx]` code. Both the
+        // message and its location line must survive; the
+        // `aborting due to` summary must not.
+        let stderr = "\
+error: this function has too many lines (111/100)
+    --> crates/rustbase/src/big.rs:5:1
+error: aborting due to 1 previous error";
+        let lines = extract_warning_lines(stderr);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("too many lines"));
+        assert!(lines[1].contains("--> crates/rustbase/src/big.rs:5:1"));
+    }
+
+    #[test]
+    fn keeps_lint_message_containing_word_generated() {
+        // Anchored `) generated ` filter must not drop a real
+        // lint whose message merely contains "generated".
+        let stderr = "warning: value assigned here is never \
+            generated again";
+        let lines = extract_warning_lines(stderr);
+        assert_eq!(lines.len(), 1);
     }
 
     #[test]

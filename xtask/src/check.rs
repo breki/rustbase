@@ -53,16 +53,26 @@ pub fn check() -> Result<(), String> {
 
 /// Extract error lines from cargo check stderr.
 ///
-/// Matches `error[E...]` and `error:` lines, excluding
-/// the rustc summary line `error: aborting due to N
-/// previous errors`. The filter is anchored to the
-/// exact summary prefix so user errors whose message
-/// happens to contain the substring "aborting" are not
-/// dropped.
+/// `check()` runs with `--message-format=short`, whose
+/// diagnostics are single lines prefixed by the location
+/// (`path:line:col: error[E...]: message`) -- so a filter
+/// anchored on `starts_with("error[")` matches nothing and
+/// the caller never sees *where* the error is. Match the
+/// `: error[` / `: error:` separator to catch those
+/// path-prefixed lines, plus a `starts_with("error")`
+/// fallback for the summary lines rustc emits at column 0.
+/// The `aborting due to` summary is excluded (anchored to
+/// its exact form so a user error whose message merely
+/// contains "aborting" survives).
 fn extract_error_lines(stderr: &str) -> Vec<&str> {
     stderr
         .lines()
-        .filter(|l| l.starts_with("error[") || l.starts_with("error:"))
+        .filter(|l| {
+            l.contains(": error[")
+                || l.contains(": error:")
+                || l.starts_with("error[")
+                || l.starts_with("error:")
+        })
         .filter(|l| !l.starts_with("error: aborting due to"))
         .collect()
 }
@@ -95,6 +105,25 @@ error: aborting due to 2 previous errors";
         assert_eq!(errors.len(), 2);
         assert!(errors[0].contains("E0425"));
         assert!(errors[1].contains("E0308"));
+    }
+
+    #[test]
+    fn extracts_short_format_path_prefixed_errors() {
+        // `check()` uses --message-format=short, whose lines
+        // are path-prefixed. The old `starts_with("error[")`
+        // filter matched none of these (they start with the
+        // path), dropping the location the caller needs.
+        let stderr = "\
+crates/rustbase/src/lib.rs:45:12: error[E0425]: cannot find value `foo`
+crates/rustbase/src/lib.rs:50:1: error: expected `;`, found `}`
+crates/rustbase/src/lib.rs:9:9: warning: unused variable: `x`
+error: aborting due to 2 previous errors";
+        let errors = extract_error_lines(stderr);
+        assert_eq!(errors.len(), 2);
+        assert!(errors[0].contains("E0425"));
+        assert!(errors[1].contains("expected"));
+        // The short-format warning line must not be kept.
+        assert!(!errors.iter().any(|l| l.contains("unused variable")));
     }
 
     #[test]

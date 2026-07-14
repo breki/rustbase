@@ -255,9 +255,55 @@ pub fn run_cargo_stream(args: &[&str]) -> Result<(), String> {
     }
 }
 
+/// Keep every line for which `keep` returns true, plus the
+/// `-->` source-location line that immediately follows a
+/// kept line. Shared by the clippy and test output
+/// extractors so a diagnostic is surfaced together with
+/// where it fired; without the paired location a failure
+/// names the lint/error but not the `file:line`, forcing a
+/// raw re-run. Only the location line *immediately* after a
+/// kept line is taken, so a `-->` following a filtered line
+/// is never wrongly attached.
+pub fn pair_with_locations<F>(stderr: &str, keep: F) -> Vec<&str>
+where
+    F: Fn(&str) -> bool,
+{
+    let mut out: Vec<&str> = Vec::new();
+    let mut prev_kept = false;
+    for line in stderr.lines() {
+        if keep(line) {
+            out.push(line);
+            prev_kept = true;
+        } else if prev_kept && line.trim_start().starts_with("-->") {
+            out.push(line);
+            prev_kept = false;
+        } else {
+            prev_kept = false;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pair_with_locations_keeps_kept_lines_and_following_arrows() {
+        let input = "\
+keep me
+    --> a/b.rs:1:1
+drop me
+    --> should/not/appear.rs:2:2
+keep me too";
+        let out = pair_with_locations(input, |l| l.starts_with("keep"));
+        assert_eq!(out.len(), 3);
+        assert!(out[0].starts_with("keep me"));
+        assert!(out[1].contains("--> a/b.rs:1:1"));
+        assert!(out[2].starts_with("keep me too"));
+        // The `-->` after the dropped line must not appear.
+        assert!(!out.iter().any(|l| l.contains("should/not/appear")));
+    }
 
     #[test]
     fn format_step_with_detail() {

@@ -10,8 +10,51 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- `cargo xtask frontend-check` runs the frontend
+  type check (svelte-check) standalone; skips cleanly when
+  there is no frontend.
+- `cargo xtask validate --check` checks formatting
+  read-only (`fmt --check`) instead of auto-fixing it, for
+  use in CI or before partial staging.
+
+### Changed
+
+- `cargo xtask validate` runs its cheap static gates (Fmt,
+  Duplication, Clippy, Frontend) before the expensive
+  dynamic ones (Test, Coverage), so a fast check's failure
+  is no longer gated behind the multi-minute instrumented
+  Coverage run.
+- `cargo xtask validate` now auto-fixes formatting in place
+  by default; the previous read-only behaviour moved behind
+  `--check`.
+- `cargo xtask validate` prints `-> iterate with: cargo
+  xtask <gate>` after a failed step so the single failing
+  gate can be re-run in seconds rather than the whole
+  pipeline.
+- The frontend type-check gate now fails (instead of
+  silently skipping) when `frontend/` exists but
+  `frontend/node_modules` is not installed -- a skip that
+  exits 0 is indistinguishable from a pass. A genuinely
+  frontend-less (CLI-only) project still skips cleanly.
+
 ### Fixed
 
+- `cargo xtask check` surfaces the `file:line` of
+  compilation errors again. It runs with
+  `--message-format=short` (diagnostics are path-prefixed
+  single lines), but the extractor matched only
+  `error[`-prefixed lines, so every located diagnostic was
+  dropped and only the locationless summary survived.
+- `cargo xtask clippy` now shows a denied lint's message
+  and its `-->` source location. Under `-D warnings` a
+  denied lint is reported as a bare `error:` (no `[Exxx]`
+  code), which the extractor dropped -- printing an empty
+  failure body -- and it also discarded the `-->` location
+  line, so a failure named the lint but not where it fired.
+- `cargo xtask test` compile-error output now includes the
+  `-->` source-location line alongside each error message.
 - Frontend ESLint now parses TypeScript inside Svelte
   components. `eslint.config.js` had no TS-aware parser
   for `*.svelte`, so `npm run lint` failed with a parsing

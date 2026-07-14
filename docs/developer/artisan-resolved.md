@@ -6,6 +6,39 @@ findings.
 
 ---
 
+### AQ-052 -- CLAUDE.md Acceptance Criteria still described fmt as read-only
+
+**Category:** Consistency (docs vs behaviour)
+
+**Resolution:** 2026-07-14 -- Stage 2 flipped the default
+`validate` fmt to auto-fix (read-only behind `--check`),
+but CLAUDE.md's Acceptance Criteria still listed
+`cargo fmt --all -- --check` as step 1. Updated the bullet
+to describe the auto-fix default and the `--check` mode,
+and added the cheapest-first ordering + fresh-checkout
+npm-install note.
+
+### AQ-051 -- `-->`-pairing state machine duplicated across two extractors
+
+**Category:** Consistency / DRY
+
+**Resolution:** 2026-07-14 -- The identical keep-then-pair
+loop in `clippy_cmd::extract_warning_lines` and
+`test_cmd::extract_compile_error_lines` was extracted to a
+shared `helpers::pair_with_locations<F>(stderr, keep)`;
+both call sites now pass only their keep-predicate.
+Directly unit-tested in `helpers`.
+
+### AQ-050 -- `extract_compile_error_lines` test missed the drop/reset branch
+
+**Category:** Test coverage
+
+**Resolution:** 2026-07-14 -- The test fed only lines that
+hit the keep or paired-`-->` branch, never the else/reset
+arm nor the "warning's `-->` is dropped" negative case.
+Expanded the sample with a warning + its `-->` and a
+non-matching `= note` line, asserting both are excluded.
+
 ### AQ-049 -- ESLint `**/*.ts` block could shadow Svelte 5 `.svelte.ts` module files
 
 **Category:** Correctness / latent footgun

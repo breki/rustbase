@@ -5,6 +5,30 @@ reverse chronological order.
 
 ---
 
+### 2026-07-14
+
+- Backfeed jutro template feedback, Stage 2 (v0.10.4)
+
+    xtask diagnostics + validate ergonomics (tracker items
+    8, 10-13, 15-16). `validate` now runs cheap static gates
+    (Fmt, Duplication, Clippy, Frontend) before the expensive
+    dynamic ones (Test, Coverage), auto-fixes formatting by
+    default (read-only behind `--check`), and prints an
+    `iterate with: cargo xtask <gate>` hint on failure. Fixed
+    three wrapper output gaps that hid where a failure was:
+    `check` now matches short-format path-prefixed errors
+    (it runs `--message-format=short`, but the extractor only
+    matched long-format `error[` prefixes), `clippy` keeps
+    the `-->` location line and surfaces bare `error:`
+    denied-lint messages, and `test` compile errors include
+    their location. The frontend gate now errors (not
+    silently skips) when `frontend/` exists but isn't
+    installed -- distinguished from a genuinely frontend-less
+    project via a pure, unit-tested `classify` helper. Added
+    a standalone `frontend-check` subcommand. Items 9 (e2e
+    Windows build-lock) and 14 (dupes JSON aggregate)
+    deferred -- see the plan doc for why.
+
 ### 2026-07-13
 
 - Backfeed jutro Stage 1 item 7: ESLint TS-in-Svelte parser (v0.10.3)

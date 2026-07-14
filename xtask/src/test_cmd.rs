@@ -118,9 +118,8 @@ pub fn test_check_xtask() -> Result<(), String> {
 fn report_failure(stdout: &str, stderr: &str) -> Result<(), String> {
     // Compilation error -- show first error lines.
     if stderr.contains("could not compile") {
-        let errors: Vec<&str> = stderr
-            .lines()
-            .filter(|l| l.starts_with("error"))
+        let errors: Vec<&str> = extract_compile_error_lines(stderr)
+            .into_iter()
             .take(10)
             .collect();
         eprintln!("FAILED: compilation error\n");
@@ -186,6 +185,16 @@ fn build_args(
         args.push("--ignored");
     }
     Ok(args)
+}
+
+/// Extract compile-error lines from `cargo test` stderr,
+/// keeping each `error...` line together with the `-->`
+/// source-location line that immediately follows it.
+/// `cargo test` uses the default (long) diagnostic format,
+/// where the location lives on the next line; keeping only
+/// the message line left the caller with no `file:line`.
+fn extract_compile_error_lines(stderr: &str) -> Vec<&str> {
+    crate::helpers::pair_with_locations(stderr, |l| l.starts_with("error"))
 }
 
 /// Extract test names from `test foo ... FAILED` lines.
@@ -338,6 +347,28 @@ failures:
     fn build_args_ignored_no_filter() {
         let args = build_args(Scope::Workspace, None, true).unwrap();
         assert_eq!(args, vec!["test", "--workspace", "--", "--ignored"]);
+    }
+
+    #[test]
+    fn extract_compile_error_lines_keeps_locations() {
+        let stderr = "\
+error[E0425]: cannot find value `foo`
+  --> crates/rustbase/src/lib.rs:10:5
+warning: unused variable: `x`
+  --> crates/rustbase/src/lib.rs:99:9
+   = note: some trailing context
+error: could not compile `rustbase` (lib) due to 1 previous error";
+        let lines = extract_compile_error_lines(stderr);
+        // The error and its `-->` are kept; the warning and
+        // its `-->` are dropped (exercises the drop/reset
+        // branch), the `= note` non-matching line is
+        // ignored, and the final summary error is kept.
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].contains("E0425"));
+        assert!(lines[1].contains("--> crates/rustbase/src/lib.rs:10:5"));
+        assert!(lines[2].contains("could not compile"));
+        assert!(!lines.iter().any(|l| l.contains("99:9")));
+        assert!(!lines.iter().any(|l| l.contains("unused variable")));
     }
 
     #[test]

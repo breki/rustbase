@@ -192,13 +192,28 @@ no emoji.
 Before completing any task, run `cargo xtask validate`,
 which checks:
 
-1. **Formatting**: `cargo fmt --all -- --check`
+1. **Formatting**: auto-fixed in place by default; pass
+   `cargo xtask validate --check` for the read-only
+   `cargo fmt --all -- --check` (use in CI or before
+   partial staging, so an in-place rewrite does not sweep
+   unrelated drift into the working tree)
 2. **No warnings**:
    `cargo clippy --all-targets -- -D warnings`
 3. **All tests pass**: `cargo test`
 4. **Coverage >= 90%**
 5. **Code duplication <= 6%** (production code, tests
    excluded)
+6. **Frontend type check** (svelte-check), skipped only
+   when there is no frontend
+
+Gates run cheapest-first (Fmt, Duplication, Clippy,
+Frontend) before the expensive dynamic gates (Test,
+Coverage), and a failed step prints the single command to
+re-run just that gate. On a fresh full-stack checkout, run
+`npm --prefix frontend install` before `validate` -- the
+Frontend gate fails (rather than silently skipping) when
+`frontend/` exists but its `node_modules` is not
+installed.
 
 ## Semantic Versioning
 
