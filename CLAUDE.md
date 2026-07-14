@@ -96,6 +96,32 @@ For production, build the frontend first, then serve
 with the backend:
 `cargo run -p rustbase-web -- --frontend frontend/dist`
 
+**Before bumping a major version of a JS dep, delete
+`frontend/node_modules` + `frontend/package-lock.json`
+first**, then `npm --prefix frontend install`. npm compares
+the new manifest against the existing tree and frequently
+emits a spurious `ERESOLVE` on an otherwise-clean upgrade
+(typically an inspector/sub-plugin the old major depended
+on gets orphaned and its stale peer wins the resolve). A
+from-scratch resolve avoids it. Cheap to do unconditionally
+for a major bump; expensive to diagnose after the fact.
+
+**Never add a `file:` npm dependency that resolves to the
+repo root.** npm materializes it as a directory *junction*
+on Windows (a symlink on Unix) -- e.g.
+`node_modules/<root-pkg> -> <repo root>` -- which is the
+reparse point a recursive delete (a worktree cleanup, `rm
+-rf node_modules`) can follow straight into the main
+checkout, taking `.git` with it. Such a dep also drags the
+root package's whole dependency tree into the frontend
+install. It resurrects unless cleared from **all three** npm
+files (`package.json`, `package-lock.json`, and the hidden
+`node_modules/.package-lock.json`). Related trap: run
+`npm install` from **inside** `frontend/`, not
+`npm --prefix frontend install` from the repo root -- the
+latter resolves relative `file:` specifiers against the
+caller's cwd and can re-anchor / re-create the junction.
+
 ### E2E Testing
 
 ```bash
@@ -131,6 +157,14 @@ run will free (stop) the other's server on the shared port.
 **Every UI feature must have E2E tests** before the
 task is marked as done. Type checking and unit tests
 verify code correctness, not feature correctness.
+
+**Stop dev servers before a full `cargo xtask validate`.**
+A running dev server can starve the forked vitest workers
+in the Frontend-test step (`Failed to start forks worker` /
+worker-timeout), which are *environment* timeouts, not real
+failures. If you see one, confirm it is a flake by
+re-running `cargo xtask frontend-test` alone before treating
+it as a regression.
 
 ### PowerShell Build Script
 

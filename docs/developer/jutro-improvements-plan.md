@@ -518,30 +518,28 @@ commit.
 
 ### 27. "Clean-install before major JS dep bump" rule
 
-- **Status:** todo -- **Target:** `CLAUDE.md` (Frontend
-  Development). **Notes:** `rm -rf frontend/node_modules
-  frontend/package-lock.json && npm --prefix frontend install`
-  before a major bump to avoid spurious `ERESOLVE` from orphaned
-  sub-plugins. Pairs with item 23. Jutro 2026-05-28.
+- **Status:** **done.** Added to CLAUDE.md Frontend
+  Development (clean `node_modules` + lockfile before a major
+  JS bump). Applied for real in item 23 (Vite 8). Jutro
+  2026-05-28.
 
 ### 28. Warn against `file:` npm deps resolving to the repo root
 
-- **Status:** todo -- **Target:** `CLAUDE.md` (Frontend
-  Development). **Notes:** Such a dep plants the Windows junction
-  behind the worktree-delete data-loss landmine and drags the
-  root package's whole tree into the frontend install. Include
-  the durable removal (drop the line, delete both lock files,
-  reinstall). Jutro 2026-06-01.
+- **Status:** **done.** Added to CLAUDE.md Frontend
+  Development, with the all-three-npm-files removal and the
+  "install from inside frontend/, not `--prefix` from root"
+  caveat. **Hit this landmine live** during Stage 4 (item 20
+  npm install re-anchored `rustbase-e2e: file:..` + planted
+  the junction); remediated then, warning added now. Jutro
+  2026-06-01.
 
 ### 29. Web variant: dev server flakes `validate`'s vitest workers
 
-- **Status:** todo -- **Target:** `CLAUDE.md` (Build Commands /
-  Frontend). **Notes:** Concurrent dev server starves forked
-  vitest workers (`Failed to start forks worker`) -- an
-  environment timeout, not a real failure. Advise stopping dev
-  servers before full `validate`, or re-running
-  `frontend-test` alone to confirm a flake. Distinct from the
-  relink-lock gotcha. Jutro 2026-06-06.
+- **Status:** **done.** Added a note to the CLAUDE.md E2E
+  section: stop dev servers before a full `validate`; a
+  worker-startup timeout is an environment flake -- confirm
+  by re-running `cargo xtask frontend-test` alone. Jutro
+  2026-06-06.
 
 ### 30. Definition of Done section
 
