@@ -179,6 +179,67 @@ it as a regression.
 .\build.ps1 clean         # clean artifacts
 ```
 
+## Canon vs memory
+
+Two places hold durable guidance, and they are not
+interchangeable:
+
+- **Canon** -- this `CLAUDE.md`, `.claude/` skills and
+  commands. Tracked in git, reviewed, shared across machines
+  and teammates and fresh clones.
+- **Memory** -- per-user auto-memory (e.g.
+  `~/.claude/.../memory/`). Per-machine, never committed,
+  invisible to everyone else.
+
+**Default to canon.** A rule others would benefit from --
+a workflow convention, a project constraint, a lesson from
+a review -- belongs in canon. Reserve memory for genuinely
+user-specific items (one operator's preferences, their
+role/background, freshly-captured corrections that have not
+generalized yet). When a memory entry matures into a shared
+rule, promote it to canon and delete the memory copy so the
+two do not drift.
+
+## Environment Constraints
+
+Declare machine-level assumptions here so the assistant does
+not reach for tools that are not present. Fill in each
+project's truths (Python, Node, Docker, cloud CLIs --
+anything an assistant might invoke reflexively); name the
+tool, its availability, and the allowed alternative. Example
+shape:
+
+- *(placeholder)* "Python is not installed. Do not invoke
+  `python`/`python3`/`py`; use PowerShell, Bash, or Rust
+  (`xtask`) for scripting." Replace with this project's
+  actual constraints, or leave empty if none.
+
+## Collaboration
+
+- **Write plainly.** One idea per sentence; lead with the
+  concrete example, then the rule; prefer plain words
+  ("reminder" over "forcing function", "try again" over
+  "iterate"); name the subject rather than leaning on "the
+  first"/"the latter". Showy phrasing looks crisp but slows
+  the reader.
+- **Narrate the work as it happens.** Before each meaningful
+  tool call or step, say in one short sentence what is about
+  to happen and why. Do not batch silently and only speak at
+  the end -- a run of silent tool calls reads as "lost".
+  This holds regardless of the active output style.
+- **Lead with context before a decision-making question,
+  and show concrete artifacts** -- for a technical choice
+  (grammar, API shape, data layout), write out what each
+  option looks like (side-by-side snippets / diffs) *before*
+  the `AskUserQuestion`. Option labels summarize choices the
+  user has already seen, not the first encounter.
+- **`AskUserQuestion`: explain in layman's terms, short.**
+  The lead prose must be readable by a non-expert: no
+  internal type names, file paths, or API names in the
+  problem statement (save those for the option
+  descriptions). It states *what the decision means*, not
+  *how it is implemented*.
+
 ## Coding Standards
 
 - Rust edition 2024
@@ -228,6 +289,15 @@ written together regardless, because the unit is
 too small to meaningfully fail-then-pass, and the
 `unimplemented!()`-stub-first dance adds no signal.
 
+Scope this carve-out narrowly to **pure data
+declarations** -- enums/structs with derived traits
+and no behaviour. The moment a "new module" or
+"new helper" carries real logic (an `apply`/`inverse`,
+a branch, a match), it is a behaviour change: write
+the failing test first, or you will ship uncovered
+branches and miss cases the after-the-fact test would
+have caught.
+
 If you're unsure which case applies, default to the
 behaviour-change discipline. The cost of an
 unnecessary red step is low; the cost of skipping a
@@ -240,10 +310,22 @@ passed) is high.
 Never use `git commit` directly. No "Co-Authored-By",
 no emoji.
 
-## Acceptance Criteria
+## Definition of Done
 
-Before completing any task, run `cargo xtask validate`,
-which checks:
+A task is done only when all of the following hold -- not
+just when the code compiles:
+
+1. **Targeted tests** for the change are written and pass.
+2. **Type-check** passes (`cargo xtask check`; svelte-check
+   for frontend).
+3. **Browser-verify** any UI change in a real browser.
+   This is the most-violated rule in practice -- treat it as
+   load-bearing; "tests pass" is not "the feature works".
+4. **Self-review the diff** before committing.
+5. **E2E tests** for UI features (`scripts/e2e.sh`).
+6. **`cargo xtask validate`** passes (the umbrella gate).
+
+`cargo xtask validate` checks:
 
 1. **Formatting**: auto-fixed in place by default; pass
    `cargo xtask validate --check` for the read-only
@@ -376,7 +458,7 @@ can verify the unsafe block is genuinely necessary.
 
 ## Coverage exceptions for hardware-bound code
 
-The 90% coverage gate (see Acceptance Criteria) assumes
+The 90% coverage gate (see Definition of Done) assumes
 every code path can run under `cargo llvm-cov` in CI.
 Real projects routinely have I/O paths that can't:
 audio playback, network calls against external
@@ -451,6 +533,30 @@ process-cleanup that pokes `Get-CimInstance` or
 *before* `cargo` is available. Document such
 exceptions inline so the next reader knows why the
 file is not a wrapper.
+
+## Long-running scripts
+
+For any script that runs more than ~30 seconds
+(`scripts/e2e.sh`, dogfood/deploy helpers):
+
+- **Author side** -- tee stdout to `target/<name>.log` so
+  the output is durable (a captured caller, CI, or a closed
+  terminal otherwise loses it). With the
+  `exec > >(tee "$LOG") 2>&1` idiom you must also capture
+  `TEE_PID=$!` and `wait "$TEE_PID"` in the `EXIT` trap --
+  bash does not synchronize with `>(...)` process
+  substitution on exit, so the trailing trap output (often
+  the most important lines) is silently truncated without
+  the wait.
+- **Caller side** -- **never pipe a long-running command
+  through `tail -N` under a tight timeout.** `tail -N` says
+  "give me the end"; the timeout says "there will be no
+  end" -- it buffers until EOF that never comes within the
+  window, so the pipeline shows nothing and reads as a
+  stall. Use `run_in_background` for the completion
+  notification, or a `Monitor` with a line-buffered grep for
+  progress; reserve `| tail -N` for already-finished
+  commands.
 
 ## Lints: `doc_markdown` allowlist via `clippy.toml`
 

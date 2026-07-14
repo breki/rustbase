@@ -543,7 +543,11 @@ commit.
 
 ### 30. Definition of Done section
 
-- **Status:** defer -- **Target:** `CLAUDE.md`. **Notes:** Jutro
+- **Status:** **done.** Renamed "Acceptance Criteria" ->
+  "Definition of Done" with a 6-step checklist (targeted
+  tests / type-check / browser-verify / diff-self-review /
+  E2E / validate) above the validate-gate list; updated the
+  one in-repo cross-ref. **Notes:** Jutro
   renamed "Acceptance Criteria" -> "Definition of Done" and
   expanded to a 6-step checklist (targeted tests / type-check /
   browser-verify / diff-self-review / E2E / validate). Overlaps
@@ -552,7 +556,9 @@ commit.
 
 ### 31. Long-running-script log convention + no-`tail -N` rule
 
-- **Status:** defer -- **Target:** `CLAUDE.md`. **Notes:**
+- **Status:** **done.** Added a "Long-running scripts"
+  section (author-side tee + `TEE_PID`/wait; caller-side
+  no-`tail -N`-under-timeout). **Notes:**
   author-side (tee to `target/<name>.log`, capture `TEE_PID`,
   wait in the EXIT trap) + caller-side (never pipe a
   long-running command through `tail -N` under a tight timeout).
@@ -561,7 +567,9 @@ commit.
 
 ### 32. `## Environment Constraints` section
 
-- **Status:** defer -- **Target:** `CLAUDE.md`. **Notes:** A
+- **Status:** **done.** Added `## Environment Constraints`
+  with a placeholder (Python-not-installed) example for each
+  project to replace. **Notes:** A
   placeholder section prompting each project to declare
   machine-level assumptions (Python/Node/Docker availability).
   Jutro's instance forbade Python. Template ships the
@@ -569,7 +577,9 @@ commit.
 
 ### 33. `## Canon vs memory` section
 
-- **Status:** defer -- **Target:** `CLAUDE.md`. **Notes:**
+- **Status:** **done.** Added `## Canon vs memory`
+  (canon vs per-user memory + default-to-canon +
+  promote-and-delete). **Notes:**
   Defines canon (tracked) vs auto-memory (per-user) and a
   default-to-canon directive with a promote-and-delete rule.
   Cross-cutting workflow philosophy; decide if it fits this
@@ -577,7 +587,10 @@ commit.
 
 ### 34. Collaboration rules (Write plainly / narrate / artifacts / layman)
 
-- **Status:** defer -- **Target:** `CLAUDE.md`. **Notes:**
+- **Status:** **done.** Added `## Collaboration` (write
+  plainly / narrate work / side-by-side artifacts before a
+  decision / AskUserQuestion in layman's terms), condensed to
+  limit bloat. **Notes:**
   Bundle of jutro Collaboration-section bullets: write plainly;
   narrate work before each meaningful tool call; show
   side-by-side concrete artifacts before a decision question;
@@ -587,8 +600,10 @@ commit.
 
 ### 35. Tighten the TDD structural-addition carve-out
 
-- **Status:** todo -- **Target:** `CLAUDE.md` (Test-Driven
-  Development). **Notes:** Jutro hit uncovered helpers / a missed
+- **Status:** **done.** Scoped the structural-addition
+  carve-out to pure data declarations (enums/structs, derived
+  traits, no behaviour) in the TDD section. **Notes:** Jutro
+  hit uncovered helpers / a missed
   enum variant by leaning on the carve-out for a module with
   behavioural methods; scope the carve-out to pure data
   declarations (enums/structs, derived traits, no methods).
