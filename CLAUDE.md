@@ -382,7 +382,7 @@ Always keep an `[Unreleased]` section at the top.
 | `/test` | Run tests with agent-friendly output |
 | `/validate` | Full quality pipeline with stepwise progress |
 | `/commit` | Commit with versioning, diary, and code review |
-| `/retrospect` | Workflow retrospective (Efficiency / Quality / Speed). Invoked automatically by `/commit`; also callable manually mid-session |
+| `/retrospect` | Workflow retrospective (Efficiency / Quality / Speed / Cleanup). Invoked automatically by `/commit`; also callable manually mid-session |
 | `/todo` | Capture a work item into `docs/todo.md` (no implementation) |
 | `/implement` | Plan + implement a captured item; writes `docs/issues/<slug>.md` |
 | `/simplify` | Review changed code for quality |

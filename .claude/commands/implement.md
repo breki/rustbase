@@ -143,9 +143,11 @@ particular:
    is *likely to stay stable* through user
    verification, you can spawn both agents now with
    `run_in_background: true`, passing the
-   working-tree diff. Use the same prompts as the
-   `/commit` step-5 reviewers. Note the agent IDs in
-   conversation context so `/commit` can reuse the
+   working-tree diff. Use the shared prompts in
+   `.claude/commands/code-reviewers.md` (the same file
+   `/commit` step 5 uses, so the pre-launch and the
+   commit-time review are identical). Note the agent IDs
+   in conversation context so `/commit` can reuse the
    results.
 
    **Skip the pre-launch** when:

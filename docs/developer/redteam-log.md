@@ -1,12 +1,16 @@
-# Red Team Findings -- Open
+# Red Team Findings -- Deferred backlog
 
-Open findings from red team reviews, newest first.
-Fixed findings are moved to
-[redteam-resolved.md](redteam-resolved.md).
+Red Team findings that were **deferred** -- real, but not
+fixed at review time. Fixed findings are not logged here;
+their resolution lives in the commit that fixed them.
 
-**Next ID:** RT-062
+Newest first; add new entries right after the `---`. Use a
+self-describing ID `rt-<YYYY-MM-DD>-<kebab-slug>` (no central
+counter); a later commit acting on an item cites the ID
+inline. Each entry: the ID heading, a `**Category:**` line,
+and a short description.
 
-**Threshold:** when 10+ findings are open, a full-codebase
-red team review is required before continuing feature work.
+**Threshold:** when 10+ items are open here, a full-codebase
+red team review is warranted before continuing feature work.
 
 ---

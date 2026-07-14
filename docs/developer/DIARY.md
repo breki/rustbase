@@ -7,6 +7,27 @@ reverse chronological order.
 
 ### 2026-07-14
 
+- Backfeed jutro Stage 6: skill/workflow changes
+
+    Reworked the review workflow (items 36-40, no version
+    bump -- tooling). Extracted the Red Team + Artisan
+    prompts into a shared `.claude/commands/code-reviewers.md`
+    referenced by both `/commit` and `/implement` (so the
+    pre-launch and commit-time reviews are identical), and
+    gave the Red Team prompt a historical-context lens
+    (`git log` per touched file -> flag un-acknowledged
+    reversals / churny surfaces). `/commit` now auto-applies
+    mechanical findings (announced) and escalates only on six
+    thresholds instead of prompting on every nit. Retired the
+    counter-based four-log review system: deleted
+    `redteam-resolved.md` / `artisan-resolved.md`, and the
+    open logs became deferred-only backlogs with
+    self-describing date-slug IDs (`rt-YYYY-MM-DD-slug`, no
+    `Next ID`) -- a fixed finding's record now lives in its
+    commit message. `/retrospect` gained a 4th "Cleanup"
+    bucket (stale/duplicate canon + memory) with a periodic
+    broader-canon-scan trigger. All opted into explicitly.
+
 - Backfeed jutro Stage 4 items 18 + 19: supply-chain tooling (v0.12.0)
 
     `cargo xtask audit` -- RUSTSEC (`cargo audit`) + `npm

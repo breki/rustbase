@@ -21,7 +21,7 @@ integration, quality gates, and CI/CD.
     confirmed-finding** detection, and a post-commit
     workflow retrospective
   - `/retrospect` -- standalone workflow retrospective
-    (Efficiency / Quality / Speed buckets,
+    (Efficiency / Quality / Speed / Cleanup buckets,
     `[trivial]`/`[propose]` tags, auto-apply offer for
     trivial fixes). Invoked automatically by `/commit`;
     also callable manually mid-session

@@ -61,105 +61,17 @@ conventions.
    changes. The only exception is commits that contain
    no code at all (docs-only markdown, `.md` files).
 
-   **Agent A -- Red Team** (security & correctness):
-
-   > You are a red team reviewer. Analyze the code changes
-   > for a Rust project. Report issues in two categories:
-   >
-   > **Correctness**: logic bugs, unhandled edge cases,
-   > missing error handling, off-by-one errors, incorrect
-   > assumptions, dead code, unclear semantics.
-   >
-   > **Security**: command injection, path traversal,
-   > unsafe deserialization, unvalidated input, TOCTOU
-   > races, information leaks, denial of service vectors.
-   >
-   > **CI/CD** (when `.github/workflows/` files are in
-   > the diff): shell injection via untrusted context
-   > variables, excessive permissions, unpinned actions,
-   > cache poisoning, secret exposure.
-   >
-   > **Project Configuration** (when `Cargo.toml`,
-   > `rustfmt.toml`, `clippy.toml`, `.gitignore`, or
-   > other root config files are in the diff): insecure
-   > defaults, overly permissive settings, missing
-   > deny/forbid lint levels, vulnerable dependencies.
-   >
-   > **Deployment** (when `.service`, `Dockerfile`,
-   > `docker-compose.yml`, nginx/Apache configs, or
-   > other infra files are in the diff): running as
-   > root, overly broad filesystem access, missing
-   > sandboxing (`ProtectSystem`, `PrivateTmp`, etc.),
-   > world-readable secrets, open bind addresses
-   > without firewall context.
-   >
-   > Be adversarial -- assume the code is wrong and try
-   > to prove it. Only report real, actionable issues
-   > with specific line references. Do NOT report style
-   > nits, missing docs, or hypothetical concerns. If you
-   > find nothing, say "No issues found."
-   >
-   > For each finding, include:
-   > 1. **What**: the specific issue with file:line ref
-   > 2. **Why it matters**: concrete impact
-   > 3. **Example trigger**: specific input or state
-   > 4. **Suggested fix**: how to resolve it
-
-   **Agent B -- Artisan** (code quality & craftsmanship):
-
-   > You are the Artisan -- a code quality reviewer for a
-   > Rust project. You focus on craftsmanship beyond what
-   > clippy catches. Analyze the code changes and report
-   > issues in these categories:
-   >
-   > **Error Handling & Messages**: error types missing
-   > Display, capitalized/punctuated error messages,
-   > error chains leaking library types.
-   >
-   > **API Design**: functions accepting concrete types
-   > instead of trait bounds, inconsistent parameter
-   > patterns, ownership semantics unclear.
-   >
-   > **Abstraction Boundaries**: public modules exposing
-   > internal types, dependency types leaked in public
-   > APIs, business logic in the binary instead of the
-   > library.
-   >
-   > **Type Safety**: missing Display/Debug on public
-   > types, stringly-typed APIs where enums/newtypes
-   > would be safer, unnecessary clones or allocations.
-   >
-   > **Module Size**: any source file over 500 lines
-   > that contains multiple structs/enums should be
-   > flagged for splitting.
-   >
-   > Only report real, actionable issues with specific
-   > line references. Do NOT duplicate clippy warnings
-   > or red team findings. If you find nothing, say
-   > "No issues found."
-   >
-   > For each finding, include:
-   > 1. **What**: the specific issue with file:line ref
-   > 2. **Why it matters**: impact on maintainability
-   > 3. **Better approach**: specific code change
-
-   **How to hand the diff to the subagents:** do NOT
-   capture the diff to a file and pass the path. Tell
-   each subagent that its first step is to run
-   `git diff --cached` itself (both agents have Bash).
-   This avoids the recurring failure mode of writing
-   the diff to `/tmp/...` (which on Windows + Git Bash
-   resolves outside the workspace and is invisible to
-   the user). If for some reason a file is needed,
-   write to a git-ignored workspace-local path under
-   `target/` -- never `/tmp`.
-
-   In each subagent prompt also include: a one-line
-   description of what the PR does, a reminder to use
-   the six labeled bullet fields (ID, Source, Category,
-   Description, Impact / Why it matters, Suggested fix)
-   when reporting findings, and the category list for
-   that reviewer (Red Team or Artisan).
+   The **Red Team** (security & correctness) and
+   **Artisan** (code quality) prompts live in the shared
+   `.claude/commands/code-reviewers.md` (also used by
+   `/implement`'s pre-launch reviewers, so the wording stays
+   canonical in one place). Spawn one subagent per prompt in
+   the single parallel message, giving each a one-line
+   description of what the change does. That file carries the
+   full prompts, the diff-handoff rule (each subagent runs
+   `git diff --cached` itself; never `/tmp`; a `target/`-local
+   file if one is truly needed), and the six labeled-bullet
+   reporting format.
 
    **Cross-confirmed findings:**
    Before presenting findings, scan both reviewers'
@@ -175,9 +87,8 @@ conventions.
      guard" -- both pointing at the same line)
 
    Cross-confirmed findings are a stronger signal
-   than unique ones. When found, present them with a
-   combined ID (`RT-NNN/AQ-NNN`) under a
-   **Cross-confirmed** heading and note that both
+   than unique ones. When found, present them under a
+   **Cross-confirmed** heading noting that both
    reviewers flagged it independently. Empirically
    (from sessions on this project's siblings) every
    cross-confirmed finding has been selected for
@@ -201,67 +112,54 @@ conventions.
    raised are silently dropped.
 
    **Presenting findings to the user:**
-   - Present **ALL** findings from both reviewers
-     without filtering or skipping any. Do not omit
-     findings based on your own priority assessment.
-   - Present each finding with full detail:
-     - **ID and title** (e.g. RT-023 or AQ-001, or
-       combined `RT-NNN/AQ-NNN` when cross-confirmed)
-     - **Source**: Red Team or Artisan (or both, when
-       cross-confirmed)
-     - **Category**
-     - **Description**
-     - **Impact / Why it matters**
-     - **Suggested fix**
-   - Use `AskUserQuestion` with the findings as
-     options to let the user pick which to fix.
-     Split into multiple questions if needed (max
-     4 options per question). Include "Commit as-is"
-     and "Abort" as options.
-   - Wait for the user's answer before proceeding
 
-   **Findings logs:**
+   Auto-apply is the default. Most findings are
+   mechanical (exact-match regression, missing
+   aria-label, rename a local, tighten a regex,
+   stale-doc fix); apply those directly and announce the
+   set you are applying so the user can interrupt. Only
+   escalate a finding via `AskUserQuestion` when it
+   crosses a threshold:
+   1. large rework (>5 files, >100 lines, or
+      out-of-diff churn),
+   2. two findings conflict with each other,
+   3. a genuine design tradeoff,
+   4. a public-surface or breaking change,
+   5. a new dependency,
+   6. out of scope for this commit.
 
-   Red team findings use two files:
-   - `docs/developer/redteam-log.md` -- open (RT-NNN)
-   - `docs/developer/redteam-resolved.md` -- fixed
+   Present each escalated finding in full (ID, Source,
+   Category, Description, Impact, Suggested fix) with
+   "Commit as-is" and "Abort" options; split across
+   questions (max 4 options each) if needed, and wait for
+   the answer before committing. Still surface **every**
+   finding -- applied or escalated -- in your summary;
+   never silently drop one. Cross-confirmed findings
+   (both reviewers, same root cause) are the strongest
+   signal -- note them as such.
 
-   Artisan findings use two files:
-   - `docs/developer/artisan-log.md` -- open (AQ-NNN)
-   - `docs/developer/artisan-resolved.md` -- fixed
+   **Deferred findings backlog:**
 
-   Both pairs are in **reverse chronological order**
-   (newest first). New entries go right after the `---`
-   separator.
+   A **fixed** finding gets **no** log entry -- its
+   resolution lives in the commit message. Only a finding
+   deliberately *deferred* (real, but not fixed now) is
+   logged, as a backlog:
+   - `docs/developer/redteam-log.md` (Red Team)
+   - `docs/developer/artisan-log.md` (Artisan)
 
-   After the review:
-   - Read each log to get the next ID (noted in the
-     "Next ID" field at the top of each open log)
-   - For each **new** finding, insert at the **top**
-     of the relevant open log with the next ID, date,
-     commit context, full description, and category.
-     Increment "Next ID".
-   - For findings the user chose to **fix**, remove
-     from the open log and insert at the **top** of
-     the resolved log using this terse format (one
-     entry per finding):
-
-     ```
-     ### <ID> -- <one-line title>
-
-     **Category:** <category>
-
-     **Resolution:** <YYYY-MM-DD> -- <how it was fixed,
-     1-3 sentences>
-     ```
-
-     Do not preserve the original Description / Impact
-     / Suggested-fix body in the resolved entry -- the
-     code change itself is the authoritative record.
-   - Include all changed log files in staged files
-   - **Threshold warning:** if 10 or more findings
-     are open in either log, tell the user that a
-     comprehensive full-codebase review is needed
+   Both are newest-first; new entries go right after the
+   `---`. Use a self-describing date-slug ID --
+   `<rt|aq>-<YYYY-MM-DD>-<kebab-slug>` (e.g.
+   `rt-2026-07-14-fetch-no-timeout`) -- so there is no
+   central counter to maintain and the ID is greppable
+   from commit messages. Each entry is the ID heading, a
+   `**Category:**` line, and a short description of the
+   deferred issue. A later commit that acts on or
+   reverses a deferred item cites its ID inline
+   ("supersedes rt-2026-07-14-..."). Stage any changed
+   backlog file. **Threshold:** if 10+ items sit open in
+   either backlog, tell the user a full-codebase review
+   is warranted.
 
 6. **Update development diary** (for significant changes):
    - Read `docs/developer/DIARY.md` to see format and
@@ -333,8 +231,8 @@ EOF
     it cannot block shipping).
 
     The `/retrospect` skill owns the full set of
-    rules: the three buckets (Efficiency / Quality
-    / Speed), `[trivial]` vs `[propose]` tagging,
+    rules: the four buckets (Efficiency / Quality /
+    Speed / Cleanup), `[trivial]` vs `[propose]` tagging,
     the offer to auto-apply trivial findings, and
     the recursive-skip carve-out for workflow-only
     diffs (`.claude/**` / `CLAUDE.md` only). See

@@ -1,5 +1,5 @@
 ---
-description: Workflow retrospective on the session so far -- Efficiency, Quality, Speed
+description: Workflow retrospective on the session so far -- Efficiency, Quality, Speed, Cleanup
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Read, Grep, Glob, AskUserQuestion, Edit
 ---
 
@@ -38,7 +38,7 @@ session.
 ## Surfacing findings
 
 Walk the session (or the just-committed work) and
-collect findings in three buckets. Aim for 0-3
+collect findings in four buckets. Aim for 0-3
 findings per bucket; do not invent filler.
 
 1. **Efficiency** -- tool calls that wasted budget.
@@ -80,6 +80,31 @@ findings per bucket; do not invent filler.
      pre-launched during `/implement` Phase 3 so
      `/commit` had results waiting.
 
+4. **Cleanup** -- stale, duplicate, or redundant
+   entries in canon or memory (including `.claude/`
+   skills and commands). Growth is otherwise
+   monotonic: retros add rules, nothing prunes them.
+   Examples:
+   - A memory entry whose rule was promoted to
+     `CLAUDE.md` but the memory copy was not deleted.
+   - Two `CLAUDE.md` bullets covering the same ground
+     in different sections.
+   - A skill/command referencing a tool, file, or
+     workflow that no longer exists.
+   - Two skills with overlapping responsibility where
+     one supersedes the other.
+
+   Scope the routine pass to what the session touched.
+   **Broader canon scan (periodic, not every retro):**
+   when the session-touched Cleanup pass has surfaced
+   nothing for 3+ consecutive retros, expand the next
+   retro's Cleanup pass to a full canon scan -- look
+   for adjacent paragraphs covering the same ground,
+   deprecated triggers, automatic rules that could be
+   dropped, and examples referencing code that no
+   longer exists. Exclude structural reorganization
+   from scope (that is its own deliberate task).
+
 ## Tagging findings
 
 For each finding, assign:
@@ -118,6 +143,11 @@ Speed:
     of fixes ran serial cargo xtask validate then
     fmt then validate. Could fold fmt into the
     validate wrapper.
+
+Cleanup:
+  3-stale-skill-ref [trivial]
+    web-dev skill still names playwright.config.js;
+    the file is playwright.config.ts. One-line fix.
 ```
 
 End the report with one of:

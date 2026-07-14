@@ -621,7 +621,11 @@ commit.
   redundant canon + memory) and a "broader canon scan
   (periodic, not every retro)" trigger when the session-scoped
   Cleanup pass surfaces nothing for 3+ consecutive retros.
-- **Status:** todo
+- **Status:** **done.** Added the Cleanup bucket (4th) +
+  the periodic broader-canon-scan trigger; updated the
+  frontmatter, bucket count, example output, and the
+  `/commit` step-12 + CLAUDE.md/README references to "four
+  buckets".
 - **Target:** `.claude/commands/retrospect.md`
 - **Notes:** Two jutro entries (2026-05-20 bucket, 2026-05-24
   periodic scan). Verify what buckets this template's retrospect
@@ -634,7 +638,9 @@ commit.
   un-acknowledged reversal of a recent decision, 4+ edits in two
   weeks, or re-introduction of a deliberately-removed pattern;
   cite the commit hash.
-- **Status:** todo
+- **Status:** **done.** Added the `**Historical context**`
+  bullet to the Red Team prompt (now in the shared
+  `code-reviewers.md` -- see item 40).
 - **Target:** `.claude/commands/commit.md`
 - **Notes:** ~3-5s per review pass; low overlap with existing
   categories. Jutro 2026-05-22.
@@ -645,7 +651,10 @@ commit.
   `AskUserQuestion` only on (1) large rework, (2) conflicting
   findings, (3) design tradeoff, (4) public/breaking surface,
   (5) new dependency, (6) out of scope.
-- **Status:** todo
+- **Status:** **done.** Rewrote the "Presenting findings"
+  block: auto-apply mechanical fixes (announced), escalate
+  via AskUserQuestion only on the six thresholds; every
+  finding still surfaced in the summary.
 - **Target:** `.claude/commands/commit.md`
 - **Notes:** Constant prompting on trivia trains rubber-stamping.
   User can still interrupt the announced auto-apply set. Assess
@@ -658,7 +667,12 @@ commit.
   keep only the deferred-item backlog; switch counter IDs
   (`RT-148`) to self-describing `<rt|aq>-<yyyy-mm-dd>-<slug>`
   IDs (no central `Next ID:` counter).
-- **Status:** defer
+- **Status:** **done** (opted in). Deleted both
+  `*-resolved.md`; rewrote the open logs as deferred-only
+  backlogs with date-slug IDs and no `Next ID`; rewrote
+  `/commit`'s findings-logs section (fixed findings get no
+  entry -- resolution lives in the commit message; only
+  deferred findings are logged).
 - **Target:** `.claude/commands/commit.md`,
   `docs/developer/{redteam,artisan}-resolved.md` (delete),
   possibly `{redteam,artisan}-log.md`.
@@ -673,7 +687,11 @@ commit.
 - **Scope:** Move the Red Team + Artisan reviewer prompts into
   `.claude/commands/code-reviewers.md`; reference it from both
   `commit.md` and `implement.md`.
-- **Status:** todo
+- **Status:** **done.** Created
+  `.claude/commands/code-reviewers.md` with both prompts +
+  the diff-handoff / reporting-format rules; `commit.md`
+  step 5 and `implement.md`'s pre-launch reviewers both
+  reference it.
 - **Target:** `.claude/commands/code-reviewers.md` (new),
   `commit.md`, `implement.md`.
 - **Notes:** `/implement`'s pre-launch reviewers can't reach

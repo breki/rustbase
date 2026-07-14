@@ -1,12 +1,17 @@
-# Artisan Findings -- Open
+# Artisan Findings -- Deferred backlog
 
-Code quality findings from the Artisan reviewer, newest
-first. Fixed findings are moved to
-[artisan-resolved.md](artisan-resolved.md).
+Artisan (code-quality) findings that were **deferred** --
+real, but not fixed at review time. Fixed findings are not
+logged here; their resolution lives in the commit that fixed
+them.
 
-**Next ID:** AQ-063
+Newest first; add new entries right after the `---`. Use a
+self-describing ID `aq-<YYYY-MM-DD>-<kebab-slug>` (no central
+counter); a later commit acting on an item cites the ID
+inline. Each entry: the ID heading, a `**Category:**` line,
+and a short description.
 
-**Threshold:** when 10+ findings are open, a full-codebase
-Artisan review is required before continuing feature work.
+**Threshold:** when 10+ items are open here, a full-codebase
+Artisan review is warranted before continuing feature work.
 
 ---
