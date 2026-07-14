@@ -382,7 +382,11 @@ committing to the scope.
 - **Scope:** Add `jscpd` devDep + `frontend/.jscpd.json` +
   `dupes` npm script + thin `xtask/src/frontend_dupes.rs`
   wrapper wired into `validate`. Threshold 6%, tests excluded.
-- **Status:** todo
+- **Status:** **done** (v0.11.0). jscpd devDep +
+  `.jscpd.json` (`formatsExts` routes `.svelte` through the
+  TS tokenizer -- verified a duplicated component pair is
+  flagged) + `dupes` npm script + `frontend_dupes.rs` on the
+  shared `frontend.rs`; validate step 6.
 - **Target:** `frontend/package.json`, `frontend/.jscpd.json`
   (new), `xtask/src/frontend_dupes.rs` (new),
   `xtask/src/main.rs`, `xtask/src/validate.rs`.
@@ -398,7 +402,11 @@ committing to the scope.
   (`frontend-fmt [--check]`): auto-fix by default
   (`npm run format`), read-only under `--check`. Wire into
   `validate` as a frontend-group step.
-- **Status:** todo
+- **Status:** **done** (v0.11.0). `frontend_fmt.rs` on the
+  shared `frontend.rs`; auto-fix default, `--check`
+  read-only; validate step 4 (threaded the validate
+  `--check` flag through). Shipped wired-in (template is
+  Prettier-clean).
 - **Target:** `xtask/src/frontend_fmt.rs` (new),
   `xtask/src/main.rs`, `xtask/src/validate.rs`.
 - **Notes:** A freshly-generated template is Prettier-clean, so
@@ -467,7 +475,9 @@ committing to the scope.
 
 - **Scope:** Add a small muted version span next to the `h1` in
   the starter `App.svelte`.
-- **Status:** todo
+- **Status:** **done** (v0.11.0). Muted version span next to
+  the `h1`; added `frontend/src/vite-env.d.ts` declaring the
+  global so svelte-check resolves it.
 - **Target:** `frontend/src/App.svelte`.
 - **Notes:** The template already injects `__APP_VERSION__` via
   Vite `define` but renders it nowhere. Small; every project adds

@@ -12,6 +12,22 @@ and this project adheres to
 
 ### Added
 
+- `cargo xtask frontend-fmt [--check]` runs Prettier over
+  the frontend (auto-fix by default, read-only under
+  `--check`), wired into `validate` mirroring the Rust `fmt`
+  gate.
+- `cargo xtask frontend-dupes` gates frontend code
+  duplication with jscpd (threshold 6%, tests excluded),
+  wired into `validate` mirroring the Rust `dupes` gate.
+  `.svelte` files are routed through jscpd's TypeScript
+  tokenizer (via `frontend/.jscpd.json`), which it otherwise
+  silently skips.
+- `cargo xtask frontend-test` runs the frontend unit suite
+  (vitest), wired into `validate` -- previously the
+  component tests were ungated (svelte-check only
+  type-checks), so a broken assertion passed `validate`.
+- The starter app header now renders the build version
+  (`__APP_VERSION__`, injected from `Cargo.toml`).
 - `cargo xtask frontend-check` runs the frontend
   type check (svelte-check) standalone; skips cleanly when
   there is no frontend.

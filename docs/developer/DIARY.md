@@ -7,6 +7,35 @@ reverse chronological order.
 
 ### 2026-07-14
 
+- Backfeed jutro Stage 4 (frontend): version header + Prettier/jscpd gates (v0.11.0)
+
+    Tracker items 21, 20, 26. Extracted a shared
+    `xtask/src/frontend.rs` (skip-vs-error classifier + npm
+    runner) that `frontend-check`, the new `frontend-fmt`
+    (Prettier; auto-fix default, `--check` read-only), and
+    the new `frontend-dupes` (jscpd) all build on -- so the
+    three frontend gates share one skip/error path. Both new
+    gates wired into `validate` (now 8 steps). jscpd routes
+    `.svelte` through its TypeScript tokenizer via
+    `frontend/.jscpd.json` (verified: a duplicated
+    component pair is flagged; without the mapping jscpd
+    silently skips components). App header renders
+    `__APP_VERSION__` (declared in a new
+    `frontend/src/vite-env.d.ts` so svelte-check resolves
+    it) -- which review caught breaking the vitest suite
+    (undefined constant + an exact-text h1 assertion); fixed
+    via a `define` in `vitest.config.js` and a relaxed
+    assertion. That slipped past validate because the vitest
+    suite was ungated, so also added a `frontend-test` gate
+    (validate now 9 steps). Landmine caught mid-work: an
+    `npm --prefix frontend
+    install` run from the repo root re-anchored a stale
+    `rustbase-e2e: file:..` dep and planted a
+    `node_modules/rustbase-e2e -> <repo root>` junction;
+    cleaned from all three npm files + node_modules (junction
+    stripped before any delete). Strong motivation for the
+    Stage 5 CLAUDE.md `file:`-dep warning.
+
 - Backfeed jutro template feedback, Stage 3: e2e port isolation + multi-project .ports
 
     Tracker item 17 (no version bump -- test infra),

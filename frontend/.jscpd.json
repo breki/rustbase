@@ -1,0 +1,14 @@
+{
+  "threshold": 6,
+  "gitignore": true,
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ],
+  "formatsExts": {
+    "typescript": ["ts", "svelte", "js", "mjs", "cjs"]
+  },
+  "reporters": ["consoleFull"]
+}

@@ -8,7 +8,11 @@ mod deploy_remote;
 mod deploy_setup;
 mod dupes;
 mod fmt_cmd;
+mod frontend;
 mod frontend_check;
+mod frontend_dupes;
+mod frontend_fmt;
+mod frontend_test;
 mod helpers;
 mod test_cmd;
 mod validate;
@@ -58,6 +62,20 @@ enum XCommand {
     /// Type-check the frontend (svelte-check); skips
     /// cleanly when there is no frontend
     FrontendCheck,
+    /// Format the frontend with Prettier; skips cleanly
+    /// when there is no frontend
+    FrontendFmt {
+        /// Check formatting read-only instead of
+        /// auto-fixing in place
+        #[arg(long)]
+        check: bool,
+    },
+    /// Check frontend code duplication (requires jscpd);
+    /// skips cleanly when there is no frontend
+    FrontendDupes,
+    /// Run the frontend unit suite (vitest); skips cleanly
+    /// when there is no frontend
+    FrontendTest,
     /// Deploy to a remote Linux host (build frontend, sync,
     /// build on remote, restart service)
     Deploy,
@@ -88,6 +106,11 @@ fn main() {
         XCommand::Coverage => coverage::coverage(),
         XCommand::Dupes => dupes::dupes(),
         XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
+        XCommand::FrontendFmt { check } => {
+            frontend_fmt::frontend_fmt_cmd(check)
+        }
+        XCommand::FrontendDupes => frontend_dupes::frontend_dupes_cmd(),
+        XCommand::FrontendTest => frontend_test::frontend_test_cmd(),
         XCommand::Deploy => deploy::deploy(),
         XCommand::DeploySetup => deploy_setup::deploy_setup(),
         XCommand::CleanCache => clean_cache::clean_cache(),

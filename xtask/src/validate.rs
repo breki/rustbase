@@ -5,11 +5,14 @@ use crate::coverage;
 use crate::dupes;
 use crate::fmt_cmd;
 use crate::frontend_check;
+use crate::frontend_dupes;
+use crate::frontend_fmt;
+use crate::frontend_test;
 use crate::helpers::{elapsed_str, step_output};
 use crate::test_cmd;
 
 /// Total number of validation steps.
-const TOTAL_STEPS: usize = 6;
+const TOTAL_STEPS: usize = 9;
 
 /// Run all validation steps with concise stepwise
 /// output.
@@ -32,11 +35,16 @@ pub fn validate(check: bool) -> Result<(), String> {
     run_step(1, "Fmt", "fmt", || run_fmt(check))?;
     run_step(2, "Duplication", "dupes", run_duplication)?;
     run_step(3, "Clippy", "clippy", run_clippy)?;
-    run_step(4, "Frontend", "frontend-check", run_frontend_check)?;
+    run_step(4, "Frontend fmt", "frontend-fmt", || {
+        run_frontend_fmt(check)
+    })?;
+    run_step(5, "Frontend check", "frontend-check", run_frontend_check)?;
+    run_step(6, "Frontend dupes", "frontend-dupes", run_frontend_dupes)?;
 
     // ... expensive dynamic gates last.
-    run_step(5, "Test (xtask only)", "test", run_test)?;
-    run_step(6, "Coverage", "coverage", run_coverage)?;
+    run_step(7, "Frontend test", "frontend-test", run_frontend_test)?;
+    run_step(8, "Test (xtask only)", "test", run_test)?;
+    run_step(9, "Coverage", "coverage", run_coverage)?;
 
     println!("Validate OK ({})", elapsed_str(overall_start));
     Ok(())
@@ -99,7 +107,7 @@ fn run_clippy() -> Result<String, String> {
 
 /// Test step -- runs xtask's own tests only.
 ///
-/// Coverage (step 6) runs `--workspace --exclude xtask`
+/// The coverage step runs `--workspace --exclude xtask`
 /// under llvm-cov instrumentation, which executes every
 /// non-xtask test. Running the full workspace tests
 /// here too would duplicate that work. Restricting to
@@ -133,12 +141,36 @@ fn run_duplication() -> Result<String, String> {
     }
 }
 
+/// Frontend Prettier step -- auto-fixes unless `check`
+/// selects the read-only path. Same skip/error semantics as
+/// the frontend check step.
+fn run_frontend_fmt(check: bool) -> Result<String, String> {
+    format_frontend(frontend_fmt::frontend_fmt(check)?)
+}
+
 /// Frontend type check -- skips (pass) when there is no
 /// frontend at all, but errors when a frontend exists with
 /// its `node_modules` not installed (a silent skip there
 /// would read as a pass).
 fn run_frontend_check() -> Result<String, String> {
-    let r = frontend_check::frontend_check()?;
+    format_frontend(frontend_check::frontend_check()?)
+}
+
+/// Frontend duplication step (jscpd).
+fn run_frontend_dupes() -> Result<String, String> {
+    format_frontend(frontend_dupes::frontend_dupes()?)
+}
+
+/// Frontend unit-test step (vitest).
+fn run_frontend_test() -> Result<String, String> {
+    format_frontend(frontend_test::frontend_test()?)
+}
+
+/// Shared mapping from a [`crate::frontend::FrontendResult`]
+/// to a validate step detail string / error.
+fn format_frontend(
+    r: crate::frontend::FrontendResult,
+) -> Result<String, String> {
     match r.error {
         None if r.skipped => Ok(format!("skipped: {}", r.detail)),
         None => Ok(r.detail),

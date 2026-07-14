@@ -13,7 +13,9 @@ describe("App", () => {
       vi.fn(() => Promise.reject(new Error())),
     );
     render(App);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+    // The heading also carries the app-version span, so match
+    // the product name rather than the exact text.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
       "rustbase",
     );
   });

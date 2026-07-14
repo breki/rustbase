@@ -6,6 +6,35 @@ findings.
 
 ---
 
+### AQ-059 -- Three frontend `*_cmd` entry points duplicated the report match
+
+**Category:** Duplication / maintainability
+
+**Resolution:** 2026-07-14 -- The identical
+skipped/OK/error match in each `frontend_*_cmd` was
+extracted to `frontend::report_cmd(r, label)`; all four
+wrappers (check, fmt, dupes, test) now call it.
+
+### AQ-058 -- CLAUDE.md Acceptance Criteria under-described the validate gates
+
+**Category:** Consistency (docs)
+
+**Resolution:** 2026-07-14 -- The numbered list still showed
+6 gates ending at "Frontend type check"; `validate` now
+runs 9 (three more frontend gates + vitest). Updated the
+list and the cheapest-first grouping so the canon (which
+propagates to derived projects) matches what runs.
+
+### AQ-057 -- `run_test` doc named a hardcoded coverage step number that keeps drifting
+
+**Category:** Correctness (stale doc)
+
+**Resolution:** 2026-07-14 -- The comment said "Coverage
+(step 6)" (already re-numbered once in Stage 2, from 4);
+the frontend gates pushed coverage to 8/9. Dropped the
+parenthetical number entirely so it can't drift on the next
+reorder.
+
 ### AQ-056 -- README listed `playwright.config.js` in the CLI-delete list
 
 **Category:** Consistency (docs)

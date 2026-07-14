@@ -5,6 +5,28 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-060 -- Frontend unit tests (vitest) were not part of any validate gate
+
+**Category:** Coverage gap / process
+
+**Resolution:** 2026-07-14 -- svelte-check only type-checks;
+nothing ran the component tests, so RT-059 passed "all
+gates." Added `cargo xtask frontend-test` (vitest via the
+shared frontend runner) and wired it into `validate` as
+step 7, so a broken frontend test now fails the gate.
+
+### RT-059 -- App header change broke the frontend unit test, uncaught by validate
+
+**Category:** Correctness / test regression
+
+**Resolution:** 2026-07-14 -- Rendering `__APP_VERSION__` in
+the `App.svelte` h1 made `npm test` throw (`__APP_VERSION__
+is not defined` under vitest, which doesn't load the app
+vite `define`) and broke the exact-text h1 assertion. Fixed
+by adding the `define` to `vitest.config.js` and relaxing
+the assertion to `toContain("rustbase")`. Slipped through
+because vitest was ungated (see RT-060).
+
 ### RT-058 -- E2E harness reused the dev servers; a bare `npx playwright test` fell back to the dev ports
 
 **Category:** Correctness / test isolation

@@ -37,7 +37,7 @@
 </script>
 
 <main>
-  <h1>rustbase</h1>
+  <h1>rustbase <span class="app-version">v{__APP_VERSION__}</span></h1>
   <p class="subtitle">Your app is running.</p>
 
   <div class="card">
@@ -78,6 +78,12 @@
   h1 {
     font-size: 2rem;
     font-weight: 700;
+  }
+
+  .app-version {
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--muted);
   }
 
   .subtitle {

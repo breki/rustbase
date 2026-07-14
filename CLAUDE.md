@@ -222,15 +222,19 @@ which checks:
 4. **Coverage >= 90%**
 5. **Code duplication <= 6%** (production code, tests
    excluded)
-6. **Frontend type check** (svelte-check), skipped only
-   when there is no frontend
+6. **Frontend format** (Prettier), auto-fixed by default
+7. **Frontend type check** (svelte-check)
+8. **Frontend duplication** (jscpd, threshold 6%)
+9. **Frontend unit tests** (vitest)
 
-Gates run cheapest-first (Fmt, Duplication, Clippy,
-Frontend) before the expensive dynamic gates (Test,
+The frontend gates (6-9) skip only when there is no
+frontend at all. Gates run cheapest-first (Fmt,
+Duplication, Clippy, then the frontend static gates) before
+the expensive dynamic gates (frontend + Rust tests,
 Coverage), and a failed step prints the single command to
 re-run just that gate. On a fresh full-stack checkout, run
 `npm --prefix frontend install` before `validate` -- the
-Frontend gate fails (rather than silently skipping) when
+frontend gates fail (rather than silently skipping) when
 `frontend/` exists but its `node_modules` is not
 installed.
 
