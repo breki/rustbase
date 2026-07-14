@@ -1,7 +1,9 @@
+mod audit;
 mod check;
 mod clean_cache;
 mod clippy_cmd;
 mod coverage;
+mod dep_age;
 mod deploy;
 mod deploy_config;
 mod deploy_remote;
@@ -59,6 +61,20 @@ enum XCommand {
     Coverage,
     /// Run code duplication check (requires code-dupes)
     Dupes,
+    /// Security-advisory audit (RUSTSEC + npm); requires
+    /// cargo-audit
+    Audit,
+    /// Report a dependency version's age and flag it if
+    /// within the publish cooldown (on-demand; requires curl)
+    DepAge {
+        /// Registry to query
+        #[arg(value_enum)]
+        ecosystem: dep_age::Ecosystem,
+        /// Package name
+        package: String,
+        /// Version to check (default: latest)
+        version: Option<String>,
+    },
     /// Type-check the frontend (svelte-check); skips
     /// cleanly when there is no frontend
     FrontendCheck,
@@ -105,6 +121,12 @@ fn main() {
         XCommand::Fmt => fmt_cmd::fmt(),
         XCommand::Coverage => coverage::coverage(),
         XCommand::Dupes => dupes::dupes(),
+        XCommand::Audit => audit::audit(),
+        XCommand::DepAge {
+            ecosystem,
+            package,
+            version,
+        } => dep_age::dep_age(ecosystem, &package, version.as_deref()),
         XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
         XCommand::FrontendFmt { check } => {
             frontend_fmt::frontend_fmt_cmd(check)

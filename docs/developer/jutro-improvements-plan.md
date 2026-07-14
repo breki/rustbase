@@ -356,7 +356,16 @@ committing to the scope.
   parsing JSON, hard-failing `validate`; `wait-timeout`-bounded
   subprocesses; install-hint on missing `cargo-audit`; clean
   skip on a Rust-only checkout. Consider also a CI job.
-- **Status:** todo
+- **Status:** **done** (v0.12.0). `audit.rs` runs
+  `cargo audit --json` + `npm audit --json`, fails on
+  vulnerabilities only (advisory warnings reported, not
+  fatal), wired into `validate` as step 10. Pure JSON parse
+  helpers unit-tested with fixtures. Landed on the clean tree
+  after the Vite 8 bump (item 23) cleared the npm highs.
+  Deviations: no `wait-timeout` bound (would add a dep -- not
+  wired; noted as a future hardening); no `xtask/Cargo.toml`
+  change needed (serde_json already present); npm side skips
+  when there's no `frontend/package.json`.
 - **Target:** `xtask/src/audit.rs` (new), `xtask/src/main.rs`,
   `xtask/src/validate.rs`, `xtask/Cargo.toml`.
 - **Notes:** Mirrors the `dupes`/`coverage` gate shape (pure
@@ -371,7 +380,15 @@ committing to the scope.
   (default: reject versions < 14 days old without justification;
   security fixes exempt). On-demand only, not a gate. Wire the
   convention into the `/commit` new-dependency criterion.
-- **Status:** todo
+- **Status:** **done** (v0.12.0). `dep_age.rs`
+  (`dep-age <npm|cargo> <package> [version]`) queries the
+  registries via `curl` (no HTTP dep added to xtask) and
+  computes age with a dependency-free civil-day count
+  (Hinnant), failing under the 14-day cooldown. Pure
+  date/parse helpers unit-tested. Cooldown convention added
+  as a CLAUDE.md "Supply-chain hygiene" section (this
+  template's `/commit` has no explicit new-dependency step to
+  wire it into, unlike jutro's).
 - **Target:** `xtask/src/dep_age.rs` (new), `xtask/src/main.rs`,
   `.claude/commands/commit.md`, `CLAUDE.md`.
 - **Notes:** Supply-chain control; a continuous gate would flag

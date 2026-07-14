@@ -5,6 +5,21 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-061 -- Audit gate conflated a network failure with a vulnerability finding
+
+**Category:** Reliability / gate integrity
+
+**Resolution:** 2026-07-14 -- `cargo xtask audit` is a hard
+`validate` step that reaches the network; an offline machine
+or fresh CI run made it fail indistinguishably from a real
+advisory, training operators to bypass the gate. Extracted a
+pure `classify_audit` that keeps a positive vulnerability
+count fatal but degrades a runner error (missing tool /
+unreachable network / unparseable output) to a non-fatal
+**warning** in the `validate` context; the standalone
+command still errors. Unit-tested the fatal-vs-warning
+boundary.
+
 ### RT-060 -- Frontend unit tests (vitest) were not part of any validate gate
 
 **Category:** Coverage gap / process

@@ -6,6 +6,38 @@ findings.
 
 ---
 
+### AQ-062 -- validate docstring didn't account for the network-dependent audit step
+
+**Category:** Consistency (docs)
+
+**Resolution:** 2026-07-14 -- The `validate` docstring
+justified "cheap static then expensive dynamic"; the new
+network-I/O Audit step fit neither. Extended the docstring
+to state Audit runs last and degrades connectivity failures
+to warnings so local gates aren't blocked on the network.
+
+### AQ-061 -- dep-age cooldown decision was inline and untested
+
+**Category:** Test coverage
+
+**Resolution:** 2026-07-14 -- The `age < COOLDOWN_DAYS`
+decision lived in the I/O `dep_age` fn (untested; xtask is
+also outside the coverage gate). Extracted a pure
+`cooldown_verdict(age, msg)` and unit-tested both branches
+plus the 13/14-day boundary.
+
+### AQ-060 -- dep-age `ecosystem` was a stringly-typed arg with a dead match arm
+
+**Category:** API design / dead code
+
+**Resolution:** 2026-07-14 -- `ecosystem` was a bare `String`
+matched in both `fetch_registry` and `dep_age`, the latter's
+`other =>` arm unreachable (fetch_registry already
+validated). Replaced with a `clap::ValueEnum` `Ecosystem`
+enum, so clap rejects bad values at the CLI boundary (with
+`--help` enumeration) and both matches became exhaustive
+two-arm matches.
+
 ### AQ-059 -- Three frontend `*_cmd` entry points duplicated the report match
 
 **Category:** Duplication / maintainability

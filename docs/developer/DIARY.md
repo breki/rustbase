@@ -7,6 +7,24 @@ reverse chronological order.
 
 ### 2026-07-14
 
+- Backfeed jutro Stage 4 items 18 + 19: supply-chain tooling (v0.12.0)
+
+    `cargo xtask audit` -- RUSTSEC (`cargo audit`) + `npm
+    audit` gate, fails on vulnerabilities only (advisory
+    warnings informational), wired into `validate` as step 10
+    (validate now needs cargo-audit + network). Landed on the
+    clean tree after the Vite 8 bump cleared the npm highs;
+    passes at `cargo: 0 vuln, 1 warn (unsound anyhow), npm: 0
+    vuln`. `cargo xtask dep-age <npm|cargo> <pkg> [ver]` --
+    on-demand cooldown helper; queries the registries via
+    `curl` (no HTTP dep added to xtask) and ages the publish
+    date with a dependency-free Hinnant civil-day count,
+    failing under 14 days. Pure JSON/date helpers unit-tested
+    with fixtures. Cooldown convention documented in a new
+    CLAUDE.md "Supply-chain hygiene" section. Deviated from
+    jutro's spec: no wait-timeout subprocess bound (would add
+    a dep; noted as future hardening).
+
 - Backfeed jutro Stage 4 item 23: Vite 8 (Rolldown) upgrade
 
     No version bump (toolchain). `vite ^7->^8`,

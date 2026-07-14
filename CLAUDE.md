@@ -477,3 +477,26 @@ as a sentinel comment (`<!-- version: 0.5.0 -->`) so a
 script can rewrite both on release, or pull the value
 from `Cargo.toml` via the build (Vite supports this
 for the frontend; CLI binaries can use `env!("CARGO_PKG_VERSION")`).
+
+## Supply-chain hygiene
+
+Two `cargo xtask` commands guard the dependency tree:
+
+- **`cargo xtask audit`** runs `cargo audit` (RUSTSEC) over
+  `Cargo.lock` and `npm audit` over the frontend, failing on
+  any vulnerability (advisory *warnings* -- unsound /
+  unmaintained / yanked -- are reported, not fatal). It runs
+  as the final `validate` step, so **`validate` needs
+  `cargo-audit` installed (`cargo install cargo-audit`) and
+  network access** to the advisory DB / npm registry.
+- **`cargo xtask dep-age <npm|cargo> <package> [version]`**
+  reports how many days ago a version was published.
+
+**Dependency-version cooldown.** Do not adopt a dependency
+version published fewer than 14 days ago without a stated
+justification -- that window is when a compromised or
+malicious release is most likely still live. Security fixes
+are exempt (the fix's urgency outweighs the cooldown). Check
+a candidate before adding it:
+`cargo xtask dep-age cargo <crate> <version>` (or `npm`); it
+exits non-zero when the version is within the cooldown.

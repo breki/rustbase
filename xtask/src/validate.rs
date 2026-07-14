@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use crate::audit;
 use crate::clippy_cmd;
 use crate::coverage;
 use crate::dupes;
@@ -12,7 +13,7 @@ use crate::helpers::{elapsed_str, step_output};
 use crate::test_cmd;
 
 /// Total number of validation steps.
-const TOTAL_STEPS: usize = 9;
+const TOTAL_STEPS: usize = 10;
 
 /// Run all validation steps with concise stepwise
 /// output.
@@ -21,7 +22,11 @@ const TOTAL_STEPS: usize = 9;
 /// dynamic gates (Test, Coverage) last, so a fast check's
 /// failure is not gated behind the multi-minute
 /// instrumented Coverage run. Fmt stays first because it
-/// rewrites whitespace that later checks read.
+/// rewrites whitespace that later checks read. The Audit
+/// step is network-dependent, so it runs last (after
+/// Coverage) and degrades a connectivity failure to a
+/// warning -- a positive vulnerability finding still fails
+/// the gate, but a transient outage does not.
 ///
 /// `check` selects fmt's mode: `false` (default) auto-fixes
 /// formatting in place; `true` runs the read-only
@@ -45,6 +50,7 @@ pub fn validate(check: bool) -> Result<(), String> {
     run_step(7, "Frontend test", "frontend-test", run_frontend_test)?;
     run_step(8, "Test (xtask only)", "test", run_test)?;
     run_step(9, "Coverage", "coverage", run_coverage)?;
+    run_step(10, "Audit", "audit", run_audit)?;
 
     println!("Validate OK ({})", elapsed_str(overall_start));
     Ok(())
@@ -116,6 +122,23 @@ fn run_clippy() -> Result<String, String> {
 fn run_test() -> Result<String, String> {
     test_cmd::test_check_xtask()?;
     Ok(String::new())
+}
+
+/// Security-advisory step -- fails on any vulnerability
+/// (RUSTSEC or npm). Advisory warnings are informational,
+/// and a connectivity / missing-tool failure degrades to a
+/// printed warning rather than failing the gate, so an
+/// offline machine or fresh CI run is not blocked by a
+/// transient outage.
+fn run_audit() -> Result<String, String> {
+    let r = audit::audit_check();
+    if let Some(err) = r.error {
+        return Err(err);
+    }
+    for w in &r.warnings {
+        eprintln!("  warning: {w}");
+    }
+    Ok(r.detail)
 }
 
 /// Coverage step -- returns "N.N% >= 90%" detail.

@@ -12,6 +12,19 @@ and this project adheres to
 
 ### Added
 
+- `cargo xtask audit` -- a security-advisory gate that runs
+  `cargo audit` (RUSTSEC) over `Cargo.lock` and `npm audit`
+  over the frontend, failing on any vulnerability (advisory
+  *warnings* like unsound/unmaintained are reported but do
+  not fail). Wired into `validate` as the final step.
+  Requires `cargo-audit` installed and network access to the
+  advisory DB / npm registry.
+- `cargo xtask dep-age <npm|cargo> <package> [version]` -- a
+  dependency-cooldown helper that reports how many days ago a
+  version was published and exits non-zero when it is younger
+  than the 14-day cooldown (the window a malicious release is
+  most likely still live). On-demand only, not a gate;
+  requires `curl`.
 - `cargo xtask frontend-fmt [--check]` runs Prettier over
   the frontend (auto-fix by default, read-only under
   `--check`), wired into `validate` mirroring the Rust `fmt`
