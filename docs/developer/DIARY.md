@@ -7,6 +7,22 @@ reverse chronological order.
 
 ### 2026-07-14
 
+- Backfeed jutro Stage 4 item 23: Vite 8 (Rolldown) upgrade
+
+    No version bump (toolchain). `vite ^7->^8`,
+    `@sveltejs/vite-plugin-svelte ^6->^7` (svelte floor
+    raised to `^5.46.4`), `vitest ^4.1.7`, dropped the
+    `hot:false` vitest option. Clean install (per the
+    clean-before-major-bump practice; reparse-scan-guarded
+    `rm -rf node_modules` first). Sequenced deliberately
+    *before* the audit gate (item 18) because the old
+    `vite 7.x` was the source of the 3 high `npm audit`
+    advisories -- the upgrade brings the tree to
+    `found 0 vulnerabilities`, so the hard audit gate can
+    land clean next. Verified: build (~130ms via Rolldown),
+    svelte-check (0 errors), vitest (1 passed), and the e2e
+    smoke suite on Vite 8.1.4 (5/5).
+
 - Backfeed jutro Stage 4 (frontend): version header + Prettier/jscpd gates (v0.11.0)
 
     Tracker items 21, 20, 26. Extracted a shared

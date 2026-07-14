@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 
 export default defineConfig({
-  plugins: [svelte({ hot: false })],
+  plugins: [svelte()],
   // Mirror vite.config.js's build-time constant so components
   // that reference __APP_VERSION__ don't throw a ReferenceError
   // under vitest (which does not load the app vite config).

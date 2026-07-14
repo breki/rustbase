@@ -435,7 +435,13 @@ committing to the scope.
   `@sveltejs/vite-plugin-svelte ^6 -> ^7`, `vitest`, explicit
   `svelte >= 5.46.4` floor; drop `{ hot: false }` from
   `vitest.config.js`.
-- **Status:** todo
+- **Status:** **done** (no bump -- toolchain). `vite ^8`,
+  `plugin-svelte ^7`, `svelte ^5.46.4`, `vitest ^4.1.7`,
+  dropped `hot:false`. Used `^8` (not jutro's `~8`) since
+  8.1.x has settled. Clean install; verified build /
+  svelte-check / vitest / e2e on 8.1.4. Sequenced before
+  item 18 -- clears the vite `npm audit` highs (tree now
+  `found 0 vulnerabilities`).
 - **Target:** `frontend/package.json`,
   `frontend/package-lock.json`, `frontend/vitest.config.js`.
 - **Notes:** Tilde-pin vite while Rolldown stabilises. Verify

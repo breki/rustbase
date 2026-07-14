@@ -37,6 +37,15 @@ and this project adheres to
 
 ### Changed
 
+- Upgraded the frontend toolchain to Vite 8 (Rolldown):
+  `vite ^7 -> ^8`, `@sveltejs/vite-plugin-svelte ^6 -> ^7`
+  (requires `svelte >= 5.46.4`, now the pinned floor),
+  `vitest -> ^4.1.7`, and dropped the `{ hot: false }`
+  vitest plugin option (no longer needed under v7). Builds
+  run on the Rust-based Rolldown bundler (production build
+  ~130ms). This also clears the frontend `npm audit`
+  advisories (3 high, all in the old `vite 7.x`), so the
+  dependency tree is advisory-clean.
 - The Playwright E2E harness now runs on isolated ports
   separate from the dev server, so a run never collides with
   -- or silently reuses -- a dogfooding session.
