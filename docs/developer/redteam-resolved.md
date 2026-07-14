@@ -5,6 +5,42 @@ See [redteam-log.md](redteam-log.md) for open findings.
 
 ---
 
+### RT-058 -- E2E harness reused the dev servers; a bare `npx playwright test` fell back to the dev ports
+
+**Category:** Correctness / test isolation
+
+**Resolution:** 2026-07-14 -- Stage 3. The harness shared
+the dev ports with `reuseExistingServer:true`, and the
+first isolation attempt left `e2e.sh` exporting unvalidated
+raw `E2E_*` while the configs validated + fell back to dev
+ports -- so a malformed value or a bare `npx playwright
+test` targeted the dev servers. Fixed by making
+`playwright.config.ts` the source of truth (resolves +
+pushes ports to both webServers, `reuseExistingServer:false`)
+and validating in `e2e.sh`; a bare run now self-isolates.
+
+### RT-057 -- `.ports` port-positivity parity between bash and JS/TS (cross-confirmed AQ-054)
+
+**Category:** Correctness / layer-disagreement
+
+**Resolution:** 2026-07-14 -- `e2e.sh` rejected `0` /
+leading-zero ports (`^[1-9][0-9]*$`) but `portFromFile` in
+the configs accepted them (`^\d+$`), so `e2e_backend_port=0`
+failed fast on the `e2e.sh` path yet bound port 0 (120s
+hang) on bare npx. Tightened `portFromFile` to `^[1-9]\d*$`
+in both configs.
+
+### RT-056 -- `.ports` whitespace parity between bash and JS/TS (cross-confirmed AQ-053)
+
+**Category:** Correctness / layer-disagreement (Windows)
+
+**Resolution:** 2026-07-14 -- Bash `read_port` stripped only
+literal spaces while the JS/TS twins stripped all whitespace
+(`\s`), so a CRLF/tab in the git-ignored `.ports` made the
+shell layer silently use defaults while the configs honored
+the file -- divergent ports across entry paths on Windows.
+Bash now strips `[[:space:]]`.
+
 ### RT-055 -- `run_frontend_check` doc claimed a graceful skip on missing `node_modules`
 
 **Category:** Correctness (stale doc)

@@ -313,7 +313,26 @@ file before editing.
   drop the dev-server restore trap. Plus three hardenings:
   `strictPort: true`, `reuseExistingServer: false`, and
   reject non-positive/non-numeric ports.
-- **Status:** todo
+- **Status:** **done** (no bump -- test infra). **Expanded
+  beyond jutro's item 17** to full cross-project isolation
+  (operator asked what happens with multiple rustbase
+  projects running at once). All four ports now come from
+  `.ports` -- `backend_port`/`frontend_port` (dev) and
+  `e2e_backend_port`/`e2e_frontend_port` (harness) -- each
+  with a default; `E2E_*` env vars override the e2e keys.
+  `playwright.config.ts` is the source of truth for e2e
+  ports (env -> .ports e2e_* -> 3001/5174), validates them,
+  and pushes them to both webServers so a bare `npx
+  playwright test` self-isolates identically to `e2e.sh`.
+  `reuseExistingServer:false`; Vite `strictPort` on isolated
+  runs. `e2e.sh` resolves+validates (positive int, fail
+  fast) the same ports and frees only those two (via the
+  extracted `scripts/lib/port-utils.sh`, also sourced by
+  `kill-servers.sh`, with a numeric guard in `free_port`).
+  Two rustbase projects coexist by each setting a distinct
+  four-port block in its own `.ports`. Verified: `playwright
+  test --list` + full smoke suite on both the `e2e.sh` and
+  bare-`npx` paths.
 - **Target:** `scripts/e2e.sh`, `playwright.config.ts`,
   `frontend/vite.config.js`, a shared `scripts/lib` port helper.
 - **Notes:** Env-unset = today's behaviour, so backward

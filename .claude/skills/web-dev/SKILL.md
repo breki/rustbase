@@ -142,7 +142,12 @@ npx playwright test --ui         # interactive UI
 ```
 
 Playwright auto-starts both backend and frontend
-servers (configured in `playwright.config.js`).
+servers (configured in `playwright.config.ts`) on
+**isolated e2e ports** (`3001` / `5174` by default),
+separate from the dev server, so a run never collides
+with a dogfooding session. Prefer `scripts/e2e.sh`,
+which frees just the e2e ports; a bare `npx playwright
+test` self-isolates the same way.
 
 ### Test Pattern
 
@@ -164,10 +169,20 @@ test("API works", async ({ request }) => {
 
 ### Port Configuration
 
-`playwright.config.js` reads `.ports` file (same
-format as Vite). It starts:
+`playwright.config.ts` resolves the e2e ports from
+`E2E_BACKEND_PORT` / `E2E_FRONTEND_PORT` (env), else the
+`.ports` keys `e2e_backend_port` / `e2e_frontend_port`,
+else `3001` / `5174` -- always isolated from the dev
+`backend_port` / `frontend_port`. It pushes the resolved
+ports to both webServers (`reuseExistingServer:false`):
 1. Backend: `cargo run -p rustbase-web -- --port N`
-2. Frontend: `cd frontend && npm run dev`
+2. Frontend: `npm run dev` (Vite binds the e2e frontend
+   port via the pushed env, and proxies to the e2e
+   backend)
+
+Give each worktree / rustbase project a distinct
+four-port block in its own `.ports` so concurrent runs
+don't collide.
 
 ## Dev Workflow
 

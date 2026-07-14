@@ -111,7 +111,7 @@ Delete these and you're left with a pure CLI template:
 1. `crates/rustbase-web/`
 2. `frontend/`
 3. `e2e/`
-4. `playwright.config.js`
+4. `playwright.config.ts`
 5. Root `package.json`
 6. Remove `"crates/rustbase-web"` from workspace
    `members` in `Cargo.toml`

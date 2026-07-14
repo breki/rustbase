@@ -21,6 +21,23 @@ and this project adheres to
 
 ### Changed
 
+- The Playwright E2E harness now runs on isolated ports
+  separate from the dev server, so a run never collides with
+  -- or silently reuses -- a dogfooding session.
+  `scripts/e2e.sh` frees only its own e2e ports and no longer
+  stops the dev servers; the e2e webServers run with
+  `reuseExistingServer:false` and Vite uses `strictPort` on
+  isolated runs. `playwright.config.ts` resolves the ports
+  and pushes them to both webServers, so a bare
+  `npx playwright test` self-isolates identically.
+- `.ports` now configures **all four** ports --
+  `backend_port` / `frontend_port` (dev) and
+  `e2e_backend_port` / `e2e_frontend_port` (harness), each
+  with a default; `E2E_BACKEND_PORT` / `E2E_FRONTEND_PORT`
+  override the e2e keys. This lets multiple worktrees or
+  rustbase-derived projects run concurrently by giving each
+  a distinct four-port block. Shared port helpers moved to
+  `scripts/lib/port-utils.sh`.
 - `cargo xtask validate` runs its cheap static gates (Fmt,
   Duplication, Clippy, Frontend) before the expensive
   dynamic ones (Test, Coverage), so a fast check's failure

@@ -99,15 +99,34 @@ with the backend:
 ### E2E Testing
 
 ```bash
-scripts/e2e.sh                   # kill stale servers + run tests
+scripts/e2e.sh                   # free e2e ports + run tests
 npx playwright test              # run all E2E tests
 npx playwright test smoke        # filtered
 npx playwright test --ui         # interactive UI mode
 ```
 
-Playwright auto-starts both backend and frontend.
-Configure ports via `.ports` file (copy from
-`.ports.sample`).
+Playwright auto-starts its own backend and frontend on
+**isolated e2e ports** (`3001` / `5174` by default), kept
+separate from the dev server (`3000` / `5173`) so a run
+never collides with -- or silently reuses -- a dogfooding
+session. `scripts/e2e.sh` frees only those e2e ports and
+leaves the dev servers running, and the e2e webServers run
+with `reuseExistingServer:false` so a stale process on an
+e2e port is replaced, not reused. `playwright.config.ts`
+resolves the ports the same way `e2e.sh` does and pushes
+them to both webServers, so a bare `npx playwright test`
+(no `e2e.sh`) self-isolates identically.
+
+**All four ports come from `.ports`** (copy from
+`.ports.sample`): `backend_port` / `frontend_port` for dev,
+`e2e_backend_port` / `e2e_frontend_port` for the harness;
+each falls back to its default. `E2E_BACKEND_PORT` /
+`E2E_FRONTEND_PORT` env vars override the e2e keys per
+invocation. Because ports are machine-global, running two
+worktrees -- or two rustbase-derived projects -- at once
+requires giving each a **distinct four-port block** in its
+own `.ports`; otherwise they collide and one project's e2e
+run will free (stop) the other's server on the shared port.
 
 **Every UI feature must have E2E tests** before the
 task is marked as done. Type checking and unit tests

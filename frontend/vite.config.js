@@ -16,22 +16,43 @@ function getAppVersion() {
   return match[1];
 }
 
-// Read backend port from ../.ports if it exists
-function getBackendPort() {
-  const portsFile = resolve(rootDir, ".ports");
-  if (!existsSync(portsFile)) return 3000;
-
-  const content = readFileSync(portsFile, "utf-8");
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const match = trimmed.match(/^backend_port\s*=\s*(\d+)/);
-    if (match) return parseInt(match[1], 10);
-  }
-  return 3000;
+// Parse a positive-integer port from an env var; undefined
+// for unset / non-numeric / non-positive so a bad value
+// falls back rather than binding port 0 (OS-assigned).
+// (Keep in sync with the twin in playwright.config.ts.)
+function envPort(name) {
+  const raw = process.env[name];
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
-const backendPort = getBackendPort();
+// Read <key>'s integer value from ../.ports, or <fallback>
+// if the file/key is absent. (Twin in playwright.config.ts.)
+function portFromFile(key, fallback) {
+  const portsFile = resolve(rootDir, ".ports");
+  if (!existsSync(portsFile)) return fallback;
+  for (const raw of readFileSync(portsFile, "utf-8").split("\n")) {
+    const line = raw.split("#")[0].replace(/\s/g, "");
+    if (!line.startsWith(`${key}=`)) continue;
+    const val = line.slice(key.length + 1);
+    // Positive integers only -- matches e2e.sh's resolve_port
+    // (rejects `0` / leading zeros) so both paths agree.
+    if (/^[1-9]\d*$/.test(val)) return parseInt(val, 10);
+  }
+  return fallback;
+}
+
+// During an isolated e2e run the E2E_* vars are set (by
+// scripts/e2e.sh, or pushed by playwright.config.ts's
+// frontend webServer), so Vite binds the dedicated frontend
+// port and proxies to the dedicated backend. Unset in normal
+// dev, so dev uses the .ports `frontend_port` / `backend_port`
+// (defaults 5173 / 3000).
+const e2eFrontendPort = envPort("E2E_FRONTEND_PORT");
+const frontendPort = e2eFrontendPort ?? portFromFile("frontend_port", 5173);
+const backendPort =
+  envPort("E2E_BACKEND_PORT") ?? portFromFile("backend_port", 3000);
 
 export default defineConfig({
   plugins: [svelte()],
@@ -39,7 +60,13 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(getAppVersion()),
   },
   server: {
-    port: 5173,
+    port: frontendPort,
+    // On an isolated e2e run, fail rather than silently
+    // binding the next free port: Playwright health-checks
+    // the expected port and a silent shift would hang the
+    // full webServer timeout. Left off in dev so a busy
+    // 5173 still falls through to the next port as usual.
+    strictPort: e2eFrontendPort !== undefined,
     proxy: {
       "/api": {
         target: `http://127.0.0.1:${backendPort}`,

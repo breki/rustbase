@@ -6,6 +6,42 @@ findings.
 
 ---
 
+### AQ-056 -- README listed `playwright.config.js` in the CLI-delete list
+
+**Category:** Consistency (docs)
+
+**Resolution:** 2026-07-14 -- The file is
+`playwright.config.ts`; `README.md`'s "delete these for a
+pure CLI template" list still named the `.js` form.
+Corrected.
+
+### AQ-055 -- `resolve_port` fail-fast relied on set -e through a command substitution
+
+**Category:** Shell fragility / clarity
+
+**Resolution:** 2026-07-14 -- `resolve_port` used `exit 1`
+while only ever called in `$(...)`, so the abort worked
+solely via set -e propagating the subshell status -- brittle
+to future edits. Switched to `return 1` with an explicit
+`|| exit 1` at each call site.
+
+### AQ-054 -- `portFromFile` accepted `0` / leading zeros (cross-confirmed RT-057)
+
+**Category:** Correctness / consistency
+
+**Resolution:** 2026-07-14 -- See RT-057. `portFromFile` now
+requires `^[1-9]\d*$`, matching `resolve_port`, so both
+entry paths agree a `.ports` value is valid.
+
+### AQ-053 -- bash / JS-TS `.ports` parsers disagreed on whitespace (cross-confirmed RT-056)
+
+**Category:** Correctness / consistency (Windows)
+
+**Resolution:** 2026-07-14 -- See RT-056. Bash `read_port`
+now strips the same whitespace class (`[[:space:]]`) as the
+JS/TS `.replace(/\s/g,"")` twins, so CRLF/tab `.ports` lines
+parse identically across layers.
+
 ### AQ-052 -- CLAUDE.md Acceptance Criteria still described fmt as read-only
 
 **Category:** Consistency (docs vs behaviour)

@@ -1,12 +1,35 @@
 # Port Configuration
 # Copy this file to .ports and customize.
 #
-# This allows multiple worktrees or instances to run
-# simultaneously without port conflicts.
+# .ports is git-ignored and per-machine. It lets multiple
+# worktrees -- or multiple rustbase-derived projects -- run
+# at the same time without port conflicts: give each a
+# distinct block of four ports below. Ports are a
+# machine-global resource, so two projects sharing any one
+# of these values will collide (and an e2e run frees its
+# ports by listener, which would stop the other project's
+# server on the same port).
 #
-# Format: key=value (no quotes)
+# Format: key=value (no quotes). Any key omitted here falls
+# back to the default shown.
 
-# Backend port (used by Axum server and Vite proxy)
+# --- Dev server (long-running dogfood session) ---
+# Backend (Axum) port; also the Vite dev proxy target.
 backend_port=3000
+# Vite dev server port.
+frontend_port=5173
 
-# If this file doesn't exist, default port 3000 is used.
+# --- E2E harness (Playwright; isolated from dev) ---
+# Kept separate from the dev ports so a test run never
+# collides with -- or silently reuses -- a dev session.
+# Overridable per-invocation via the E2E_BACKEND_PORT /
+# E2E_FRONTEND_PORT environment variables (which win over
+# this file).
+e2e_backend_port=3001
+e2e_frontend_port=5174
+
+# Example second project's block (copy into its own .ports):
+#   backend_port=3100
+#   frontend_port=5273
+#   e2e_backend_port=3101
+#   e2e_frontend_port=5274

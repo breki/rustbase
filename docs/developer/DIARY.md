@@ -7,6 +7,34 @@ reverse chronological order.
 
 ### 2026-07-14
 
+- Backfeed jutro template feedback, Stage 3: e2e port isolation + multi-project .ports
+
+    Tracker item 17 (no version bump -- test infra),
+    expanded past jutro's original scope after the operator
+    asked what happens when multiple rustbase-derived
+    projects run at once. The Playwright harness stands up
+    its own backend + Vite on isolated ports instead of
+    sharing the dev server's with `reuseExistingServer:true`.
+    `.ports` now defines all four ports
+    (`backend_port`/`frontend_port` for dev,
+    `e2e_backend_port`/`e2e_frontend_port` for the harness);
+    `E2E_*` env vars override the e2e keys.
+    `playwright.config.ts` is the source of truth for e2e
+    ports (env -> .ports e2e_* -> 3001/5174), validates them,
+    and pushes them to both webServers -- so a bare
+    `npx playwright test` self-isolates identically to
+    `e2e.sh`, closing the reviewer-found regression where a
+    bare run would otherwise spawn on the dev ports.
+    `reuseExistingServer:false`; Vite `strictPort` on
+    isolated runs. `e2e.sh` resolves + validates (positive
+    int, fail fast) the same ports and frees only those two
+    via the extracted `scripts/lib/port-utils.sh` (also
+    sourced by `kill-servers.sh`, with a numeric guard in
+    `free_port`). Two projects coexist by each setting a
+    distinct four-port block in its own `.ports`. Verified:
+    `playwright test --list` + the smoke suite on both the
+    `e2e.sh` and bare-`npx` paths.
+
 - Backfeed jutro template feedback, Stage 2 (v0.10.4)
 
     xtask diagnostics + validate ergonomics (tracker items
