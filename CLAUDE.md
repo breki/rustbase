@@ -99,6 +99,16 @@ For production, build the frontend first, then serve
 with the backend:
 `cargo run -p rustbase-web -- --frontend frontend/dist`
 
+**Restore the working directory to the repo root after an
+in-`frontend/` npm command before running `cargo xtask`.**
+npm operations must run from inside `frontend/` (see the
+`file:`-dependency trap below), but `cargo xtask`'s
+frontend detection is cwd-relative -- from `frontend/` it
+looks for `frontend/frontend/package.json`, finds nothing,
+and silently reports "no frontend" (a false skip that reads
+as a pass). The shell cwd persists across commands, so a
+lingering `cd frontend` will mask every later frontend gate.
+
 **Before bumping a major version of a JS dep, delete
 `frontend/node_modules` + `frontend/package-lock.json`
 first**, then `npm --prefix frontend install`. npm compares
