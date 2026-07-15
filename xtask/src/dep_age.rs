@@ -33,8 +33,10 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 mod gate;
+mod preflight;
 
 pub use gate::{check_changed_deps, dep_age_check};
+pub use preflight::dep_preflight;
 
 /// Do not adopt a version published fewer than this many
 /// days ago without a stated justification.

@@ -16,6 +16,23 @@ Artisan review is warranted before continuing feature work.
 
 ---
 
+### aq-2026-07-15-preflight-report-structured-records
+
+**Category:** Type Safety
+
+`Report.pinned` and `Report.dead_ends` in
+`xtask/src/dep_age/preflight.rs` store pre-formatted display
+strings (`"{name}: {ver} -> {target}"`, `"{name}@{ver}"`)
+assembled inside the pure-ish `run` loop. This couples the
+loop's unit tests to message wording (they assert on
+sentences, not behaviour) and forecloses a non-printing
+consumer (a JSON `--format`, per-crate counts) without
+re-parsing. Better: store structured records (e.g.
+`Pin { name, from, to }`, `DeadEnd { name, version }`) and move
+formatting to the `dep_preflight` print site. Deferred to keep
+the feature+RT-1-bugfix commit focused; the string form is not
+incorrect, only less flexible.
+
 ### aq-2026-07-15-locked-dep-newtype
 
 **Category:** Type Safety

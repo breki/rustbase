@@ -73,6 +73,7 @@ cargo xtask audit             # security-advisory audit (RUSTSEC + npm)
 cargo xtask dep-age <eco> <pkg> [ver]  # one package's publish age
 cargo xtask dep-age <eco> <pkg> --latest-aged  # newest ver past cooldown
 cargo xtask dep-age-check     # cooldown-gate changed deps (vs HEAD)
+cargo xtask dep-preflight     # pin changed deps past cooldown pre-build
 cargo xtask deploy            # deploy to remote (see docs/deployment.md)
 cargo xtask deploy-setup      # one-time remote provisioning
 ```
@@ -642,7 +643,7 @@ for the frontend; CLI binaries can use `env!("CARGO_PKG_VERSION")`).
 
 ## Supply-chain hygiene
 
-Three `cargo xtask` commands guard the dependency tree:
+Four `cargo xtask` commands guard the dependency tree:
 
 - **`cargo xtask audit`** runs `cargo audit` (RUSTSEC) over
   `Cargo.lock` and `npm audit` over the frontend, failing on
@@ -668,6 +669,38 @@ Three `cargo xtask` commands guard the dependency tree:
   version on every routine update. Like `audit`, an
   unreachable registry / missing `HEAD` baseline degrades to a
   warning, not a hard failure.
+- **`cargo xtask dep-preflight`** is the *pre-compile* twin of
+  `dep-age-check`. Where the gate reports a cooldown breach
+  *after* the fact, preflight *remediates* it *before* you
+  build: it reads the changed Rust crates (same `HEAD` diff as
+  the gate) and, for each one still inside the cooldown, pins
+  it down to its newest aged version with
+  `cargo update --precise`, looping until the whole changed set
+  is aged or no aged version fits the resolved requirements.
+  Every step touches only the registry index and the lockfile,
+  so no crate tarball is fetched and no build script runs until
+  the tree is clean. Use it as a front door: `cargo add <dep>`
+  (updates the lockfile, no compile) -> `cargo xtask
+  dep-preflight` -> `cargo build`. Rust / crates.io only.
+
+**Why both a gate *and* a preflight?** `dep-age-check` is a
+*post-resolution* check -- by the time it fails, `cargo` has
+already downloaded *and compiled* the fresh crates, running
+their build scripts (`cc`, `ring`, ...) on your machine. The
+gate protects the committed lockfile (and everyone who builds
+from it); it does not protect the build host during the window.
+`dep-preflight` closes that host-side gap, but only when you
+run it *instead of* going straight to `cargo build` -- it
+cannot intercept a bare `cargo build` that resolves and
+compiles in one shot. The only thing that protects *every*
+invocation automatically is cargo's in-resolver
+**`-Zmin-publish-age`** (RFC 3923), which refuses to *select* a
+too-new version so it is never fetched or built. That flag's
+client side is nightly-only as of now; once it stabilizes on
+stable, layer it in front of (or in place of) these xtask
+commands. Until then, `dep-age-check` is the CI-enforced gate
+(runs on stable) and `dep-preflight` is the opt-in host-side
+hardening.
 
 **Dependency-version cooldown.** Do not adopt a dependency
 version published fewer than 14 days ago without a stated

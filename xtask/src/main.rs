@@ -84,6 +84,10 @@ enum XCommand {
     /// the working tree versus HEAD (the changed-deps gate that
     /// `validate` runs; requires curl + git)
     DepAgeCheck,
+    /// Pin any changed Rust dependency still within the cooldown
+    /// down to its newest aged version, before compiling
+    /// (front-door remediation; requires curl + git + cargo)
+    DepPreflight,
     /// Type-check the frontend (svelte-check); skips
     /// cleanly when there is no frontend
     FrontendCheck,
@@ -144,6 +148,7 @@ fn main() {
             }
         }
         XCommand::DepAgeCheck => dep_age::dep_age_check(),
+        XCommand::DepPreflight => dep_age::dep_preflight(),
         XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
         XCommand::FrontendFmt { check } => {
             frontend_fmt::frontend_fmt_cmd(check)

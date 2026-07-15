@@ -7,6 +7,35 @@ reverse chronological order.
 
 ### 2026-07-15
 
+- `cargo xtask dep-preflight` -- pre-compile cooldown
+  remediation (v0.15.0)
+
+    Surfaced from clockdump's template feedback: the existing
+    `dep-age-check` gate is *post-resolution* -- by the time it
+    fails, `cargo` has already downloaded and compiled the
+    fresh crates, running their build scripts on the host. The
+    gate protects the committed lockfile, not the build
+    machine. The insight that made a stable-toolchain fix
+    possible: cargo resolves in three phases (resolve -> fetch
+    -> compile), and only the last runs third-party code, so
+    the full transitive version set is knowable from the index
+    alone -- and an *old* parent still pulls *fresh* children,
+    because dependency edges are semver ranges resolved to the
+    newest match at resolve time. `dep-preflight` reads the
+    changed crates (same `HEAD` diff as the gate) and pins each
+    one still within the cooldown down to its newest aged
+    version via `cargo update --precise`, looping until the set
+    is aged or no aged version fits the resolved requirements.
+    Every step is index-only, so no build script runs until the
+    tree is clean. It is front-door only (opt-in; cannot
+    intercept a bare `cargo build`) -- the only automatic
+    protection is cargo's in-resolver `-Zmin-publish-age`
+    (nightly), noted in CLAUDE.md as the migration target once
+    it stabilizes on stable. The pin-and-re-resolve loop is
+    fully unit-tested via an injected `Io` of fake closures;
+    the git/curl/`cargo update` shell-outs are thin. Rust /
+    crates.io only; the npm tree stays with `/update-deps`.
+
 - `/update-deps` command for cooldown-aware upgrades (v0.14.0)
 
     Codified the third-party upgrade workflow (used earlier

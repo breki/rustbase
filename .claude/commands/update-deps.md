@@ -71,7 +71,12 @@ Do not proceed until the scope is chosen.
    pre-update lock, so the crate still advances where it can.
 4. Re-run `cargo xtask dep-age-check` until it is
    `0 fresh`. (Pinning one crate can pull a fresh transitive
-   dep; repeat for any new arrivals.)
+   dep; repeat for any new arrivals.) `cargo xtask
+   dep-preflight` automates this exact pin-and-re-resolve
+   loop for the Rust tree -- it reads the changed crates and
+   pins each fresh one to its newest aged version until the
+   set converges -- so you can run it in place of the manual
+   steps 2-4 and inspect what it pinned.
 5. Major Rust bumps (a new major in `Cargo.toml`) are a
    deliberate, separate effort -- do them one crate at a
    time with the same cooldown discipline, not via

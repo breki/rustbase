@@ -12,6 +12,24 @@ and this project adheres to
 
 ### Added
 
+- `cargo xtask dep-preflight` -- pre-compile cooldown
+  remediation for the Rust dependency tree. After adding or
+  bumping a dependency (via `cargo add`, which updates the
+  lockfile without compiling), run this instead of going
+  straight to `cargo build`: it inspects the newly-locked
+  versions and pins any crate still within the 14-day cooldown
+  down to its newest aged version (`cargo update --precise`),
+  looping until the whole changed set is aged or no aged
+  version satisfies the resolved requirements. Every step
+  touches only the registry index and the lockfile -- no crate
+  tarball is fetched and no build script runs until the tree
+  is clean -- closing the window the post-resolution
+  `dep-age-check` gate cannot (by the time that gate fails,
+  cargo has already compiled the fresh crates). Front-door
+  only: it cannot intercept a bare `cargo build`; that is what
+  cargo's in-resolver `-Zmin-publish-age` (nightly) will
+  eventually do automatically. Rust / crates.io only; requires
+  `curl` + `git` + `cargo`.
 - `/update-deps` command -- an end-to-end third-party
   dependency upgrade workflow (Rust + frontend) that adopts
   the newest version of each dependency outside the 14-day

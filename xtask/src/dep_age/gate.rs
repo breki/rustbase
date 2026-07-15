@@ -142,7 +142,7 @@ fn parse_allow(spec: Option<&str>) -> HashSet<String> {
 /// (`source = "git+..."`) have no crates.io publish date to
 /// check, so including them would spuriously warn on every
 /// release commit.
-fn parse_cargo_lock(text: &str) -> Vec<(String, String)> {
+pub(super) fn parse_cargo_lock(text: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut name: Option<String> = None;
     let mut version: Option<String> = None;
@@ -217,7 +217,7 @@ fn parse_npm_lock(text: &str) -> Vec<(String, String)> {
 /// `(name, version)` pairs present in `new` but not in `old`
 /// -- both freshly added packages and version bumps of an
 /// existing package (the bumped tuple is simply not in `old`).
-fn new_locked_versions(
+pub(super) fn new_locked_versions(
     old: &[(String, String)],
     new: &[(String, String)],
 ) -> Vec<(String, String)> {
@@ -234,7 +234,7 @@ fn new_locked_versions(
 /// never a hard failure. Run via the process working directory
 /// (`current_dir`), not the `git -C` flag, to keep the command
 /// coverable by a blanket permission rule.
-fn git_show(rel: &str) -> Option<String> {
+pub(super) fn git_show(rel: &str) -> Option<String> {
     let output = Command::new("git")
         .current_dir(workspace_root())
         .args(["show", &format!("HEAD:{rel}")])

@@ -73,6 +73,27 @@ individual projects.
 
 ## Resolved
 
+### 2026-07-15 -- dependency cooldown was post-resolution only (no build-host protection)
+
+Surfaced from clockdump's template feedback (2026-07-15).
+`dep-age-check` runs *after* cargo has resolved, fetched, and
+compiled a change, so a freshly-published crate's build script
+has already run on the build host by the time the gate fails --
+it protects the committed lockfile, not the machine. clockdump
+suggested migrating to cargo's in-resolver `-Zmin-publish-age`
+once its client side stabilizes on stable. **Fix:** added
+`cargo xtask dep-preflight`, a front-door pre-compile
+remediation for the Rust tree -- it reads the changed crates
+(same `HEAD` diff as the gate) and pins each one still within
+the cooldown down to its newest aged version via `cargo update
+--precise`, looping until the set is aged or no aged version
+fits the resolved requirements. Every step touches only the
+registry index and the lockfile, so no build script runs until
+the tree is clean. Documented the post-resolution limitation
+and the `-Zmin-publish-age` migration trigger in CLAUDE.md's
+Supply-chain hygiene section. The pure loop logic is
+unit-tested via injected I/O; the shell-outs are thin.
+
 ### 2026-05-18 -- `clean_cache` Windows junctions bypassed the symlink guard
 
 Surfaced from hoard's template feedback (2026-05-18).
