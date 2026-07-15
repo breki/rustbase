@@ -60,6 +60,15 @@ and this project adheres to
 
 ### Changed
 
+- Refreshed third-party dependencies within the 14-day
+  cooldown. Frontend major bumps: `typescript ^5 -> ^6`
+  (6.0.3), `jscpd ^4 -> ^5` (5.0.11), `prettier-plugin-svelte
+  ^3 -> ^4` (4.1.1); jscpd 5 drops ~107 transitive packages.
+  Rust: 17 crates advanced to their newest out-of-cooldown
+  version (`anyhow`, `hyper`, `regex`, `serde_json`, `syn`,
+  ... ), which also clears the last `cargo audit` advisory
+  warning (0 vuln, 0 warn). Held back as too fresh: TypeScript
+  7.0.2 (7 days) and the svelte 5.56.5 patch (1 day).
 - Upgraded the frontend toolchain to Vite 8 (Rolldown):
   `vite ^7 -> ^8`, `@sveltejs/vite-plugin-svelte ^6 -> ^7`
   (requires `svelte >= 5.46.4`, now the pinned floor),

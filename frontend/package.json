@@ -26,14 +26,14 @@
     "eslint": "^10.2.0",
     "eslint-plugin-svelte": "^3.17.0",
     "globals": "^17.4.0",
-    "jscpd": "^4.0.0",
+    "jscpd": "^5.0.11",
     "jsdom": "^29.0.2",
     "prettier": "^3.8.2",
-    "prettier-plugin-svelte": "^3.5.1",
+    "prettier-plugin-svelte": "^4.1.1",
     "svelte": "^5.46.4",
     "svelte-check": "^4.0.0",
     "svelte-eslint-parser": "^1.6.0",
-    "typescript": "^5.0.0",
+    "typescript": "^6.0.3",
     "vite": "^8.0.0",
     "vitest": "^4.1.7"
   }
