@@ -69,6 +69,9 @@ cargo xtask clippy            # lint only
 cargo xtask coverage          # coverage only (>=90%)
 cargo xtask fmt               # format code
 cargo xtask dupes             # code duplication check
+cargo xtask audit             # security-advisory audit (RUSTSEC + npm)
+cargo xtask dep-age <eco> <pkg> [ver]  # one package's publish age
+cargo xtask dep-age-check     # cooldown-gate changed deps (vs HEAD)
 cargo xtask deploy            # deploy to remote (see docs/deployment.md)
 cargo xtask deploy-setup      # one-time remote provisioning
 ```
@@ -342,6 +345,13 @@ just when the code compiles:
 7. **Frontend type check** (svelte-check)
 8. **Frontend duplication** (jscpd, threshold 6%)
 9. **Frontend unit tests** (vitest)
+10. **Security audit** (RUSTSEC + npm; `cargo xtask audit`) --
+    a positive vulnerability fails; an unreachable advisory
+    DB degrades to a warning
+11. **Dependency cooldown** (`cargo xtask dep-age-check`) --
+    fails when a dependency added or bumped since `HEAD` was
+    published within the 14-day window; unchanged lockfiles
+    make it a no-op
 
 The frontend gates (6-9) skip only when there is no
 frontend at all. Gates run cheapest-first (Fmt,
@@ -620,17 +630,28 @@ for the frontend; CLI binaries can use `env!("CARGO_PKG_VERSION")`).
 
 ## Supply-chain hygiene
 
-Two `cargo xtask` commands guard the dependency tree:
+Three `cargo xtask` commands guard the dependency tree:
 
 - **`cargo xtask audit`** runs `cargo audit` (RUSTSEC) over
   `Cargo.lock` and `npm audit` over the frontend, failing on
   any vulnerability (advisory *warnings* -- unsound /
   unmaintained / yanked -- are reported, not fatal). It runs
-  as the final `validate` step, so **`validate` needs
-  `cargo-audit` installed (`cargo install cargo-audit`) and
-  network access** to the advisory DB / npm registry.
+  late in `validate`, so **`validate` needs `cargo-audit`
+  installed (`cargo install cargo-audit`) and network access**
+  to the advisory DB / npm registry.
 - **`cargo xtask dep-age <npm|cargo> <package> [version]`**
-  reports how many days ago a version was published.
+  reports how many days ago a version was published (on-demand,
+  a single package).
+- **`cargo xtask dep-age-check`** enforces the cooldown as the
+  final `validate` step. It checks **only the dependencies
+  added or version-bumped in the working tree versus `HEAD`**
+  (both lockfiles), so it fires exactly when a dependency is
+  adopted and costs nothing -- no network -- on a commit that
+  leaves the lockfiles untouched. A *whole-tree* gate is
+  deliberately avoided: it would flag every already-locked
+  version on every routine update. Like `audit`, an
+  unreachable registry / missing `HEAD` baseline degrades to a
+  warning, not a hard failure.
 
 **Dependency-version cooldown.** Do not adopt a dependency
 version published fewer than 14 days ago without a stated
@@ -640,3 +661,29 @@ are exempt (the fix's urgency outweighs the cooldown). Check
 a candidate before adding it:
 `cargo xtask dep-age cargo <crate> <version>` (or `npm`); it
 exits non-zero when the version is within the cooldown.
+
+`validate` enforces this automatically for changed deps via
+the `dep-age-check` step above. When you *do* adopt a
+fresh version with justification (or a security fix), name it
+in the **`RUSTBASE_DEP_AGE_ALLOW`** env var
+(`name@version`, comma-separated) so the gate passes while
+leaving an auditable record of what was waved through --
+e.g. `RUSTBASE_DEP_AGE_ALLOW=serde@1.0.999 cargo xtask
+validate`.
+
+**`cargo update` interaction.** The gate checks *every*
+newly-locked registry dependency, **transitive ones included**
+-- so it is a no-op only on commits that leave the lockfiles
+untouched, not on every "routine" commit. A lockfile-churning
+update (`cargo update`, `npm update`) can bump many transitive
+crates to versions published within the cooldown, and the gate
+will fail listing all of them. That is intended -- a bulk
+update is exactly when a freshly-published (possibly
+compromised) transitive release slips in. The recommended
+workflow: run the update, then either wait out the cooldown
+before committing, or, once you've reviewed the flagged
+versions, bulk-approve them with
+`RUSTBASE_DEP_AGE_ALLOW=a@1.2.3,b@4.5.6,... cargo xtask
+validate`. Prefer scoped updates (`cargo update -p <crate>`)
+over a blanket `cargo update` so the flagged set stays small
+and reviewable.

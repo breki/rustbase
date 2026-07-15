@@ -5,6 +5,32 @@ reverse chronological order.
 
 ---
 
+### 2026-07-15
+
+- Dependency-cooldown enforced as a `validate` gate (v0.13.0)
+
+    Promoted the 14-day dependency cooldown from an on-demand
+    check to an automatic gate. New `cargo xtask dep-age-check`
+    (validate step 11) diffs the working-tree `Cargo.lock` and
+    `frontend/package-lock.json` against `HEAD` and cooldown-
+    checks **only** the registry dependencies newly added or
+    version-bumped there -- so it costs nothing (no network) on
+    a commit that leaves the lockfiles untouched and fires
+    exactly when a dependency is adopted. A *whole-tree* gate
+    was deliberately avoided (it would flag every already-locked
+    version on every routine update); that scoping is what made
+    the reversal of yesterday's "never a validate gate" note
+    (commit `4602285`) worthwhile, and the module doc now
+    explains it. Local workspace crates (no `source`) and git
+    deps are excluded -- only `source = "registry+..."` crates
+    and npm entries with an `http` `resolved` URL are checked --
+    so a version bump like this one does not spuriously warn.
+    Like the audit gate, an unreachable registry / missing
+    baseline degrades to a warning, not a failure. The
+    `RUSTBASE_DEP_AGE_ALLOW=name@version` env var is the
+    auditable escape hatch for a justified fresh adoption or a
+    security fix.
+
 ### 2026-07-14
 
 - Backfeed jutro Stage 6: skill/workflow changes

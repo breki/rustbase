@@ -23,8 +23,18 @@ and this project adheres to
   dependency-cooldown helper that reports how many days ago a
   version was published and exits non-zero when it is younger
   than the 14-day cooldown (the window a malicious release is
-  most likely still live). On-demand only, not a gate;
+  most likely still live). On-demand, a single package;
   requires `curl`.
+- `cargo xtask dep-age-check` -- enforces the 14-day cooldown
+  as the final `validate` step, checking only the
+  dependencies added or version-bumped in the working tree
+  versus `HEAD` (both `Cargo.lock` and the frontend lockfile).
+  Free (no network) when the lockfiles are unchanged; an
+  unreachable registry or missing `HEAD` baseline degrades to
+  a warning. A fresh version adopted with justification (or a
+  security fix) is waved through by naming it in the
+  `RUSTBASE_DEP_AGE_ALLOW` env var (`name@version`,
+  comma-separated). Requires `curl` + `git`.
 - `cargo xtask frontend-fmt [--check]` runs Prettier over
   the frontend (auto-fix by default, read-only under
   `--check`), wired into `validate` mirroring the Rust `fmt`

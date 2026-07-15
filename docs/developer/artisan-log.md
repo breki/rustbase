@@ -15,3 +15,18 @@ and a short description.
 Artisan review is warranted before continuing feature work.
 
 ---
+
+### aq-2026-07-15-locked-dep-newtype
+
+**Category:** Type Safety
+
+The changed-deps cooldown gate threads `(name, version)` as a
+bare `(String, String)` tuple through `parse_cargo_lock`,
+`parse_npm_lock`, `new_locked_versions`, and `collect_changes`
+in `xtask/src/dep_age.rs`. The two fields are the same type and
+positionally interchangeable, so nothing at the type level
+prevents a name/version transposition in a future edit. A named
+`struct LockedDep { name, version }` would harden the
+most-touched data shape. Deferred as low-value: the tuple is
+private, module-internal, and its shape is guarded by the
+parser/diff unit tests.

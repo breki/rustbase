@@ -3,6 +3,7 @@ use std::time::Instant;
 use crate::audit;
 use crate::clippy_cmd;
 use crate::coverage;
+use crate::dep_age;
 use crate::dupes;
 use crate::fmt_cmd;
 use crate::frontend_check;
@@ -13,7 +14,7 @@ use crate::helpers::{elapsed_str, step_output};
 use crate::test_cmd;
 
 /// Total number of validation steps.
-const TOTAL_STEPS: usize = 10;
+const TOTAL_STEPS: usize = 11;
 
 /// Run all validation steps with concise stepwise
 /// output.
@@ -26,7 +27,11 @@ const TOTAL_STEPS: usize = 10;
 /// step is network-dependent, so it runs last (after
 /// Coverage) and degrades a connectivity failure to a
 /// warning -- a positive vulnerability finding still fails
-/// the gate, but a transient outage does not.
+/// the gate, but a transient outage does not. The Dep-age
+/// step runs last for the same reason (network-dependent,
+/// same degrade-to-warning treatment); it is free when the
+/// lockfiles are unchanged, so it only reaches the network on
+/// a commit that actually adopts a dependency.
 ///
 /// `check` selects fmt's mode: `false` (default) auto-fixes
 /// formatting in place; `true` runs the read-only
@@ -51,6 +56,7 @@ pub fn validate(check: bool) -> Result<(), String> {
     run_step(8, "Test (xtask only)", "test", run_test)?;
     run_step(9, "Coverage", "coverage", run_coverage)?;
     run_step(10, "Audit", "audit", run_audit)?;
+    run_step(11, "Dep-age", "dep-age-check", run_dep_age)?;
 
     println!("Validate OK ({})", elapsed_str(overall_start));
     Ok(())
@@ -132,6 +138,22 @@ fn run_test() -> Result<String, String> {
 /// transient outage.
 fn run_audit() -> Result<String, String> {
     let r = audit::audit_check();
+    if let Some(err) = r.error {
+        return Err(err);
+    }
+    for w in &r.warnings {
+        eprintln!("  warning: {w}");
+    }
+    Ok(r.detail)
+}
+
+/// Dep-age step -- cooldown-checks only dependencies added or
+/// bumped in the working tree versus HEAD. A within-cooldown
+/// dependency fails the gate; a missing baseline or
+/// unreachable registry degrades to a printed warning (same
+/// treatment as Audit), so an offline run is not blocked.
+fn run_dep_age() -> Result<String, String> {
+    let r = dep_age::check_changed_deps();
     if let Some(err) = r.error {
         return Err(err);
     }

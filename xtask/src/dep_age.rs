@@ -7,9 +7,20 @@
 //! malicious release is most likely still live. Security
 //! fixes are the operator's judgement call to override.
 //!
-//! On-demand only, never a `validate` gate: a continuous
-//! gate would flag the newest locked version on every
-//! routine update.
+//! Two entry points share the fetch + verdict machinery:
+//!
+//! - [`dep_age`] -- the on-demand `cargo xtask dep-age
+//!   <npm|cargo> <pkg> [version]` query for a single package.
+//! - [`check_changed_deps`] -- the `validate` gate. It checks
+//!   only the `(name, version)` pairs newly present in the
+//!   working-tree lockfiles versus `HEAD`, so it costs nothing
+//!   (no network) on the common commit that leaves the
+//!   lockfiles untouched, and fires exactly at the moment a
+//!   dependency is adopted. A *whole-tree* continuous gate is
+//!   deliberately avoided -- it would flag every already-locked
+//!   version on every routine update; the changed-deps scope
+//!   is what makes an automatic gate tolerable. Its
+//!   implementation lives in the [`gate`] submodule.
 //!
 //! Registry queries shell out to `curl` (avoids adding an
 //! HTTP stack to xtask); the date math is dependency-free so
@@ -20,6 +31,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::ValueEnum;
 use serde_json::Value;
+
+mod gate;
+
+pub use gate::{check_changed_deps, dep_age_check};
 
 /// Do not adopt a version published fewer than this many
 /// days ago without a stated justification.
@@ -89,7 +104,20 @@ fn fetch_registry(
     };
     let output = Command::new("curl")
         // crates.io rejects requests without a User-Agent.
-        .args(["-sSfL", "-A", "rustbase-xtask-dep-age", &url])
+        // Bounded timeouts so a reachable-but-hanging registry
+        // cannot stall the `validate` gate indefinitely: a
+        // timeout is a non-zero exit -> Unavailable -> a
+        // non-fatal warning, the intended offline degrade.
+        .args([
+            "-sSfL",
+            "--connect-timeout",
+            "10",
+            "--max-time",
+            "20",
+            "-A",
+            "rustbase-xtask-dep-age",
+            &url,
+        ])
         .output()
         .map_err(|e| format!("failed to run curl (is it installed?): {e}"))?;
     if !output.status.success() {

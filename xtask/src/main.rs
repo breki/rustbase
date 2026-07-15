@@ -75,6 +75,10 @@ enum XCommand {
         /// Version to check (default: latest)
         version: Option<String>,
     },
+    /// Cooldown-check only the dependencies added or bumped in
+    /// the working tree versus HEAD (the changed-deps gate that
+    /// `validate` runs; requires curl + git)
+    DepAgeCheck,
     /// Type-check the frontend (svelte-check); skips
     /// cleanly when there is no frontend
     FrontendCheck,
@@ -127,6 +131,7 @@ fn main() {
             package,
             version,
         } => dep_age::dep_age(ecosystem, &package, version.as_deref()),
+        XCommand::DepAgeCheck => dep_age::dep_age_check(),
         XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
         XCommand::FrontendFmt { check } => {
             frontend_fmt::frontend_fmt_cmd(check)
