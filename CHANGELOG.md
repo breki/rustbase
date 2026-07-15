@@ -12,6 +12,18 @@ and this project adheres to
 
 ### Added
 
+- `/update-deps` command -- an end-to-end third-party
+  dependency upgrade workflow (Rust + frontend) that adopts
+  the newest version of each dependency outside the 14-day
+  cooldown, re-pins any `cargo update` picks that landed
+  within the window, runs the frontend major-bump procedure,
+  verifies with `validate`, and hands off to `/commit`.
+- `cargo xtask dep-age ... --latest-aged` -- prints the
+  highest version of a package that has cleared the cooldown
+  (selected by version, skipping prereleases, yanked crates,
+  and unpublished npm versions) -- the pin target
+  `/update-deps` feeds to `cargo update --precise` /
+  `npm install`.
 - `cargo xtask audit` -- a security-advisory gate that runs
   `cargo audit` (RUSTSEC) over `Cargo.lock` and `npm audit`
   over the frontend, failing on any vulnerability (advisory

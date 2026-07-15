@@ -71,6 +71,7 @@ cargo xtask fmt               # format code
 cargo xtask dupes             # code duplication check
 cargo xtask audit             # security-advisory audit (RUSTSEC + npm)
 cargo xtask dep-age <eco> <pkg> [ver]  # one package's publish age
+cargo xtask dep-age <eco> <pkg> --latest-aged  # newest ver past cooldown
 cargo xtask dep-age-check     # cooldown-gate changed deps (vs HEAD)
 cargo xtask deploy            # deploy to remote (see docs/deployment.md)
 cargo xtask deploy-setup      # one-time remote provisioning
@@ -405,6 +406,7 @@ Always keep an `[Unreleased]` section at the top.
 | `/retrospect` | Workflow retrospective (Efficiency / Quality / Speed / Cleanup). Invoked automatically by `/commit`; also callable manually mid-session |
 | `/todo` | Capture a work item into `docs/todo.md` (no implementation) |
 | `/implement` | Plan + implement a captured item; writes `docs/issues/<slug>.md` |
+| `/update-deps` | Upgrade third-party deps (Rust + frontend) to the newest versions outside the 14-day cooldown |
 | `/simplify` | Review changed code for quality |
 | `/architect` | Project overview and architecture guide |
 | `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |
@@ -651,7 +653,11 @@ Three `cargo xtask` commands guard the dependency tree:
   to the advisory DB / npm registry.
 - **`cargo xtask dep-age <npm|cargo> <package> [version]`**
   reports how many days ago a version was published (on-demand,
-  a single package).
+  a single package). Add **`--latest-aged`** to instead print
+  the **highest** version that has cleared the cooldown
+  (selected by version, not publish date) -- the pin target the
+  `/update-deps` workflow feeds to `cargo update --precise` /
+  `npm install <pkg>@<ver>`.
 - **`cargo xtask dep-age-check`** enforces the cooldown as the
   final `validate` step. It checks **only the dependencies
   added or version-bumped in the working tree versus `HEAD`**

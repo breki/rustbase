@@ -74,6 +74,11 @@ enum XCommand {
         package: String,
         /// Version to check (default: latest)
         version: Option<String>,
+        /// Instead of checking a version's age, print the
+        /// newest version published before the cooldown (the
+        /// pin target for `/update-deps`). Ignores `version`.
+        #[arg(long)]
+        latest_aged: bool,
     },
     /// Cooldown-check only the dependencies added or bumped in
     /// the working tree versus HEAD (the changed-deps gate that
@@ -130,7 +135,14 @@ fn main() {
             ecosystem,
             package,
             version,
-        } => dep_age::dep_age(ecosystem, &package, version.as_deref()),
+            latest_aged,
+        } => {
+            if latest_aged {
+                dep_age::dep_age_latest(ecosystem, &package)
+            } else {
+                dep_age::dep_age(ecosystem, &package, version.as_deref())
+            }
+        }
         XCommand::DepAgeCheck => dep_age::dep_age_check(),
         XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
         XCommand::FrontendFmt { check } => {

@@ -218,6 +218,130 @@ fn age_in_days(published_days: i64, today: i64) -> i64 {
     (today - published_days).max(0)
 }
 
+/// Print the newest version of `package` that has cleared the
+/// cooldown, to stdout (bare, so a caller can capture it for
+/// `cargo update --precise` / `npm install <pkg>@<ver>`).
+/// Errors when the registry lists no aged version. This is the
+/// pin target for the `/update-deps` workflow: "the latest
+/// version outside the cooldown".
+pub fn dep_age_latest(
+    ecosystem: Ecosystem,
+    package: &str,
+) -> Result<(), String> {
+    let json = fetch_registry(ecosystem, package)?;
+    let versions = match ecosystem {
+        Ecosystem::Npm => npm_versions(&json),
+        Ecosystem::Cargo => cargo_versions(&json),
+    };
+    match latest_aged(&versions, today_days()) {
+        Some(v) => {
+            println!("{v}");
+            Ok(())
+        }
+        None => Err(format!(
+            "{package}: no version published more than \
+             {COOLDOWN_DAYS} days ago"
+        )),
+    }
+}
+
+/// Among non-prerelease versions published at least
+/// `COOLDOWN_DAYS` ago, return the one with the most recent
+/// version ordering -- the highest release that has cleared
+/// the cooldown. `None` when every version is still within the
+/// cooldown (or the list is empty). Pure, so unit-tested.
+///
+/// Selection is by *version*, not publish date. Date order
+/// diverges from version order in two ways that would make a
+/// pin target wrong: a same-day multi-version release would
+/// tie-break by (map/array) iteration order rather than
+/// version, and a recently-shipped backport to an older
+/// release line (published *after* a higher version) would
+/// outrank it -- pinning to it would silently *downgrade* the
+/// dependency. Taking the max by parsed version segments
+/// avoids both.
+fn latest_aged(versions: &[(String, i64)], today: i64) -> Option<&str> {
+    versions
+        .iter()
+        .filter(|(_, day)| age_in_days(*day, today) >= COOLDOWN_DAYS)
+        .max_by(|a, b| version_key(&a.0).cmp(&version_key(&b.0)))
+        .map(|(v, _)| v.as_str())
+}
+
+/// Parse a release version (`1.10.0`) into comparable numeric
+/// segments so `Vec<u64>` ordering gives correct version order
+/// (`1.10.0` > `1.9.0`, which string order gets wrong). Build
+/// metadata (`+...`) is dropped; a non-numeric segment sorts
+/// as 0. Inputs are already prerelease-filtered by the
+/// extractors, so no `-` handling is needed here.
+fn version_key(v: &str) -> Vec<u64> {
+    v.split('+')
+        .next()
+        .unwrap_or(v)
+        .split('.')
+        .map(|s| s.parse().unwrap_or(0))
+        .collect()
+}
+
+/// `(version, publish-day)` for every non-prerelease,
+/// non-yanked crates.io version in the crate document. Entries
+/// with a missing / unparseable `created_at` are skipped (a
+/// bulk scan tolerates junk, unlike the single-version
+/// `cargo_version_date`, which errors).
+fn cargo_versions(json: &Value) -> Vec<(String, i64)> {
+    json["versions"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| {
+                    let num = v["num"].as_str()?;
+                    if num.contains('-') {
+                        return None; // skip prereleases
+                    }
+                    if v["yanked"].as_bool() == Some(true) {
+                        return None;
+                    }
+                    let day = parse_iso_date(v["created_at"].as_str()?).ok()?;
+                    Some((num.to_string(), day))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `(version, publish-day)` for every non-prerelease version
+/// in an npm registry `time` map (excluding its `created` /
+/// `modified` sentinel keys). Entries with a missing /
+/// unparseable date are skipped.
+///
+/// npm keeps `time` entries for *unpublished* versions, which
+/// can no longer be installed, so a version is included only
+/// if it is also present in the document's `versions`
+/// (installable) manifest -- the npm analogue of the cargo
+/// `yanked` filter. If `versions` is absent (a malformed
+/// document), the cross-check is skipped rather than dropping
+/// everything.
+fn npm_versions(json: &Value) -> Vec<(String, i64)> {
+    let Some(time) = json["time"].as_object() else {
+        return Vec::new();
+    };
+    let installable = json["versions"].as_object();
+    time.iter()
+        .filter_map(|(k, val)| {
+            if k == "created" || k == "modified" || k.contains('-') {
+                return None;
+            }
+            if let Some(vers) = installable
+                && !vers.contains_key(k)
+            {
+                return None; // unpublished -> not installable
+            }
+            let day = parse_iso_date(val.as_str()?).ok()?;
+            Some((k.clone(), day))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,5 +441,114 @@ mod tests {
         )
         .unwrap();
         assert!(cargo_version_date(&json, Some("9.9.9")).is_err());
+    }
+
+    #[test]
+    fn latest_aged_picks_newest_outside_cooldown() {
+        let today = days_from_civil(2026, 7, 15);
+        let versions = vec![
+            ("1.0.0".to_string(), days_from_civil(2026, 1, 1)),
+            ("1.2.0".to_string(), days_from_civil(2026, 6, 20)), // aged
+            ("1.3.0".to_string(), days_from_civil(2026, 7, 14)), // fresh
+        ];
+        // 1.3.0 is within the cooldown; 1.2.0 is the newest aged.
+        assert_eq!(latest_aged(&versions, today), Some("1.2.0"));
+    }
+
+    #[test]
+    fn latest_aged_selects_by_version_not_publish_date() {
+        // A backport to an older line (1.9.7) shipped *after*
+        // the higher aged release (2.4.0) must NOT win -- else
+        // the pin would downgrade the dependency (RT-1).
+        let today = days_from_civil(2026, 7, 15);
+        let versions = vec![
+            ("2.4.0".to_string(), days_from_civil(2026, 5, 1)),
+            ("1.9.7".to_string(), days_from_civil(2026, 6, 25)),
+        ];
+        assert_eq!(latest_aged(&versions, today), Some("2.4.0"));
+    }
+
+    #[test]
+    fn latest_aged_same_day_tie_breaks_to_higher_version() {
+        // Same publish day: 1.10.0 must beat 1.9.0 by numeric
+        // (not string) version order (RT-2).
+        let today = days_from_civil(2026, 7, 15);
+        let day = days_from_civil(2026, 6, 20);
+        let versions =
+            vec![("1.9.0".to_string(), day), ("1.10.0".to_string(), day)];
+        assert_eq!(latest_aged(&versions, today), Some("1.10.0"));
+    }
+
+    #[test]
+    fn version_key_orders_numerically() {
+        assert!(version_key("1.10.0") > version_key("1.9.0"));
+        assert_eq!(version_key("1.2.3+build"), version_key("1.2.3"));
+    }
+
+    #[test]
+    fn latest_aged_none_when_all_fresh_or_empty() {
+        let today = days_from_civil(2026, 7, 15);
+        let all_fresh = vec![
+            ("2.0.0".to_string(), days_from_civil(2026, 7, 10)),
+            ("2.0.1".to_string(), days_from_civil(2026, 7, 14)),
+        ];
+        assert_eq!(latest_aged(&all_fresh, today), None);
+        assert_eq!(latest_aged(&[], today), None);
+    }
+
+    #[test]
+    fn cargo_versions_skips_prerelease_and_yanked() {
+        let json: Value = serde_json::from_str(
+            r#"{"versions":[
+                {"num":"1.2.0","created_at":"2026-06-20T00:00:00Z"},
+                {"num":"1.3.0-rc.1","created_at":"2026-07-01T00:00:00Z"},
+                {"num":"1.1.0","created_at":"2026-05-01T00:00:00Z","yanked":true}
+            ]}"#,
+        )
+        .unwrap();
+        // Prerelease (rc) and yanked entries are dropped.
+        let v = cargo_versions(&json);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].0, "1.2.0");
+    }
+
+    #[test]
+    fn npm_versions_skips_sentinels_and_prerelease() {
+        // No `versions` manifest -> the installable cross-check
+        // is skipped and all non-sentinel releases are kept.
+        let json: Value = serde_json::from_str(
+            r#"{"time":{
+                "created":"2020-01-01T00:00:00Z",
+                "modified":"2026-07-15T00:00:00Z",
+                "1.2.0":"2026-06-20T00:00:00Z",
+                "2.0.0-beta.1":"2026-07-01T00:00:00Z"
+            }}"#,
+        )
+        .unwrap();
+        // created/modified sentinels and the beta are dropped.
+        let mut v = npm_versions(&json);
+        v.sort();
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].0, "1.2.0");
+    }
+
+    #[test]
+    fn npm_versions_skips_unpublished() {
+        // `1.1.0` lingers in `time` but is absent from the
+        // installable `versions` manifest (unpublished) -- it
+        // must be dropped so the pin never targets it (RT-3).
+        let json: Value = serde_json::from_str(
+            r#"{
+                "versions":{"1.2.0":{"version":"1.2.0"}},
+                "time":{
+                    "1.1.0":"2026-05-01T00:00:00Z",
+                    "1.2.0":"2026-06-20T00:00:00Z"
+                }
+            }"#,
+        )
+        .unwrap();
+        let v = npm_versions(&json);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].0, "1.2.0");
     }
 }

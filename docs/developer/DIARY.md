@@ -7,6 +7,24 @@ reverse chronological order.
 
 ### 2026-07-15
 
+- `/update-deps` command for cooldown-aware upgrades (v0.14.0)
+
+    Codified the third-party upgrade workflow (used earlier
+    the same day to refresh the deps) into a repeatable
+    `/update-deps` command spanning both ecosystems. Its
+    tricky step -- "pin to the newest version outside the
+    cooldown" -- is backed by a new
+    `cargo xtask dep-age ... --latest-aged` mode rather than
+    ad-hoc shell date-parsing, keeping the non-trivial logic
+    in `xtask` (unit-tested) per the repo convention. The
+    command assesses both ecosystems, asks scope (safe vs
+    majors), re-pins any `cargo update` picks that landed
+    within the window, runs the frontend major-bump
+    procedure (targeted install; wipe only on `ERESOLVE`;
+    restore cwd before `cargo xtask`), verifies with
+    `validate`, reports held-back-as-fresh items with their
+    age-out dates, and hands off to `/commit`.
+
 - Dependency-cooldown enforced as a `validate` gate (v0.13.0)
 
     Promoted the 14-day dependency cooldown from an on-demand
