@@ -18,6 +18,14 @@ use std::process::Command;
 
 use crate::helpers::workspace_root;
 
+/// Workspace-relative path of the primary crate's manifest --
+/// the single source of truth for the release version. A
+/// downstream that renames the crate changes this one line
+/// instead of hunting every hard-coded `crates/rustbase`
+/// occurrence. (The `/release` command doc references the same
+/// path in prose; keep the two in step on a rename.)
+const PRIMARY_MANIFEST: &str = "crates/rustbase/Cargo.toml";
+
 /// Abort the deploy unless `HEAD` is a clean, tagged release
 /// whose tag matches the crate version.
 pub fn require_release_tag() -> Result<(), String> {
@@ -33,7 +41,7 @@ pub fn require_release_tag() -> Result<(), String> {
 /// `[workspace.package]` version when the crate inherits it
 /// (a common Cargo pattern in derived projects).
 fn crate_version(root: &Path) -> Result<String, String> {
-    let path = root.join("crates/rustbase/Cargo.toml");
+    let path = root.join(PRIMARY_MANIFEST);
     let manifest = fs::read_to_string(&path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     match package_version(&manifest) {
@@ -45,14 +53,13 @@ fn crate_version(root: &Path) -> Result<String, String> {
                     format!("cannot read {}: {e}", root_path.display())
                 })?;
             workspace_package_version(&root_manifest).ok_or_else(|| {
-                "crates/rustbase/Cargo.toml has version.workspace = true \
-                 but Cargo.toml has no [workspace.package] version"
-                    .to_string()
+                format!(
+                    "{PRIMARY_MANIFEST} has version.workspace = true but \
+                     Cargo.toml has no [workspace.package] version"
+                )
             })
         }
-        None => {
-            Err("no [package] version in crates/rustbase/Cargo.toml".into())
-        }
+        None => Err(format!("no [package] version in {PRIMARY_MANIFEST}")),
     }
 }
 

@@ -16,6 +16,19 @@ Artisan review is warranted before continuing feature work.
 
 ---
 
+### aq-2026-07-16-duplicated-name-arg-help-text
+
+**Category:** API Design (doc drift)
+
+The `--name` argument carries a verbatim-identical three-line
+clap help comment on both the `BackfeedDiff` and
+`BackfeedRecord` subcommands in `xtask/src/main.rs`. Two copies
+can drift on edit. Acceptable for two sites (clap derive makes
+sharing arg docs across enum variants awkward); if a third
+backfeed consumer appears, factor the shared args into a
+`#[command(flatten)]` struct. Surfaced by the Artisan reviewer
+during the ledgerstone-backfeed `/commit`.
+
 ### aq-2026-07-16-consolidate-date-helpers
 
 **Category:** Duplication (module cohesion)

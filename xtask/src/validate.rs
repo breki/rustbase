@@ -19,19 +19,27 @@ const TOTAL_STEPS: usize = 11;
 /// Run all validation steps with concise stepwise
 /// output.
 ///
-/// Steps run cheap static gates first and the expensive
-/// dynamic gates (Test, Coverage) last, so a fast check's
-/// failure is not gated behind the multi-minute
-/// instrumented Coverage run. Fmt stays first because it
-/// rewrites whitespace that later checks read. The Audit
-/// step is network-dependent, so it runs last (after
-/// Coverage) and degrades a connectivity failure to a
-/// warning -- a positive vulnerability finding still fails
-/// the gate, but a transient outage does not. The Dep-age
-/// step runs last for the same reason (network-dependent,
-/// same degrade-to-warning treatment); it is free when the
-/// lockfiles are unchanged, so it only reaches the network on
-/// a commit that actually adopts a dependency.
+/// Dep-age runs first so a dependency adopted within the
+/// cooldown fails the gate *before* the compile steps
+/// (Clippy, Test, Coverage) build -- and run its build
+/// script -- on the too-new crate. It is free when the
+/// lockfiles are unchanged (no network, ~0.1s), so on the
+/// common no-dep-change commit its early placement costs
+/// nothing; it only reaches the network on a commit that
+/// actually adopts a dependency, and even then a
+/// connectivity failure degrades to a warning (a genuine
+/// cooldown breach still fails; a transient outage does not),
+/// so it never blocks the local gates behind the network.
+///
+/// After Dep-age, steps run cheap static gates first and the
+/// expensive dynamic gates (Test, Coverage) last, so a fast
+/// check's failure is not gated behind the multi-minute
+/// instrumented Coverage run. Fmt leads the static gates
+/// because it rewrites whitespace that later checks read. The
+/// Audit step is network-dependent, so it runs last (after
+/// Coverage) with the same degrade-to-warning treatment as
+/// Dep-age -- a positive vulnerability finding still fails the
+/// gate, but a transient outage does not.
 ///
 /// `check` selects fmt's mode: `false` (default) auto-fixes
 /// formatting in place; `true` runs the read-only
@@ -41,22 +49,24 @@ const TOTAL_STEPS: usize = 11;
 pub fn validate(check: bool) -> Result<(), String> {
     let overall_start = Instant::now();
 
+    // Fail fast on a within-cooldown dependency before compiling it.
+    run_step(1, "Dep-age", "dep-age-check", run_dep_age)?;
+
     // Cheap static gates first ...
-    run_step(1, "Fmt", "fmt", || run_fmt(check))?;
-    run_step(2, "Duplication", "dupes", run_duplication)?;
-    run_step(3, "Clippy", "clippy", run_clippy)?;
-    run_step(4, "Frontend fmt", "frontend-fmt", || {
+    run_step(2, "Fmt", "fmt", || run_fmt(check))?;
+    run_step(3, "Duplication", "dupes", run_duplication)?;
+    run_step(4, "Clippy", "clippy", run_clippy)?;
+    run_step(5, "Frontend fmt", "frontend-fmt", || {
         run_frontend_fmt(check)
     })?;
-    run_step(5, "Frontend check", "frontend-check", run_frontend_check)?;
-    run_step(6, "Frontend dupes", "frontend-dupes", run_frontend_dupes)?;
+    run_step(6, "Frontend check", "frontend-check", run_frontend_check)?;
+    run_step(7, "Frontend dupes", "frontend-dupes", run_frontend_dupes)?;
 
     // ... expensive dynamic gates last.
-    run_step(7, "Frontend test", "frontend-test", run_frontend_test)?;
-    run_step(8, "Test (xtask only)", "test", run_test)?;
-    run_step(9, "Coverage", "coverage", run_coverage)?;
-    run_step(10, "Audit", "audit", run_audit)?;
-    run_step(11, "Dep-age", "dep-age-check", run_dep_age)?;
+    run_step(8, "Frontend test", "frontend-test", run_frontend_test)?;
+    run_step(9, "Test (xtask only)", "test", run_test)?;
+    run_step(10, "Coverage", "coverage", run_coverage)?;
+    run_step(11, "Audit", "audit", run_audit)?;
 
     println!("Validate OK ({})", elapsed_str(overall_start));
     Ok(())

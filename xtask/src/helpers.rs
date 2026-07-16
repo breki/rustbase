@@ -317,43 +317,6 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     (y + i64::from(m <= 2), m, d)
 }
 
-/// True when `s` is a well-formed ISO `YYYY-MM-DD` date:
-/// exactly ten chars, `dddd-dd-dd`, with month `01..=12` and
-/// day `01..=31`. A shallow calendar check -- it does not
-/// reject Feb 30 -- which is enough for lexical watermark
-/// comparison (ISO dates sort lexically iff well-formed).
-pub fn is_iso_date(s: &str) -> bool {
-    let b = s.as_bytes();
-    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
-        return false;
-    }
-    let digits = |r: &[u8]| r.iter().all(u8::is_ascii_digit);
-    if !digits(&b[0..4]) || !digits(&b[5..7]) || !digits(&b[8..10]) {
-        return false;
-    }
-    let two = |a: u8, c: u8| (a - b'0') * 10 + (c - b'0');
-    let month = two(b[5], b[6]);
-    let day = two(b[8], b[9]);
-    (1..=12).contains(&month) && (1..=31).contains(&day)
-}
-
-/// Extract the first well-formed ISO `YYYY-MM-DD` date embedded
-/// anywhere in `line`, or `None`. Used to read the date out of
-/// heterogeneous feedback headers (`### 2026-07-16 -- title`,
-/// `## 2026-07-16 fixed X`). Scans every 10-char window and
-/// validates it with [`is_iso_date`]. Windows that do not fall
-/// on UTF-8 char boundaries are skipped via the non-panicking
-/// `str::get`, so a header with non-ASCII text never panics.
-pub fn extract_iso_date(line: &str) -> Option<String> {
-    if line.len() < 10 {
-        return None;
-    }
-    (0..=line.len() - 10)
-        .filter_map(|i| line.get(i..i + 10))
-        .find(|w| is_iso_date(w))
-        .map(str::to_string)
-}
-
 /// True when `line` opens or closes a fenced code block (its
 /// first non-whitespace run is ```` ``` ```` or `~~~`). Callers
 /// toggle fence state on each such line so markdown headers
@@ -385,45 +348,18 @@ mod tests {
 
     #[test]
     fn today_iso_is_well_formed() {
-        assert!(is_iso_date(&today_iso()));
-    }
-
-    #[test]
-    fn is_iso_date_accepts_valid_and_rejects_junk() {
-        assert!(is_iso_date("2026-07-16"));
-        assert!(is_iso_date("1999-12-31"));
-        assert!(!is_iso_date("2026-13-01")); // month 13
-        assert!(!is_iso_date("2026-07-32")); // day 32
-        assert!(!is_iso_date("2026-7-16")); // not zero-padded
-        assert!(!is_iso_date("2026/07/16")); // wrong separator
-        assert!(!is_iso_date("not a date"));
-        assert!(!is_iso_date("2026-07-16 "));
-    }
-
-    #[test]
-    fn extract_iso_date_finds_embedded_date() {
-        assert_eq!(
-            extract_iso_date("### 2026-07-16 -- some title"),
-            Some("2026-07-16".to_string())
+        // `dddd-dd-dd` shape, without depending on the
+        // ISO-date validator (which now lives in `backfeed`).
+        let s = today_iso();
+        let b = s.as_bytes();
+        assert_eq!(b.len(), 10);
+        assert_eq!(b[4], b'-');
+        assert_eq!(b[7], b'-');
+        assert!(
+            b.iter()
+                .enumerate()
+                .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
         );
-        assert_eq!(extract_iso_date("## Open divergences"), None);
-        assert_eq!(
-            extract_iso_date("### fixed on 2026-01-02!"),
-            Some("2026-01-02".to_string())
-        );
-        assert_eq!(extract_iso_date("short"), None);
-    }
-
-    #[test]
-    fn extract_iso_date_handles_non_ascii_without_panic() {
-        // Multibyte chars before/around the window must not
-        // panic on a non-char-boundary slice (RT-1).
-        assert_eq!(extract_iso_date("### Café UI regression"), None);
-        assert_eq!(
-            extract_iso_date("### café then 2026-07-16"),
-            Some("2026-07-16".to_string())
-        );
-        assert_eq!(extract_iso_date("— em-dash lead —"), None);
     }
 
     #[test]

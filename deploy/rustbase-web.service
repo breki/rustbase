@@ -8,7 +8,15 @@
 
 [Unit]
 Description=rustbase web server
-After=network.target
+# network-online.target (not bare network.target) so an
+# externally-bound server has a usable address before start;
+# harmless for the default 127.0.0.1 bind.
+Wants=network-online.target
+After=network-online.target
+# StartLimit* belong in [Unit] -- systemd silently ignores them
+# in [Service], so a crash-loop cap placed there never applies.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -25,8 +33,6 @@ Environment=RUST_LOG=rustbase_web=info,tower_http=warn
 
 Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 StandardOutput=journal
 StandardError=journal

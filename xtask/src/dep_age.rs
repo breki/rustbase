@@ -93,11 +93,44 @@ fn cooldown_verdict(age: i64, msg: &str) -> Result<String, String> {
     }
 }
 
+/// Percent-encode a package name as a single URL path segment.
+/// Everything outside the RFC-3986 unreserved set is encoded,
+/// so a scoped npm name (`@scope/name`) becomes `@scope%2Fname`
+/// -- the raw `/` splits the path and 404s the packument
+/// endpoint -- and a stray `?`/`#`/space hits a literal
+/// non-existent package instead of silently retargeting the
+/// request. `@` is kept literal to match npm's packument
+/// convention. crates.io names are `[A-Za-z0-9_-]` only, so
+/// encoding is a harmless no-op there.
+fn percent_encode_segment(s: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut out = String::with_capacity(s.len());
+    for &b in s.as_bytes() {
+        match b {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'.'
+            | b'_'
+            | b'~'
+            | b'@' => out.push(b as char),
+            _ => {
+                out.push('%');
+                out.push(HEX[(b >> 4) as usize] as char);
+                out.push(HEX[(b & 0x0f) as usize] as char);
+            }
+        }
+    }
+    out
+}
+
 /// Fetch the registry metadata JSON for a package via curl.
 fn fetch_registry(
     ecosystem: Ecosystem,
     package: &str,
 ) -> Result<Value, String> {
+    let package = percent_encode_segment(package);
     let url = match ecosystem {
         Ecosystem::Npm => format!("https://registry.npmjs.org/{package}"),
         Ecosystem::Cargo => {
@@ -347,6 +380,20 @@ fn npm_versions(json: &Value) -> Vec<(String, i64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn percent_encode_segment_handles_scoped_and_special() {
+        // Scoped npm name: the slash must encode so the
+        // packument endpoint resolves.
+        assert_eq!(percent_encode_segment("@scope/name"), "@scope%2Fname");
+        // Unreserved set passes through untouched.
+        assert_eq!(percent_encode_segment("serde"), "serde");
+        assert_eq!(percent_encode_segment("pkg.name-1_2~x"), "pkg.name-1_2~x");
+        // Query/fragment/space bytes encode rather than
+        // retargeting the request.
+        assert_eq!(percent_encode_segment("a b"), "a%20b");
+        assert_eq!(percent_encode_segment("q?x#y"), "q%3Fx%23y");
+    }
 
     #[test]
     fn days_from_civil_epoch() {

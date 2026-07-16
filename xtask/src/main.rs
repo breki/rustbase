@@ -123,6 +123,11 @@ enum XCommand {
     BackfeedDiff {
         /// Path to the downstream rustbase-derived project
         downstream_path: String,
+        /// Ledger key for this downstream (default: the final
+        /// path component). Use for worktree layouts like
+        /// `../ledgerstone/main` whose basename is a branch.
+        #[arg(long)]
+        name: Option<String>,
     },
     /// Advance the backfeed-ledger watermark for a downstream
     /// after evaluating a batch of its feedback
@@ -135,6 +140,11 @@ enum XCommand {
         /// Downstream commit SHA (default: read from its `.git`)
         #[arg(long)]
         head: Option<String>,
+        /// Ledger key for this downstream (default: the final
+        /// path component). Use for worktree layouts like
+        /// `../ledgerstone/main` whose basename is a branch.
+        #[arg(long)]
+        name: Option<String>,
     },
     /// Append an entry to `docs/developer/template-feedback.md`
     /// with a minted `tf-<date>-<slug>` ID (body from
@@ -202,17 +212,20 @@ fn main() {
         XCommand::Deploy => deploy::deploy(),
         XCommand::DeploySetup => deploy_setup::deploy_setup(),
         XCommand::CleanCache => clean_cache::clean_cache(),
-        XCommand::BackfeedDiff { downstream_path } => {
-            backfeed::backfeed_diff(&downstream_path)
-        }
+        XCommand::BackfeedDiff {
+            downstream_path,
+            name,
+        } => backfeed::backfeed_diff(&downstream_path, name.as_deref()),
         XCommand::BackfeedRecord {
             downstream_path,
             watermark,
             head,
+            name,
         } => backfeed::backfeed_record(
             &downstream_path,
             &watermark,
             head.as_deref(),
+            name.as_deref(),
         ),
         XCommand::FeedbackAdd {
             section,

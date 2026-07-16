@@ -212,6 +212,16 @@ provided, ask via `AskUserQuestion`.
     to the downstream's current `.git` HEAD; the
     command stamps `last-run` with today.
 
+    **Ledger key / worktree layouts.** The ledger keys
+    the downstream by the final path component. For a
+    worktree-style checkout like `../ledgerstone/main`
+    that basename is a branch (`main`) -- a poor,
+    collision-prone key. Pass `--name <project>` (e.g.
+    `--name ledgerstone`) to both `backfeed-diff` and
+    `backfeed-record` so the ledger entry is keyed by
+    the real project name. Use the same `--name` on
+    every run for that downstream.
+
 13. **Summary** -- Report:
     - Entries applied (titles + IDs)
     - Entries skipped (with reason)

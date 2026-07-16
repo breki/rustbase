@@ -13,11 +13,14 @@
 #   last-run         the date this ledger entry was last updated
 #
 # Do not hand-edit; `cargo xtask backfeed-record` rewrites it.
-# Seeded 2026-07-16 with the two known downstreams so their
-# pre-existing feedback history is never re-scanned.
 
 [clockdump]
 watermark = "2026-07-15"
 
 [jutro]
 watermark = "2026-07-14"
+
+[ledgerstone]
+watermark = "2026-07-16"
+downstream-head = "969601023c8e7d0c1a83d28de18151dc8e4c38cc"
+last-run = "2026-07-16"

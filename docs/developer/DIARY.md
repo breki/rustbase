@@ -7,6 +7,28 @@ reverse chronological order.
 
 ### 2026-07-16
 
+- Backfed ledgerstone template feedback
+
+    First-run full-history backfeed from the `ledgerstone`
+    downstream (31 entries evaluated, keyed in the ledger via
+    the new `--name` override since its checkout lives at a
+    worktree path `../ledgerstone/main`). Applied six fixes:
+    (1) added `--name` to `backfeed-diff`/`backfeed-record` for
+    worktree layouts; (2) `dep-age` now percent-encodes the
+    package name so scoped npm names (`@scope/name`) resolve;
+    (3) extracted a `PRIMARY_MANIFEST` const in `deploy_guard`
+    so a renamed downstream has one edit point; (4) moved
+    `dep-age-check` to the first `validate` step (fail fast on a
+    within-cooldown dependency before compiling it); (5) fixed
+    the shipped systemd unit (`StartLimit*` moved `[Service]` ->
+    `[Unit]`, `network-online.target`); (6) moved the
+    backfeed-only date helpers out of `helpers` into `backfeed`
+    so a downstream adopting only the sync/feedback half doesn't
+    hit dead-code build failures. Logged each as a Resolved
+    `tf-` entry and advanced the ledger watermark to 2026-07-16.
+    The rest of the 31 were skipped as already-resolved,
+    deliberate design, or intentional ledgerstone divergences.
+
 - Removed GitHub Actions CI/CD
 
     Deleted `.github/workflows/ci.yml` (fmt/clippy/tests on

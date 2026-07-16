@@ -12,9 +12,35 @@ and this project adheres to
 
 ### Added
 
+- `cargo xtask backfeed-diff` / `backfeed-record` accept a
+  `--name <project>` override for the ledger key, for worktree
+  -style downstream layouts (`../project/main`) whose path
+  basename is a branch name rather than the project.
+
 ### Changed
 
+- `cargo xtask dep-age-check` now runs as the **first**
+  `validate` step (was last), so a dependency adopted within
+  the 14-day cooldown fails the gate before the compile steps
+  build and run its build script. It stays a no-op on unchanged
+  lockfiles, and a connectivity failure still degrades to a
+  warning; `audit` remains the last (network) step.
+
 ### Fixed
+
+- `cargo xtask dep-age` now percent-encodes the package name in
+  the registry URL, so a scoped npm name (`@scope/name`) resolves
+  instead of 404-ing on the un-encoded `/`.
+- The shipped systemd unit (`deploy/rustbase-web.service`) placed
+  `StartLimitIntervalSec` / `StartLimitBurst` in `[Service]`,
+  where systemd silently ignores them; moved to `[Unit]` so the
+  crash-loop cap applies, and switched to
+  `Wants=/After=network-online.target`.
+- A downstream adopting only the sync/feedback half of the
+  template tooling (and deleting the template-repo-only
+  `backfeed` module) no longer hits dead-code build failures:
+  the backfeed-only date helpers moved out of the shared
+  `helpers` module into `backfeed`.
 
 ### Removed
 

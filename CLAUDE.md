@@ -399,12 +399,15 @@ just when the code compiles:
     published within the 14-day window; unchanged lockfiles
     make it a no-op
 
-The frontend gates (6-9) skip only when there is no
-frontend at all. Gates run cheapest-first (Fmt,
-Duplication, Clippy, then the frontend static gates) before
-the expensive dynamic gates (frontend + Rust tests,
-Coverage), and a failed step prints the single command to
-re-run just that gate. On a fresh full-stack checkout, run
+The frontend gates skip only when there is no frontend at
+all. The dependency-cooldown gate runs **first** (it is a
+no-op on unchanged lockfiles, and fails fast on a within
+-cooldown dependency before anything compiles it); after it
+the gates run cheapest-first (Fmt, Duplication, Clippy, then
+the frontend static gates) before the expensive dynamic gates
+(frontend + Rust tests, Coverage, then the network Audit), and
+a failed step prints the single command to re-run just that
+gate. On a fresh full-stack checkout, run
 `npm --prefix frontend install` before `validate` -- the
 frontend gates fail (rather than silently skipping) when
 `frontend/` exists but its `node_modules` is not
@@ -761,11 +764,13 @@ Four `cargo xtask` commands guard the dependency tree:
   `/update-deps` workflow feeds to `cargo update --precise` /
   `npm install <pkg>@<ver>`.
 - **`cargo xtask dep-age-check`** enforces the cooldown as the
-  final `validate` step. It checks **only the dependencies
-  added or version-bumped in the working tree versus `HEAD`**
-  (both lockfiles), so it fires exactly when a dependency is
-  adopted and costs nothing -- no network -- on a commit that
-  leaves the lockfiles untouched. A *whole-tree* gate is
+  **first** `validate` step, so a dependency adopted within the
+  cooldown fails the gate before the compile steps (Clippy,
+  Test, Coverage) build and run its build script. It checks
+  **only the dependencies added or version-bumped in the working
+  tree versus `HEAD`** (both lockfiles), so it fires exactly when
+  a dependency is adopted and costs nothing -- no network -- on a
+  commit that leaves the lockfiles untouched. A *whole-tree* gate is
   deliberately avoided: it would flag every already-locked
   version on every routine update. Like `audit`, an
   unreachable registry / missing `HEAD` baseline degrades to a

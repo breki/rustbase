@@ -73,6 +73,71 @@ individual projects.
 
 ## Resolved
 
+### tf-2026-07-16-dep-age-check-moved-to-first-validate-step -- dep-age-check moved to first validate step
+
+Surfaced from ledgerstone's template feedback (2026-07-16).
+`dep-age-check` ran as the last `validate` step; moved it to
+step 1 so a dependency adopted within the cooldown fails the gate
+before the compile steps (Clippy, Test, Coverage) build and run
+its build script on the too-new crate. It is a no-op on unchanged
+lockfiles, so the early placement costs nothing on the common
+commit, and a connectivity failure still degrades to a warning
+rather than blocking the local gates. Audit stays last.
+
+### tf-2026-07-16-backfeed-ledger-name-override-for-worktree-layou -- Backfeed ledger --name override for worktree layouts
+
+Surfaced while backfeeding ledgerstone (2026-07-16), whose
+checkout lives at `../ledgerstone/main`. The backfeed ledger keyed
+the downstream by the final path component, yielding the branch
+name `main` -- a poor, collision-prone key (any worktree-style
+`<project>/<branch>` layout would clash). Added a `--name`
+override to `backfeed-diff` / `backfeed-record` (falling back to
+the basename) so worktree-layout downstreams are keyed by their
+real project name.
+
+### tf-2026-07-16-systemd-startlimit-keys-moved-to-unit-section -- systemd StartLimit keys moved to Unit section
+
+Surfaced from ledgerstone's template feedback (2026-07-16). The
+shipped `deploy/rustbase-web.service` placed `StartLimitIntervalSec`
+and `StartLimitBurst` in `[Service]`, where modern systemd
+silently ignores them -- so the crash-loop restart cap never
+applied and a persistently-failing service would restart forever.
+Moved both keys to `[Unit]` and switched `After=network.target` to
+`Wants=network-online.target` + `After=network-online.target` so an
+externally-bound server has a usable address before start.
+
+### tf-2026-07-16-single-const-for-the-primary-crate-manifest-path -- Single const for the primary crate manifest path
+
+Surfaced from ledgerstone's template feedback (2026-07-16).
+`deploy_guard.rs` hard-coded `crates/rustbase/Cargo.toml` in the
+release-version check, so a renamed downstream re-patched it on
+every sync. Collapsed the functional occurrence to a
+`PRIMARY_MANIFEST` const (one edit point). Full workspace-member
+resolution was judged not worthwhile: the `[workspace] members`
+array has no "primary crate" marker, and it cannot fix the
+`/release` command doc, which references the path in prose.
+
+### tf-2026-07-16-dep-age-percent-encodes-the-package-name -- dep-age percent-encodes the package name
+
+Surfaced from ledgerstone's template feedback (2026-07-16).
+`dep_age::fetch_registry` interpolated the raw package name into
+the registry URL, so a scoped npm name (`@scope/name`) 404'd
+because the `/` was not URL-encoded -- and the `dep-age-check` /
+`dep-preflight` gates would misreport a scoped transitive
+dependency as unavailable. Added `percent_encode_segment`
+(RFC-3986 unreserved set, `@` kept literal, `/` -> `%2F`) applied
+to both the npm and crates.io URLs, with a unit test.
+
+### tf-2026-07-16-backfeed-only-helpers-decoupled-for-partial-adop -- Backfeed-only helpers decoupled for partial adoption
+
+Surfaced from ledgerstone's template feedback (2026-07-16). The
+v0.16.0 template-maintenance helpers all lived in `helpers.rs`,
+but `extract_iso_date` / `is_iso_date` are consumed only by
+`backfeed.rs`. A downstream adopting just the sync/feedback half
+and deleting the template-repo-only `backfeed` module hit dead
+code under `warnings = deny`. Moved both into `backfeed.rs` so the
+sync/feedback half is adoptable without carrying `backfeed.rs`.
+
 ### 2026-07-16 -- no `/release` SemVer workflow; `/commit` bundled version bumping
 
 Surfaced from jutro's template feedback (2026-07-14 /

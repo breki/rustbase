@@ -26,8 +26,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::helpers::{
-    BACKFEED_LEDGER_REL, FEEDBACK_REL, extract_iso_date, is_fence, is_iso_date,
-    today_iso, workspace_root,
+    BACKFEED_LEDGER_REL, FEEDBACK_REL, is_fence, today_iso, workspace_root,
 };
 
 /// Canonical header re-emitted on every ledger rewrite so the
@@ -174,6 +173,50 @@ fn unquote(s: &str) -> String {
         .to_string()
 }
 
+// The two ISO-date helpers below are consumed only by backfeed
+// (watermark validation + reading dates out of feedback
+// headers), so they live here rather than in `helpers`. That
+// keeps a downstream that adopts only the sync/feedback half --
+// and deletes this template-repo-only `backfeed` module -- from
+// tripping `warnings = deny` on now-dead helper code.
+
+/// True when `s` is a well-formed ISO `YYYY-MM-DD` date:
+/// exactly ten chars, `dddd-dd-dd`, with month `01..=12` and
+/// day `01..=31`. A shallow calendar check -- it does not
+/// reject Feb 30 -- which is enough for lexical watermark
+/// comparison (ISO dates sort lexically iff well-formed).
+fn is_iso_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+        return false;
+    }
+    let digits = |r: &[u8]| r.iter().all(u8::is_ascii_digit);
+    if !digits(&b[0..4]) || !digits(&b[5..7]) || !digits(&b[8..10]) {
+        return false;
+    }
+    let two = |a: u8, c: u8| (a - b'0') * 10 + (c - b'0');
+    let month = two(b[5], b[6]);
+    let day = two(b[8], b[9]);
+    (1..=12).contains(&month) && (1..=31).contains(&day)
+}
+
+/// Extract the first well-formed ISO `YYYY-MM-DD` date embedded
+/// anywhere in `line`, or `None`. Used to read the date out of
+/// heterogeneous feedback headers (`### 2026-07-16 -- title`,
+/// `## 2026-07-16 fixed X`). Scans every 10-char window and
+/// validates it with [`is_iso_date`]. Windows that do not fall
+/// on UTF-8 char boundaries are skipped via the non-panicking
+/// `str::get`, so a header with non-ASCII text never panics.
+fn extract_iso_date(line: &str) -> Option<String> {
+    if line.len() < 10 {
+        return None;
+    }
+    (0..=line.len() - 10)
+        .filter_map(|i| line.get(i..i + 10))
+        .find(|w| is_iso_date(w))
+        .map(str::to_string)
+}
+
 /// The markdown heading level (1..=3) of `line` when it is a
 /// section/entry header (`# `, `## `, or `### ` after trimming
 /// leading whitespace), else `None`. Level 4+ headers stay in
@@ -260,8 +303,15 @@ fn entries_in_scope(md: &str, watermark: Option<&str>) -> Vec<String> {
 }
 
 /// Derive the ledger key for a downstream from its path (the
-/// final path component, e.g. `../jutro` -> `jutro`).
-fn downstream_name(path: &str) -> String {
+/// final path component, e.g. `../jutro` -> `jutro`), unless an
+/// explicit `--name` override is supplied. The override is
+/// needed for worktree-style layouts where the checkout lives
+/// at `<project>/<branch>` (e.g. `../ledgerstone/main`), whose
+/// basename `main` is a poor, collision-prone ledger key.
+fn downstream_name(path: &str, name_override: Option<&str>) -> String {
+    if let Some(name) = name_override {
+        return name.to_string();
+    }
     Path::new(path)
         .file_name()
         .map_or_else(|| path.to_string(), |s| s.to_string_lossy().into_owned())
@@ -324,11 +374,14 @@ fn load_ledger() -> Ledger {
 /// downstream feedback entries on or after this downstream's
 /// ledger watermark (entries to stdout, a one-line summary to
 /// stderr).
-pub fn backfeed_diff(downstream_path: &str) -> Result<(), String> {
+pub fn backfeed_diff(
+    downstream_path: &str,
+    name_override: Option<&str>,
+) -> Result<(), String> {
     let feedback_path = Path::new(downstream_path).join(FEEDBACK_REL);
     let md = fs::read_to_string(&feedback_path)
         .map_err(|e| format!("cannot read {}: {e}", feedback_path.display()))?;
-    let name = downstream_name(downstream_path);
+    let name = downstream_name(downstream_path, name_override);
     let watermark = load_ledger().watermark(&name).map(str::to_string);
     let blocks = entries_in_scope(&md, watermark.as_deref());
 
@@ -357,13 +410,14 @@ pub fn backfeed_record(
     downstream_path: &str,
     watermark: &str,
     head: Option<&str>,
+    name_override: Option<&str>,
 ) -> Result<(), String> {
     if !is_iso_date(watermark) {
         return Err(format!(
             "--watermark {watermark:?} is not a YYYY-MM-DD date"
         ));
     }
-    let name = downstream_name(downstream_path);
+    let name = downstream_name(downstream_path, name_override);
     let head = head
         .map(str::to_string)
         .or_else(|| read_git_head(downstream_path));
@@ -590,9 +644,57 @@ Back to prose.
 
     #[test]
     fn downstream_name_takes_final_component() {
-        assert_eq!(downstream_name("../jutro"), "jutro");
-        assert_eq!(downstream_name("../jutro/"), "jutro");
-        assert_eq!(downstream_name("/abs/path/clockdump"), "clockdump");
+        assert_eq!(downstream_name("../jutro", None), "jutro");
+        assert_eq!(downstream_name("../jutro/", None), "jutro");
+        assert_eq!(downstream_name("/abs/path/clockdump", None), "clockdump");
+    }
+
+    #[test]
+    fn downstream_name_override_wins_over_basename() {
+        // A worktree layout basenames to the branch ("main");
+        // the override supplies the real project key.
+        assert_eq!(
+            downstream_name("../ledgerstone/main", Some("ledgerstone")),
+            "ledgerstone"
+        );
+    }
+
+    #[test]
+    fn is_iso_date_accepts_valid_and_rejects_junk() {
+        assert!(is_iso_date("2026-07-16"));
+        assert!(is_iso_date("1999-12-31"));
+        assert!(!is_iso_date("2026-13-01")); // month 13
+        assert!(!is_iso_date("2026-07-32")); // day 32
+        assert!(!is_iso_date("2026-7-16")); // not zero-padded
+        assert!(!is_iso_date("2026/07/16")); // wrong separator
+        assert!(!is_iso_date("not a date"));
+        assert!(!is_iso_date("2026-07-16 "));
+    }
+
+    #[test]
+    fn extract_iso_date_finds_embedded_date() {
+        assert_eq!(
+            extract_iso_date("### 2026-07-16 -- some title"),
+            Some("2026-07-16".to_string())
+        );
+        assert_eq!(extract_iso_date("## Open divergences"), None);
+        assert_eq!(
+            extract_iso_date("### fixed on 2026-01-02!"),
+            Some("2026-01-02".to_string())
+        );
+        assert_eq!(extract_iso_date("short"), None);
+    }
+
+    #[test]
+    fn extract_iso_date_handles_non_ascii_without_panic() {
+        // Multibyte chars before/around the window must not
+        // panic on a non-char-boundary slice (RT-1).
+        assert_eq!(extract_iso_date("### Café UI regression"), None);
+        assert_eq!(
+            extract_iso_date("### café then 2026-07-16"),
+            Some("2026-07-16".to_string())
+        );
+        assert_eq!(extract_iso_date("— em-dash lead —"), None);
     }
 
     #[test]
