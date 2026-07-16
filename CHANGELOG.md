@@ -28,6 +28,24 @@ and this project adheres to
   URIs, CSP-`<meta>`-enforced, dual light/dark theming, one
   `--fs-*` type scale; fetched content is HTML-escaped as data;
   never a cloud Artifact.
+
+### Changed
+
+- `/commit` is now a save-point: it no longer bumps the
+  version, syncs `Cargo.lock`, or runs `cargo xtask validate`.
+  Those move to the new `/release` command. Multiple commits
+  land between releases; `/release` computes one bump from the
+  accumulated `[Unreleased]` entries.
+- `cargo xtask deploy` now refuses to run unless `HEAD` is on a
+  `vX.Y.Z` annotated tag matching `crates/rustbase/Cargo.toml`
+  and the working tree is clean -- tying "publish to
+  production" to "cut a release" (`/release`). Run `/release`
+  before deploying.
+
+## [0.15.0] - 2026-07-15
+
+### Added
+
 - `cargo xtask dep-preflight` -- pre-compile cooldown
   remediation for the Rust dependency tree. After adding or
   bumping a dependency (via `cargo add`, which updates the
@@ -46,6 +64,11 @@ and this project adheres to
   cargo's in-resolver `-Zmin-publish-age` (nightly) will
   eventually do automatically. Rust / crates.io only; requires
   `curl` + `git` + `cargo`.
+
+## [0.14.0] - 2026-07-15
+
+### Added
+
 - `/update-deps` command -- an end-to-end third-party
   dependency upgrade workflow (Rust + frontend) that adopts
   the newest version of each dependency outside the 14-day
@@ -58,6 +81,38 @@ and this project adheres to
   and unpublished npm versions) -- the pin target
   `/update-deps` feeds to `cargo update --precise` /
   `npm install`.
+
+## [0.13.0] - 2026-07-15
+
+### Added
+
+- `cargo xtask dep-age-check` -- enforces the 14-day cooldown
+  as the final `validate` step, checking only the
+  dependencies added or version-bumped in the working tree
+  versus `HEAD` (both `Cargo.lock` and the frontend lockfile).
+  Free (no network) when the lockfiles are unchanged; an
+  unreachable registry or missing `HEAD` baseline degrades to
+  a warning. A fresh version adopted with justification (or a
+  security fix) is waved through by naming it in the
+  `RUSTBASE_DEP_AGE_ALLOW` env var (`name@version`,
+  comma-separated). Requires `curl` + `git`.
+
+### Changed
+
+- Refreshed third-party dependencies within the 14-day
+  cooldown. Frontend major bumps: `typescript ^5 -> ^6`
+  (6.0.3), `jscpd ^4 -> ^5` (5.0.11), `prettier-plugin-svelte
+  ^3 -> ^4` (4.1.1); jscpd 5 drops ~107 transitive packages.
+  Rust: 17 crates advanced to their newest out-of-cooldown
+  version (`anyhow`, `hyper`, `regex`, `serde_json`, `syn`,
+  ... ), which also clears the last `cargo audit` advisory
+  warning (0 vuln, 0 warn). Held back as too fresh: TypeScript
+  7.0.2 (7 days) and the svelte 5.56.5 patch (1 day).
+
+## [0.12.0] - 2026-07-14
+
+### Added
+
 - `cargo xtask audit` -- a security-advisory gate that runs
   `cargo audit` (RUSTSEC) over `Cargo.lock` and `npm audit`
   over the frontend, failing on any vulnerability (advisory
@@ -71,16 +126,11 @@ and this project adheres to
   than the 14-day cooldown (the window a malicious release is
   most likely still live). On-demand, a single package;
   requires `curl`.
-- `cargo xtask dep-age-check` -- enforces the 14-day cooldown
-  as the final `validate` step, checking only the
-  dependencies added or version-bumped in the working tree
-  versus `HEAD` (both `Cargo.lock` and the frontend lockfile).
-  Free (no network) when the lockfiles are unchanged; an
-  unreachable registry or missing `HEAD` baseline degrades to
-  a warning. A fresh version adopted with justification (or a
-  security fix) is waved through by naming it in the
-  `RUSTBASE_DEP_AGE_ALLOW` env var (`name@version`,
-  comma-separated). Requires `curl` + `git`.
+
+## [0.11.0] - 2026-07-14
+
+### Added
+
 - `cargo xtask frontend-fmt [--check]` runs Prettier over
   the frontend (auto-fix by default, read-only under
   `--check`), wired into `validate` mirroring the Rust `fmt`
@@ -97,34 +147,9 @@ and this project adheres to
   type-checks), so a broken assertion passed `validate`.
 - The starter app header now renders the build version
   (`__APP_VERSION__`, injected from `Cargo.toml`).
-- `cargo xtask frontend-check` runs the frontend
-  type check (svelte-check) standalone; skips cleanly when
-  there is no frontend.
-- `cargo xtask validate --check` checks formatting
-  read-only (`fmt --check`) instead of auto-fixing it, for
-  use in CI or before partial staging.
 
 ### Changed
 
-- `/commit` is now a save-point: it no longer bumps the
-  version, syncs `Cargo.lock`, or runs `cargo xtask validate`.
-  Those move to the new `/release` command. Multiple commits
-  land between releases; `/release` computes one bump from the
-  accumulated `[Unreleased]` entries.
-- `cargo xtask deploy` now refuses to run unless `HEAD` is on a
-  `vX.Y.Z` annotated tag matching `crates/rustbase/Cargo.toml`
-  and the working tree is clean -- tying "publish to
-  production" to "cut a release" (`/release`). Run `/release`
-  before deploying.
-- Refreshed third-party dependencies within the 14-day
-  cooldown. Frontend major bumps: `typescript ^5 -> ^6`
-  (6.0.3), `jscpd ^4 -> ^5` (5.0.11), `prettier-plugin-svelte
-  ^3 -> ^4` (4.1.1); jscpd 5 drops ~107 transitive packages.
-  Rust: 17 crates advanced to their newest out-of-cooldown
-  version (`anyhow`, `hyper`, `regex`, `serde_json`, `syn`,
-  ... ), which also clears the last `cargo audit` advisory
-  warning (0 vuln, 0 warn). Held back as too fresh: TypeScript
-  7.0.2 (7 days) and the svelte 5.56.5 patch (1 day).
 - Upgraded the frontend toolchain to Vite 8 (Rolldown):
   `vite ^7 -> ^8`, `@sveltejs/vite-plugin-svelte ^6 -> ^7`
   (requires `svelte >= 5.46.4`, now the pinned floor),
@@ -134,6 +159,20 @@ and this project adheres to
   ~130ms). This also clears the frontend `npm audit`
   advisories (3 high, all in the old `vite 7.x`), so the
   dependency tree is advisory-clean.
+
+## [0.10.4] - 2026-07-14
+
+### Added
+
+- `cargo xtask frontend-check` runs the frontend
+  type check (svelte-check) standalone; skips cleanly when
+  there is no frontend.
+- `cargo xtask validate --check` checks formatting
+  read-only (`fmt --check`) instead of auto-fixing it, for
+  use in CI or before partial staging.
+
+### Changed
+
 - The Playwright E2E harness now runs on isolated ports
   separate from the dev server, so a run never collides with
   -- or silently reuses -- a dogfooding session.
@@ -185,6 +224,11 @@ and this project adheres to
   line, so a failure named the lint but not where it fired.
 - `cargo xtask test` compile-error output now includes the
   `-->` source-location line alongside each error message.
+
+## [0.10.3] - 2026-07-13
+
+### Fixed
+
 - Frontend ESLint now parses TypeScript inside Svelte
   components. `eslint.config.js` had no TS-aware parser
   for `*.svelte`, so `npm run lint` failed with a parsing
@@ -195,6 +239,25 @@ and this project adheres to
   `svelte-eslint-parser` and `files` blocks for `**/*.ts`
   and `**/*.svelte`; bumped `tsconfig` `lib` to ES2022 so
   modern APIs (e.g. `new Error(msg, { cause })`) type-check.
+
+## [0.10.2] - 2026-07-13
+
+### Changed
+
+- `scripts/kill-servers.sh` now frees the dev-server ports
+  (`:3000`, `:5173`) by stopping the process *listening* on
+  them, instead of killing by process/image name. A by-name
+  kill is machine-wide and would also terminate a production
+  instance of the same binary running on another port.
+- `cargo xtask coverage` now excludes every module under
+  `src/bin/` from the per-module coverage floor, not just
+  `src/main.rs`. Multi-file binary shells are exercised only
+  by spawned-subprocess integration tests, which llvm-cov
+  cannot fully credit; testable logic belongs in the library
+  crate.
+
+### Fixed
+
 - `scripts/e2e.sh` now runs from the project root, so
   `npx playwright test` resolves `playwright.config.ts`
   regardless of the caller's working directory. A caller
@@ -210,6 +273,25 @@ and this project adheres to
   `cargo test <filter>` exits 0 on no match, so a typo'd
   or over-specific filter previously read as a passing
   targeted run. Unfiltered runs are unaffected.
+
+## [0.10.1] - 2026-05-18
+
+### Changed
+
+- `[profile.release]` reverted to cargo defaults so
+  `cargo build --release` (and deploy flows) produce
+  fully-optimised binaries. The previous
+  `incremental = true` / `codegen-units = 256`
+  overrides moved into a new
+  `[profile.release-fast]`. Local fast iteration
+  uses `cargo build --profile release-fast`;
+  deployed binaries get cargo's standard
+  `release` shape. Existing derived projects that
+  relied on the old overrides should switch their
+  iteration scripts to `--profile release-fast`.
+
+### Fixed
+
 - `cargo xtask clean-cache` no longer follows Windows
   directory junctions (`mklink /J`) under
   `target/incremental/`. A junction previously fell
@@ -232,31 +314,6 @@ and this project adheres to
   would resurface on the following hook run looking
   "new" -- defeating the `stop_hook_active` guard
   and amplifying fix loops.
-
-### Changed
-
-- `scripts/kill-servers.sh` now frees the dev-server ports
-  (`:3000`, `:5173`) by stopping the process *listening* on
-  them, instead of killing by process/image name. A by-name
-  kill is machine-wide and would also terminate a production
-  instance of the same binary running on another port.
-- `cargo xtask coverage` now excludes every module under
-  `src/bin/` from the per-module coverage floor, not just
-  `src/main.rs`. Multi-file binary shells are exercised only
-  by spawned-subprocess integration tests, which llvm-cov
-  cannot fully credit; testable logic belongs in the library
-  crate.
-- `[profile.release]` reverted to cargo defaults so
-  `cargo build --release` (and deploy flows) produce
-  fully-optimised binaries. The previous
-  `incremental = true` / `codegen-units = 256`
-  overrides moved into a new
-  `[profile.release-fast]`. Local fast iteration
-  uses `cargo build --profile release-fast`;
-  deployed binaries get cargo's standard
-  `release` shape. Existing derived projects that
-  relied on the old overrides should switch their
-  iteration scripts to `--profile release-fast`.
 
 ## [0.10.0] - 2026-05-18
 
