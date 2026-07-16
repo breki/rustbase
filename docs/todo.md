@@ -52,6 +52,18 @@ plan, decisions, and outcome.
   planning doc up front. Sourced from kozmotic's
   template feedback (2026-05-04).
 
+- **changelog-version-drift** -- Reconcile CHANGELOG drift
+  before the first `/release`.
+  `CHANGELOG.md`'s newest dated release is `[0.10.0]`, but
+  `crates/rustbase/Cargo.toml` is at 0.15.0 -- versions
+  0.11-0.15 were bumped by the old (pre-split) `/commit`
+  without ever getting dated CHANGELOG sections. The new
+  `/release` model only promotes `[Unreleased]` to the next
+  version, so the 0.11-0.15 gap will persist. Either backfill
+  the missing dated sections from git history, or accept the
+  gap and note it in CHANGELOG. Surfaced by the `/release`
+  backfeed retro on 2026-07-16.
+
 ## Done
 
 <!-- Completed items are moved here by /implement during
