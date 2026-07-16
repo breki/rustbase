@@ -12,6 +12,16 @@ and this project adheres to
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.17.0] - 2026-07-16
+
+### Added
+
 - `cargo xtask backfeed-diff` / `backfeed-record` accept a
   `--name <project>` override for the ledger key, for worktree
   -style downstream layouts (`../project/main`) whose path

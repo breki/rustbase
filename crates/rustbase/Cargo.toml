@@ -1,6 +1,6 @@
 [package]
 name = "rustbase"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2024"
 # TODO: update these fields for your project
 description = "A Rust project"
