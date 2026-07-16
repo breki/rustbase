@@ -7,6 +7,17 @@ reverse chronological order.
 
 ### 2026-07-16
 
+- Removed GitHub Actions CI/CD
+
+    Deleted `.github/workflows/ci.yml` (fmt/clippy/tests on
+    push+PR) and `.github/workflows/release.yml` (tag-triggered
+    multi-target builds). The project no longer runs checks in
+    GitHub Actions; quality gating is local via
+    `cargo xtask validate`, and releases are cut with `/release`
+    + `cargo xtask deploy`. Trimmed the corresponding README
+    "GitHub Actions" feature bullet, the CI/CD tagline, and the
+    `release.yml` search-and-replace step.
+
 - Template tooling: determinism moved into `cargo xtask`
 
     Made `/template-backfeed`, `/template-improve`, and

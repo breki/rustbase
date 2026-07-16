@@ -18,6 +18,13 @@ and this project adheres to
 
 ### Removed
 
+- **BREAKING:** GitHub Actions CI/CD removed
+  (`.github/workflows/ci.yml` and `release.yml`). Quality
+  gating now runs locally via `cargo xtask validate`;
+  releases are cut with `/release` + `cargo xtask deploy`.
+  Derived projects no longer get CI checks or tag-triggered
+  release builds out of the box.
+
 ## [0.16.0] - 2026-07-16
 
 ### Added

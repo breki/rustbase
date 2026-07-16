@@ -1,7 +1,7 @@
 # rustbase
 
 Opinionated Rust project template with Claude Code
-integration, quality gates, and CI/CD.
+integration and quality gates.
 
 ## What's included
 
@@ -60,10 +60,6 @@ integration, quality gates, and CI/CD.
   - `cargo xtask clean-cache` -- drop stale
     `target/{debug,release}/incremental/` content
     (symlink-safe; continues past locked files)
-- **GitHub Actions**:
-  - CI: fmt, clippy, tests on Linux/Windows/macOS
-  - Release: 5-target builds (both CLI + web binaries)
-    with frontend dist and checksums
 - **Code quality**:
   - `#[deny(warnings)]`, `#[forbid(unsafe_code)]`
   - Clippy pedantic + perf
@@ -95,8 +91,6 @@ integration, quality gates, and CI/CD.
      repository URL)
    - `crates/rustbase-web/Cargo.toml` (if keeping web)
    - `crates/rustbase/src/bin/rustbase/main.rs`
-   - `.github/workflows/release.yml` (binary name,
-     archive name)
    - `CLAUDE.md` (crate path references)
    - `.claude/commands/commit.md` (crate path)
    - `frontend/package.json` (if keeping web)
