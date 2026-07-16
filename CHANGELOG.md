@@ -12,6 +12,16 @@ and this project adheres to
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.16.0] - 2026-07-16
+
+### Added
+
 - Template-maintenance tooling moved into `cargo xtask`
   (deterministic, unit-tested) so `/template-backfeed`,
   `/template-improve`, and `/template-sync` scale without the
