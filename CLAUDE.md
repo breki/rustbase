@@ -535,11 +535,31 @@ gate honest without weakening it:
    The leaf module should be as small as possible --
    ideally just the unmockable call plus its
    immediate error mapping.
-2. **Add the leaf submodule to the coverage
-   `IGNORE_REGEX`** in `xtask/src/coverage.rs`. The
-   existing default excludes `src/main.rs` only; extend
-   it with the new path. The leaf module is exempted
-   from the gate; the orchestrator is not.
+2. **Exclude the leaf submodule via manifest config.**
+   Add its path (a regex fragment) to
+   `[workspace.metadata.coverage] ignore` in the **root
+   `Cargo.toml`** -- no need to fork `xtask`:
+
+   ```toml
+   [workspace.metadata.coverage]
+   # Each entry is a regex fragment merged into the coverage
+   # --ignore-filename-regex baseline. Use single-quoted TOML
+   # literal strings so backslashes reach the regex verbatim
+   # (no doubling).
+   ignore = ['src[/\\]audio[/\\]playback\.rs']
+   ```
+
+   `cargo xtask coverage` merges these with its built-in
+   baseline (`src/main.rs`, `src/bin/`); the leaf module is
+   exempted from the gate, the orchestrator is not. An absent
+   section leaves the baseline unchanged, and a
+   missing/unreadable manifest degrades to the baseline rather
+   than failing. A pattern that would match *every* file
+   (empty, `.`, `.*`, `.+`) is rejected -- it would silently
+   neuter the gate. Only the `[workspace.metadata.coverage]` +
+   line-leading `ignore = [...]` shape is read; the dotted-key
+   (`coverage.ignore = ...`) and inline-table spellings are
+   not.
 3. **Add a `*_TEST_*` env-var escape hatch in the
    excluded module.** For example, `RUSTBASE_TEST_AUDIO`
    short-circuits the real native call and returns a

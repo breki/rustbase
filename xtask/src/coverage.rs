@@ -1,8 +1,9 @@
 use std::fmt::Write as _;
+use std::fs;
 
 use serde::Deserialize;
 
-use crate::helpers::run_cargo_capture;
+use crate::helpers::{run_cargo_capture, workspace_root};
 
 /// Minimum line coverage percentage for the workspace
 /// as a whole. The validate pipeline fails when the
@@ -28,6 +29,179 @@ pub const MODULE_THRESHOLD: f64 = 85.0;
 /// source. Keep the testable logic in the library crate;
 /// the binary shell is the thin entry point.
 const IGNORE_REGEX: &str = r"src[/\\](main\.rs$|bin[/\\])";
+
+/// The full `--ignore-filename-regex` for this workspace: the
+/// [`IGNORE_REGEX`] baseline merged with any project patterns
+/// from `[workspace.metadata.coverage] ignore` in the root
+/// `Cargo.toml`. A missing/unreadable manifest degrades to the
+/// baseline (coverage never fails over config *parsing*), but a
+/// pattern that would match every file is a hard error -- such
+/// a pattern silently neuters the gate, which is never intended.
+fn ignore_regex() -> Result<String, String> {
+    let manifest = fs::read_to_string(workspace_root().join("Cargo.toml"))
+        .unwrap_or_default();
+    let patterns = validate_ignore_patterns(parse_coverage_ignore(&manifest))?;
+    Ok(build_ignore_regex(IGNORE_REGEX, &patterns))
+}
+
+/// Merge the baseline regex with project-supplied patterns
+/// into one `--ignore-filename-regex` value. Baseline first,
+/// user patterns appended in declared order, joined by `|`
+/// (top-level alternation). Returns the baseline unchanged
+/// when there are no user patterns. Pure.
+fn build_ignore_regex(default: &str, user: &[String]) -> String {
+    if user.is_empty() {
+        return default.to_string();
+    }
+    let mut out = String::from(default);
+    for pattern in user {
+        out.push('|');
+        out.push_str(pattern);
+    }
+    out
+}
+
+/// Drop blank patterns and reject any that match every file.
+/// A blank entry would append a bare `|` to the alternation
+/// (matching the empty string -> every path); `.`, `.*`, `.+`
+/// match everything outright. Either silently reduces coverage
+/// to a vacuous always-pass, so a blank is dropped as a typo
+/// and a match-all fails loudly. Pure.
+fn validate_ignore_patterns(
+    patterns: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let mut kept = Vec::new();
+    for pattern in patterns {
+        let trimmed = pattern.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if matches!(trimmed, "." | ".*" | ".+" | ".*?") {
+            return Err(format!(
+                "coverage ignore pattern {pattern:?} matches every file \
+                 -- refusing a vacuous coverage gate; fix or remove it in \
+                 [workspace.metadata.coverage] ignore"
+            ));
+        }
+        kept.push(pattern);
+    }
+    Ok(kept)
+}
+
+/// Extract `[workspace.metadata.coverage]` `ignore = [...]`
+/// patterns from a root `Cargo.toml`, in declared order; empty
+/// when the section or `ignore` key is absent. Pure -- a
+/// dependency-free scan, matching the manifest-parsing
+/// convention used by `dep_age::gate` and `deploy_guard` (no
+/// `toml` crate).
+///
+/// The value scan is quote-aware: `]` and `#` inside a quoted
+/// pattern are literal (patterns are regex fragments, which
+/// routinely contain `]`), and both double-quoted (`"..."`) and
+/// single-quoted TOML literal (`'...'`) strings are read -- a
+/// literal string is the recommended form for a regex since it
+/// needs no backslash doubling. Only the
+/// `[workspace.metadata.coverage]` header followed by a
+/// line-leading `ignore = [...]` is recognised; the dotted-key
+/// (`coverage.ignore = ...`) and inline-table
+/// (`coverage = { ignore = ... }`) spellings are not (a
+/// deliberate limit of the hand-rolled scan; see CLAUDE.md).
+fn parse_coverage_ignore(manifest: &str) -> Vec<String> {
+    let body = coverage_section_body(manifest);
+    ignore_value_region(&body)
+        .map(scan_quoted)
+        .unwrap_or_default()
+}
+
+/// Raw text of the `[workspace.metadata.coverage]` section
+/// (lines after its header, up to the next section header or
+/// EOF). Lines are kept verbatim so the quote-aware value scan
+/// sees comments and brackets in context.
+fn coverage_section_body(manifest: &str) -> String {
+    let mut in_section = false;
+    let mut body = String::new();
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            let name = trimmed.trim_matches(|c| c == '[' || c == ']').trim();
+            in_section = name == "workspace.metadata.coverage";
+            continue;
+        }
+        if in_section {
+            body.push_str(line);
+            body.push('\n');
+        }
+    }
+    body
+}
+
+/// The text after the `=` of a line-leading `ignore` key in
+/// `body`, through end of `body` (so a multi-line array is
+/// scanned in full). `None` when there is no such key.
+fn ignore_value_region(body: &str) -> Option<&str> {
+    let mut offset = 0;
+    for line in body.split_inclusive('\n') {
+        if let Some(after) = line.trim_start().strip_prefix("ignore")
+            && after.trim_start().starts_with('=')
+            && let Some(eq) = line.find('=')
+        {
+            return Some(&body[offset + eq + 1..]);
+        }
+        offset += line.len();
+    }
+    None
+}
+
+/// Collect the contents of each quoted string in `region`
+/// (both `"..."` and `'...'`), stopping at the first `]` that
+/// falls outside a quote (the array close). `#` outside a quote
+/// begins a comment to end of line. A quote or comment
+/// character *inside* a string is captured literally. An
+/// unterminated final quote is discarded. Pure.
+fn scan_quoted(region: &str) -> Vec<String> {
+    enum State {
+        Normal,
+        Comment,
+        Double,
+        Single,
+    }
+    let mut state = State::Normal;
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for c in region.chars() {
+        match state {
+            State::Normal => match c {
+                '#' => state = State::Comment,
+                '"' => state = State::Double,
+                '\'' => state = State::Single,
+                ']' => break,
+                _ => {}
+            },
+            State::Comment => {
+                if c == '\n' {
+                    state = State::Normal;
+                }
+            }
+            State::Double => {
+                if c == '"' {
+                    out.push(std::mem::take(&mut cur));
+                    state = State::Normal;
+                } else {
+                    cur.push(c);
+                }
+            }
+            State::Single => {
+                if c == '\'' {
+                    out.push(std::mem::take(&mut cur));
+                    state = State::Normal;
+                } else {
+                    cur.push(c);
+                }
+            }
+        }
+    }
+    out
+}
 
 /// Coverage check result for use by validate.
 pub struct CoverageResult {
@@ -89,13 +263,14 @@ pub fn coverage_check() -> Result<CoverageResult, String> {
     // `segments` array in the JSON output, which we need
     // to compute uncovered line ranges on failure. The
     // extra JSON bulk is small for a project this size.
+    let ignore = ignore_regex()?;
     let output = run_cargo_capture(&[
         "llvm-cov",
         "--workspace",
         "--exclude",
         "xtask",
         "--ignore-filename-regex",
-        IGNORE_REGEX,
+        &ignore,
         "--json",
     ])?;
 
@@ -346,6 +521,113 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn build_ignore_regex_returns_default_without_user_patterns() {
+        assert_eq!(build_ignore_regex(IGNORE_REGEX, &[]), IGNORE_REGEX);
+    }
+
+    #[test]
+    fn build_ignore_regex_appends_user_patterns_in_order() {
+        let user = vec!["src/audio/native.rs".to_string(), "src/x.rs".into()];
+        assert_eq!(
+            build_ignore_regex("base", &user),
+            "base|src/audio/native.rs|src/x.rs"
+        );
+    }
+
+    #[test]
+    fn parse_coverage_ignore_reads_an_inline_array() {
+        let toml = "[workspace.metadata.coverage]\n\
+                    ignore = [\"src/a.rs\", \"src/b.rs\"]\n";
+        assert_eq!(parse_coverage_ignore(toml), ["src/a.rs", "src/b.rs"]);
+    }
+
+    #[test]
+    fn parse_coverage_ignore_reads_a_multiline_array() {
+        let toml = "[workspace.metadata.coverage]\nignore = [\n  \
+                    \"src/a.rs\",  # a comment\n  \"src/b.rs\",\n]\n";
+        assert_eq!(parse_coverage_ignore(toml), ["src/a.rs", "src/b.rs"]);
+    }
+
+    #[test]
+    fn parse_coverage_ignore_keeps_brackets_inside_a_pattern() {
+        // Regex char classes contain `]`; a `]` inside a quoted
+        // pattern must not terminate a multi-line array (RT-2 /
+        // AQ-2). The Rust literals below carry `\\` so the TOML
+        // value (and thus the pattern) is `src[/\\]a\.rs`.
+        let toml = "[workspace.metadata.coverage]\nignore = [\n  \
+                    \"src[/\\\\]a\\.rs\",\n  \"src/b\\.rs\",\n]\n";
+        assert_eq!(
+            parse_coverage_ignore(toml),
+            [r"src[/\\]a\.rs", r"src/b\.rs"]
+        );
+    }
+
+    #[test]
+    fn parse_coverage_ignore_keeps_hash_inside_a_pattern() {
+        // `#` inside a quoted pattern is literal, not a comment
+        // (RT-3).
+        let toml = "[workspace.metadata.coverage]\n\
+                    ignore = [\"src/v#2/a.rs\"]\n";
+        assert_eq!(parse_coverage_ignore(toml), ["src/v#2/a.rs"]);
+    }
+
+    #[test]
+    fn parse_coverage_ignore_reads_single_quoted_literals() {
+        // TOML literal strings ('...') take the value raw -- the
+        // recommended form for a regex (no `\\` doubling).
+        let toml = "[workspace.metadata.coverage]\n\
+                    ignore = ['src[/\\]a.rs']\n";
+        assert_eq!(parse_coverage_ignore(toml), [r"src[/\]a.rs"]);
+    }
+
+    #[test]
+    fn parse_coverage_ignore_empty_when_section_absent() {
+        let toml = "[workspace]\nmembers = []\n\n\
+                    [profile.release-fast]\ninherits = \"release\"\n";
+        assert!(parse_coverage_ignore(toml).is_empty());
+    }
+
+    #[test]
+    fn parse_coverage_ignore_empty_when_key_absent() {
+        // Section present, no `ignore` key -- and a later
+        // section's `ignore`-lookalike must not leak in.
+        let toml = "[workspace.metadata.coverage]\nother = 1\n\n\
+                    [other.section]\nignore = [\"nope.rs\"]\n";
+        assert!(parse_coverage_ignore(toml).is_empty());
+    }
+
+    #[test]
+    fn validate_ignore_patterns_drops_blanks() {
+        let got = validate_ignore_patterns(vec![
+            "src/a.rs".into(),
+            String::new(),
+            "  ".into(),
+        ])
+        .unwrap();
+        assert_eq!(got, ["src/a.rs"]);
+    }
+
+    #[test]
+    fn validate_ignore_patterns_rejects_match_all() {
+        // A match-all pattern would silently neuter the gate
+        // (RT-1) -- it must fail loudly.
+        for p in [".", ".*", ".+", ".*?"] {
+            assert!(
+                validate_ignore_patterns(vec![p.to_string()]).is_err(),
+                "{p:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_ignore_patterns_passes_normal_patterns() {
+        let got =
+            validate_ignore_patterns(vec![r"src/audio/native\.rs".into()])
+                .unwrap();
+        assert_eq!(got, [r"src/audio/native\.rs"]);
+    }
 
     fn seg(line: u64, count: u64, is_gap: bool) -> Segment {
         Segment {

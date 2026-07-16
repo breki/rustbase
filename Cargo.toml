@@ -17,6 +17,17 @@ missing_panics_doc = "allow"
 must_use_candidate = "allow"
 module_name_repetitions = "allow"
 
+# Extra paths to exclude from the coverage gate, merged with
+# `cargo xtask coverage`'s baseline (which already ignores
+# src/main.rs and src/bin/). Each entry is a regex fragment
+# passed to `cargo llvm-cov --ignore-filename-regex`. Use this
+# for hardware-bound leaf modules that can't run under llvm-cov
+# in CI (see CLAUDE.md "Coverage exceptions for hardware-bound
+# code"); the template itself needs none. Use single-quoted
+# TOML literal strings so backslashes reach the regex verbatim.
+# [workspace.metadata.coverage]
+# ignore = ['src[/\\]audio[/\\]playback\.rs']
+
 [profile.test]
 opt-level = 1
 

@@ -7,6 +7,23 @@ reverse chronological order.
 
 ### 2026-07-16
 
+- Coverage ignores configurable via workspace metadata
+
+    `cargo xtask coverage` now merges
+    `[workspace.metadata.coverage] ignore = [...]` from the
+    root `Cargo.toml` into its `--ignore-filename-regex`
+    baseline, so a derived project excludes a hardware-bound
+    leaf module (see the "Coverage exceptions" recipe) via
+    manifest config instead of forking `coverage.rs`. Baseline
+    unchanged when the section is absent; a missing/unreadable
+    manifest degrades to the baseline rather than failing the
+    gate. Hand-parsed (no `toml` dep), matching the
+    `gate.rs`/`deploy_guard.rs` convention. Verified
+    end-to-end: a temporary `ignore = ["rustbase-web"]` dropped
+    the measured line total 94 -> 6, confirming the pattern
+    reaches llvm-cov. Implements `coverage-metadata-ignore`
+    (from kozmotic's template feedback).
+
 - `/release` workflow + save-point `/commit` + deploy tag-guard
 
     Backfed from jutro's template feedback. Split the

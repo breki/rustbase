@@ -12,6 +12,15 @@ and this project adheres to
 
 ### Added
 
+- `cargo xtask coverage` merges
+  `[workspace.metadata.coverage] ignore = [...]` from the root
+  `Cargo.toml` into its `--ignore-filename-regex` baseline
+  (which already excludes `src/main.rs` and `src/bin/`). Derived
+  projects exclude a hardware-bound leaf module by adding its
+  path to the manifest instead of forking `xtask`. The baseline
+  is unchanged when the section is absent; a missing/unreadable
+  manifest degrades to the baseline rather than failing the
+  gate.
 - `/release` command -- a SemVer release workflow that pairs
   with `/commit`. It infers the bump from the accumulated
   `[Unreleased]` CHANGELOG entries (`**BREAKING:**` or a

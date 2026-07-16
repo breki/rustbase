@@ -16,21 +16,6 @@ plan, decisions, and outcome.
 
 <!-- Items captured by /todo land here. -->
 
-- **coverage-metadata-ignore** -- Make the coverage
-  `IGNORE_REGEX` extensible via
-  `[workspace.metadata.coverage] ignore = [...]` in the
-  root `Cargo.toml`. The hardcoded default in
-  `xtask/src/coverage.rs:23`
-  (`r"src[/\\]main\.rs$"`) stays as the baseline; user
-  patterns are merged in. Every derived project that
-  excludes a hardware-bound submodule (the recipe added
-  in CLAUDE.md's "Coverage exceptions for hardware-
-  bound code") currently has to fork `coverage.rs` --
-  metadata-based config keeps the xtask unmodified.
-  Includes tests for merge behaviour and missing-key
-  graceful fallback. Sourced from kozmotic's template
-  feedback (2026-05-04).
-
 - **xtask-strip-web** -- Ship `cargo xtask strip-web`
   as a one-shot in-place mutation that converts the
   template into a CLI-only project. Touches:
@@ -53,6 +38,13 @@ plan, decisions, and outcome.
   template feedback (2026-05-04).
 
 ## Done
+
+- [**coverage-metadata-ignore**](issues/coverage-metadata-ignore.md)
+  -- Coverage `--ignore-filename-regex` now merges
+  `[workspace.metadata.coverage] ignore` from the root
+  `Cargo.toml`; derived projects exclude hardware-bound modules
+  via manifest config instead of forking `coverage.rs`.
+  (2026-07-16)
 
 - [**changelog-version-drift**](issues/changelog-version-drift.md)
   -- Backfilled dated CHANGELOG sections 0.10.1-0.15.0 from git

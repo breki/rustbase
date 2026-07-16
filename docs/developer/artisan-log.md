@@ -16,6 +16,28 @@ Artisan review is warranted before continuing feature work.
 
 ---
 
+### aq-2026-07-16-shared-toml-scan-helper
+
+**Category:** Duplication (shared helper)
+
+`coverage::coverage_section_body` re-implements the same
+`[section]` header detection as `deploy_guard::section_name`
+(`trimmed.starts_with('[') && trimmed.ends_with(']')` +
+`trim_matches`), and `coverage::scan_quoted` overlaps
+conceptually with `deploy_guard::unquote_value` /
+`dep_age::gate`'s ad-hoc quote handling. Three modules now
+hand-scan TOML with slightly different, drift-prone shapes.
+Consider a shared dependency-free `toml_scan` module (section
+detection, comment stripping, a quote-aware string/array
+reader) that `coverage`, `deploy_guard`, and `gate` build on.
+Deferred: unifying it touches `deploy_guard.rs` and `gate.rs`
+outside the current diff, and the shapes differ enough
+(single value vs array vs lockfile records) that a good shared
+API needs its own design pass. Pairs with
+`aq-2026-07-16-shared-git-capture-helper` -- the same
+"consolidate the hand-scan primitives" theme. If a fourth
+hand-parser appears, do the extraction.
+
 ### aq-2026-07-16-shared-git-capture-helper
 
 **Category:** Duplication (shared helper)
