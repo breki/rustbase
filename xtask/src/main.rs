@@ -1,4 +1,5 @@
 mod audit;
+mod backfeed;
 mod check;
 mod clean_cache;
 mod clippy_cmd;
@@ -10,6 +11,7 @@ mod deploy_guard;
 mod deploy_remote;
 mod deploy_setup;
 mod dupes;
+mod feedback;
 mod fmt_cmd;
 mod frontend;
 mod frontend_check;
@@ -17,6 +19,7 @@ mod frontend_dupes;
 mod frontend_fmt;
 mod frontend_test;
 mod helpers;
+mod sync;
 mod test_cmd;
 mod validate;
 
@@ -114,6 +117,46 @@ enum XCommand {
     /// Empty `target/{debug,release}/incremental/` while
     /// keeping the dirs themselves (manual invocation only)
     CleanCache,
+    /// Print a downstream's template-feedback entries on or
+    /// after its backfeed-ledger watermark (the `/template-
+    /// backfeed` delta; requires the downstream path)
+    BackfeedDiff {
+        /// Path to the downstream rustbase-derived project
+        downstream_path: String,
+    },
+    /// Advance the backfeed-ledger watermark for a downstream
+    /// after evaluating a batch of its feedback
+    BackfeedRecord {
+        /// Path to the downstream rustbase-derived project
+        downstream_path: String,
+        /// Newest feedback-entry date evaluated (`YYYY-MM-DD`)
+        #[arg(long)]
+        watermark: String,
+        /// Downstream commit SHA (default: read from its `.git`)
+        #[arg(long)]
+        head: Option<String>,
+    },
+    /// Append an entry to `docs/developer/template-feedback.md`
+    /// with a minted `tf-<date>-<slug>` ID (body from
+    /// `--body-file` or stdin)
+    FeedbackAdd {
+        /// Which lifecycle section to add the entry to
+        #[arg(long, value_enum)]
+        section: feedback::FeedbackSection,
+        /// Entry title (also drives the ID slug)
+        #[arg(long)]
+        title: String,
+        /// Read the entry body from this file (default: stdin)
+        #[arg(long)]
+        body_file: Option<String>,
+    },
+    /// Print the categorized `/template-sync` file delta from
+    /// `<last-synced>` to `template/main`, minus the never-sync
+    /// bookkeeping set (requires git + a fetched `template/main`)
+    SyncCandidates {
+        /// The `last-synced` SHA from `.template-sync.toml`
+        last_synced: String,
+    },
 }
 
 fn main() {
@@ -159,6 +202,26 @@ fn main() {
         XCommand::Deploy => deploy::deploy(),
         XCommand::DeploySetup => deploy_setup::deploy_setup(),
         XCommand::CleanCache => clean_cache::clean_cache(),
+        XCommand::BackfeedDiff { downstream_path } => {
+            backfeed::backfeed_diff(&downstream_path)
+        }
+        XCommand::BackfeedRecord {
+            downstream_path,
+            watermark,
+            head,
+        } => backfeed::backfeed_record(
+            &downstream_path,
+            &watermark,
+            head.as_deref(),
+        ),
+        XCommand::FeedbackAdd {
+            section,
+            title,
+            body_file,
+        } => feedback::feedback_add(section, &title, body_file.as_deref()),
+        XCommand::SyncCandidates { last_synced } => {
+            sync::sync_candidates(&last_synced)
+        }
     };
 
     if let Err(e) = result {

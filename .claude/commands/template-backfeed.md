@@ -1,6 +1,6 @@
 ---
 description: Apply template-improvement suggestions from a downstream rustbase project back into this template
-allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(ls:*), Bash(cargo xtask validate*), Read, Edit, Write, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(ls:*), Bash(cargo xtask validate*), Bash(cargo xtask check*), Bash(cargo xtask backfeed-diff:*), Bash(cargo xtask backfeed-record:*), Bash(cargo xtask feedback-add:*), Read, Edit, Write, Grep, Glob, AskUserQuestion
 ---
 
 Apply template-improvement feedback that a downstream
@@ -45,15 +45,47 @@ provided, ask via `AskUserQuestion`.
      a git repo. Do not run any commands against
      the downstream's git -- only read its files.
 
-3. **Read the downstream feedback file.** Open
-   `<path>/docs/developer/template-feedback.md`. If
-   missing, report that and stop. The file uses the
-   three-section shape (Open divergences / Resolved /
-   Suggestions to flow back), but rustwerk and older
-   downstreams may use freeform headings -- be
-   tolerant.
+3. **Determine the delta deterministically -- do NOT
+   read the whole feedback file yourself.** The
+   downstream's `template-feedback.md` can be thousands
+   of lines; a watermark in
+   `docs/developer/backfeed-ledger.toml` (this template)
+   records how far prior runs already evaluated it, so
+   each run judges only new entries.
 
-4. **Categorize each entry:** scan the file and
+   - **First run for this downstream** (no table for it
+     in the ledger -- `backfeed-diff` prints
+     `no ledger watermark -- full history`): offer a
+     bootstrap choice via `AskUserQuestion`, mirroring
+     `/template-sync`'s bootstrap:
+     - **Start from now** -- skip retroactive backfeed;
+       record today as the watermark
+       (`cargo xtask backfeed-record <path> --watermark
+       <today>`) and stop. Use this when the
+       downstream's history has already been backfed by
+       hand or is not worth re-mining.
+     - **Full history once** -- proceed with the full
+       entry list this run (the `backfeed-diff` output
+       already contains it), then record the watermark
+       at the end (step 12).
+
+   - **Normal run:** run
+     `cargo xtask backfeed-diff <path>`. It reads the
+     downstream feedback file plus the ledger watermark
+     and prints (to stdout) only the entries dated on or
+     after the watermark; a one-line summary goes to
+     stderr. Act **only** on that output -- it is the
+     candidate set. The cut is date-header based
+     (`##`/`###` headers carrying an ISO date) and
+     tolerant of the heterogeneous / freeform formats
+     older downstreams use; undated legacy entries are
+     treated as already-evaluated history.
+
+   If `backfeed-diff` errors that the feedback file is
+   missing, report that and stop.
+
+4. **Categorize each candidate entry:** scan the
+   `backfeed-diff` output and
    bucket each entry by the tag prefix common to
    rustwerk's format:
    - `[Fixed locally]` -- already applied
@@ -69,13 +101,16 @@ provided, ask via `AskUserQuestion`.
 
 5. **Cross-reference this template's own
    `docs/developer/template-feedback.md`** (the
-   Resolved section). Skip any downstream entry
-   whose substance is already in Resolved here --
-   prior backfeed runs or independent fixes may
-   have already closed it. Cross-reference by
-   short-title substring match and key topic
-   keywords; when ambiguous, surface the entry as
-   "review" rather than auto-skipping.
+   Resolved section), but only over the (now small)
+   candidate set from step 3 -- this is a
+   same-day-boundary safety net, not a full re-scan.
+   The watermark cut is inclusive of its own date, so
+   an entry dated on the watermark day that a prior run
+   already resolved can reappear here; skip any
+   candidate whose substance is already in Resolved.
+   Cross-reference by short-title substring match and
+   key topic keywords; when ambiguous, surface the
+   entry as "review" rather than auto-skipping.
 
 6. **Present a summary table** to the user:
 
@@ -135,21 +170,24 @@ provided, ask via `AskUserQuestion`.
 
 10. **Log each applied entry as a Resolved item** in
     this template's own
-    `docs/developer/template-feedback.md`. Use the
-    project's existing date-prefix format:
+    `docs/developer/template-feedback.md`. Do not edit
+    the file by hand -- call the deterministic
+    appender so the entry gets a stable
+    `tf-<date>-<slug>` ID and consistent placement:
 
     ```
-    ### YYYY-MM-DD -- <short title>
-
-    Surfaced from <downstream>'s template feedback
-    (<downstream date>). <2-4 sentence description
-    of what was wrong and the fix applied.>
+    cargo xtask feedback-add --section resolved \
+      --title "<short title>" --body-file <tmp>
     ```
 
-    Insert at the top of the **Resolved** section
-    (newest first). Do not preserve the original
-    entry body verbatim -- the upstream code change
-    is the authoritative record.
+    The body (written to a temp file, 80-char wrapped)
+    should read: `Surfaced from <downstream>'s template
+    feedback (<downstream date>). <2-4 sentence
+    description of what was wrong and the fix applied.>`
+    Do not preserve the original entry body verbatim --
+    the upstream code change is the authoritative
+    record. The command inserts at the top of the
+    **Resolved** section and dedups by ID.
 
 11. **Validate** -- Run `cargo xtask validate` to
     confirm nothing broke. If a slash-command-only
@@ -158,10 +196,27 @@ provided, ask via `AskUserQuestion`.
     sufficient; for any `.rs` / `Cargo.toml`
     change, run full validate.
 
-12. **Summary** -- Report:
+12. **Advance the ledger watermark.** After the batch
+    is applied (or the user chose "start from now" in
+    step 3), record the newest candidate date so the
+    next run starts from there:
+
+    ```
+    cargo xtask backfeed-record <path> --watermark <date>
+    ```
+
+    `<date>` is the newest entry date you evaluated
+    this run (not necessarily one you applied -- the
+    watermark tracks what was *judged*, so a skipped
+    newer entry still advances it). `--head` defaults
+    to the downstream's current `.git` HEAD; the
+    command stamps `last-run` with today.
+
+13. **Summary** -- Report:
     - Entries applied (titles + IDs)
     - Entries skipped (with reason)
     - Files changed
+    - New ledger watermark for the downstream
     - Remind the user to `/commit` -- this command
       does NOT commit.
 

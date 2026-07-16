@@ -12,6 +12,20 @@ and this project adheres to
 
 ### Added
 
+- Template-maintenance tooling moved into `cargo xtask`
+  (deterministic, unit-tested) so `/template-backfeed`,
+  `/template-improve`, and `/template-sync` scale without the
+  LLM re-scanning growing markdown logs. New subcommands:
+  `backfeed-diff <ds-path>` / `backfeed-record <ds-path>
+  --watermark <date>` (a per-downstream watermark ledger in
+  `docs/developer/backfeed-ledger.toml`, so backfeed evaluates
+  only feedback newer than the last run); `feedback-add
+  --section <open|resolved|suggestion> --title <t>` (appends a
+  `template-feedback.md` entry with a minted `tf-<date>-<slug>`
+  ID, inserted at the section top, deduped); and
+  `sync-candidates <last-synced>` (the `/template-sync` file
+  delta, categorized, with template-internal bookkeeping files
+  filtered out).
 - `cargo xtask coverage` merges
   `[workspace.metadata.coverage] ignore = [...]` from the root
   `Cargo.toml` into its `--ignore-filename-regex` baseline

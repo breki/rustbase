@@ -76,6 +76,10 @@ cargo xtask dep-age-check     # cooldown-gate changed deps (vs HEAD)
 cargo xtask dep-preflight     # pin changed deps past cooldown pre-build
 cargo xtask deploy            # deploy to remote (see docs/deployment.md)
 cargo xtask deploy-setup      # one-time remote provisioning
+cargo xtask backfeed-diff <ds-path>      # downstream feedback since watermark
+cargo xtask backfeed-record <ds-path> --watermark <date>  # advance watermark
+cargo xtask feedback-add --section <s> --title <t>  # append feedback entry
+cargo xtask sync-candidates <last-synced>  # categorized sync delta, filtered
 ```
 
 Never use raw `cargo test` or `cargo clippy` -- always
@@ -454,15 +458,42 @@ a fresh empty `[Unreleased]` above it.
 | `/template-sync` | Sync upstream template changes |
 | `/template-backfeed` | Apply downstream feedback back into this template (template repo only) |
 
+## Template tooling: determinism vs judgment
+
+The template-maintenance workflows (`/template-sync`,
+`/template-backfeed`, `/template-improve`) split their work
+into two kinds, and the split is load-bearing:
+
+- **Determinism -- belongs in `cargo xtask`.** Delta
+  determination (what changed since a watermark / SHA), log
+  bookkeeping (appending an entry, minting an ID, dedup), and
+  exclude-set filtering are mechanical. They must run as
+  unit-tested `cargo xtask` commands, never as an LLM scan of
+  a growing markdown file. An LLM re-reading a 2000-line log
+  on every run is unbounded cost and drifts on format.
+- **Judgment -- belongs to the LLM.** Categorizing a change,
+  deciding apply/skip, merging code, writing prose. This is
+  what the commands hand back to the agent.
+
+Concretely: `backfeed-diff` (delta since the ledger
+watermark), `backfeed-record` (advance the watermark),
+`feedback-add` (append with a `tf-<date>-<slug>` ID), and
+`sync-candidates` (categorized diff minus the never-sync set)
+own the determinism; the slash commands own the judgment. When
+extending these workflows, keep new mechanical work in xtask
+with tests -- do not push it back into the prompt.
+
 ## Template Sync
 
 This project tracks its template origin in
 `.template-sync.toml`. Use `/template-sync` to pull
 improvements from the upstream
 [rustbase](https://github.com/breki/rustbase) template.
-The command fetches upstream changes, categorizes them,
-and helps you selectively apply relevant updates while
-preserving your project's customizations.
+The command fetches upstream changes, then calls
+`cargo xtask sync-candidates` to get a categorized file
+delta with template-internal bookkeeping files already
+filtered out, and helps you selectively apply relevant
+updates while preserving your project's customizations.
 
 ## Template Feedback
 
@@ -488,7 +519,18 @@ section semantics): **Open divergences** (gaps the
 project intentionally keeps), **Resolved** (gaps closed
 by retrofit work), and **Suggestions to flow back to
 the template**. `/template-improve` routes new entries
-into the appropriate section.
+into the appropriate section by calling
+`cargo xtask feedback-add`, which mints a stable
+`tf-<yyyy-mm-dd>-<slug>` ID, inserts at the section top,
+and dedups -- the file is never hand-edited.
+
+`/template-backfeed` (template repo only) pulls a
+downstream's feedback back upstream. It uses a watermark in
+`docs/developer/backfeed-ledger.toml` (one table per
+downstream, machine-owned by `cargo xtask backfeed-record`)
+so each run evaluates only feedback newer than the last, via
+`cargo xtask backfeed-diff` -- it never re-scans the whole
+downstream file.
 
 ## Workspace lints and xtask overrides
 

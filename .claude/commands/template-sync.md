@@ -1,6 +1,6 @@
 ---
 description: Sync upstream template changes into this project
-allowed-tools: Bash(git remote:*), Bash(git fetch:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git status:*), Bash(cargo xtask validate*), Read, Edit, Write, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(git remote:*), Bash(git fetch:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git status:*), Bash(cargo xtask validate*), Bash(cargo xtask sync-candidates:*), Read, Edit, Write, Grep, Glob, AskUserQuestion
 ---
 
 Sync changes from the upstream rustbase template into
@@ -61,19 +61,30 @@ this project.
 
 5. **Analyze changes**:
    - Run `git log --oneline <last-synced>..template/main`
-   - Run `git diff --stat <last-synced>..template/main`
-   - Run `git diff <last-synced>..template/main`
-   - Categorize each changed file:
-     - **Infrastructure**: CI, xtask, build.ps1,
-       scripts/, .github/, rust-toolchain.toml,
-       rustfmt.toml
+     for commit context.
+   - **Get the categorized candidate list deterministically
+     -- do NOT hand-categorize the diff.** Run
+     `cargo xtask sync-candidates <last-synced>`. It runs
+     `git diff --name-status <last-synced>..template/main`,
+     drops the template-internal never-sync set (CHANGELOG,
+     the feedback file, the backfeed ledger, the diary and
+     review logs, per-issue docs -- bookkeeping each project
+     owns independently, so their growth is never sync
+     noise), and prints a `status  category  path` table
+     already bucketed into:
+     - **Infrastructure**: CI, xtask, build.ps1, scripts/,
+       .github/, toolchain / rustfmt / clippy config
      - **Claude config**: CLAUDE.md, .claude/
-     - **Docs**: docs/, README.md, llms.txt,
-       CHANGELOG.md
-     - **Boilerplate**: sample code in crates/,
-       frontend/, e2e/
-     - **Project config**: root Cargo.toml, .gitignore,
+     - **Docs**: docs/, README.md, llms.txt
+     - **Boilerplate**: sample code in crates/, frontend/,
+       e2e/
+     - **Project config**: Cargo.toml/lock, .gitignore,
        .editorconfig
+     - **Other**: anything unmatched
+   - For the files you will actually review or apply (step
+     7), read their per-file diff
+     (`git diff <last-synced>..template/main -- <file>`)
+     rather than dumping the whole diff up front.
    - **Cross-reference declared divergences.** Read
      `docs/developer/template-feedback.md` and parse
      its **Open divergences** section. For each

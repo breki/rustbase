@@ -1,10 +1,15 @@
 ---
 description: Log feedback for the rustbase template
-allowed-tools: Read, Edit, AskUserQuestion
+allowed-tools: Read, Write, AskUserQuestion, Bash(cargo xtask feedback-add:*)
 ---
 
 Log an observation about the rustbase template in
 `docs/developer/template-feedback.md`.
+
+Entry placement, date stamping, ID minting, and dedup are
+owned by `cargo xtask feedback-add` -- do **not** hand-edit
+the file. Your job is the judgement: the section, a short
+title, and the body prose.
 
 ## Instructions
 
@@ -12,47 +17,41 @@ Log an observation about the rustbase template in
    Otherwise, use `AskUserQuestion` to ask what they
    noticed.
 
-2. Read `docs/developer/template-feedback.md` to see
-   the format and existing entries. The file is
-   organised into three lifecycle sections:
+2. Decide which lifecycle section the entry belongs in.
+   The file has three (read the file header for the full
+   semantics):
 
-   - **Open divergences** -- things known to be
-     suboptimal, missing, or differently-shaped than
-     the ideal template baseline. New observations
-     about current template issues land here.
-   - **Resolved** -- entries closed out by a retrofit
-     or fix. Move entries here (with a one-line
-     `Resolution:` note and the fix date) once the
-     issue is addressed.
-   - **Suggestions to flow back to the template** --
-     in a derived project, ideas the project wants
-     pushed upstream. In the template repo itself
-     this section is normally empty; it exists for
-     structural symmetry with derived projects.
+   - **Open divergences** (`--section open`) -- new
+     observations about current template state that are
+     suboptimal, missing, or differently-shaped than the
+     ideal. This is the default for a fresh observation.
+   - **Resolved** (`--section resolved`) -- something the
+     user has already fixed; the entry records what was
+     wrong and how it was closed out.
+   - **Suggestions to flow back** (`--section suggestion`)
+     -- in a derived project, an idea to push upstream.
 
-3. Use `AskUserQuestion` (or infer from context) to
-   decide which section the new entry belongs in.
-   Default: **Open divergences** for new observations
-   about current template state. If the user
-   describes something they've already fixed, route
-   to **Resolved**. If the user is a derived project
-   logging a suggestion for the upstream template,
-   route to **Suggestions to flow back**.
+   Use `AskUserQuestion` (or infer from context) when the
+   section is not obvious. Default to **open**.
 
-4. Insert the entry at the **top** of the chosen
-   section (newest first within each section).
-   Format:
+3. Choose a short title (a few words -- it drives the entry
+   ID slug) and write the body prose, wrapped at 80
+   characters. The body should explain the issue, why it
+   matters, and the suggested fix; for a **resolved** entry,
+   end with a one-line summary of the fix.
+
+4. Add the entry with the deterministic appender. Write the
+   body to a temp file, then call:
 
    ```
-   ### <YYYY-MM-DD or short topic> -- <Short title>
-
-   <Description of the issue, why it matters, and
-   suggested fix for the template.>
+   cargo xtask feedback-add --section <open|resolved|suggestion> \
+     --title "<short title>" --body-file <tmp>
    ```
 
-   For entries in **Resolved**, end with a one-line
-   summary of the fix.
+   The command mints a `tf-<yyyy-mm-dd>-<slug>` ID, inserts
+   the entry at the top of the chosen section (newest
+   first), and skips silently if that ID is already present.
+   (Body may also be piped on stdin instead of `--body-file`.)
 
-5. Do NOT commit -- just edit the file and let the
-   user review. It will be included in the next
-   `/commit`.
+5. Do NOT commit -- the entry is included in the next
+   `/commit`. Report the ID the command minted.

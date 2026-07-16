@@ -2,7 +2,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// Width of the step name column (including dots).
 const STEP_NAME_WIDTH: usize = 14;
@@ -284,9 +284,156 @@ where
     out
 }
 
+/// Today's date as an ISO `YYYY-MM-DD` string (UTC).
+///
+/// Used to stamp `last-run` in the backfeed ledger and to
+/// mint `tf-<date>-<slug>` feedback IDs. A clock read before
+/// the Unix epoch (should never happen) degrades to day zero.
+pub fn today_iso() -> String {
+    let days = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|d| i64::try_from(d.as_secs() / 86_400).ok())
+        .unwrap_or(0);
+    let (y, m, d) = civil_from_days(days);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// Convert a count of days since the Unix epoch back into a
+/// civil `(year, month, day)`. Howard Hinnant's `civil_from_days`
+/// (the inverse of the `days_from_civil` used elsewhere), valid
+/// for the whole proleptic Gregorian range. Pure, so it is
+/// unit-tested against known dates.
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    (y + i64::from(m <= 2), m, d)
+}
+
+/// True when `s` is a well-formed ISO `YYYY-MM-DD` date:
+/// exactly ten chars, `dddd-dd-dd`, with month `01..=12` and
+/// day `01..=31`. A shallow calendar check -- it does not
+/// reject Feb 30 -- which is enough for lexical watermark
+/// comparison (ISO dates sort lexically iff well-formed).
+pub fn is_iso_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+        return false;
+    }
+    let digits = |r: &[u8]| r.iter().all(u8::is_ascii_digit);
+    if !digits(&b[0..4]) || !digits(&b[5..7]) || !digits(&b[8..10]) {
+        return false;
+    }
+    let two = |a: u8, c: u8| (a - b'0') * 10 + (c - b'0');
+    let month = two(b[5], b[6]);
+    let day = two(b[8], b[9]);
+    (1..=12).contains(&month) && (1..=31).contains(&day)
+}
+
+/// Extract the first well-formed ISO `YYYY-MM-DD` date embedded
+/// anywhere in `line`, or `None`. Used to read the date out of
+/// heterogeneous feedback headers (`### 2026-07-16 -- title`,
+/// `## 2026-07-16 fixed X`). Scans every 10-char window and
+/// validates it with [`is_iso_date`]. Windows that do not fall
+/// on UTF-8 char boundaries are skipped via the non-panicking
+/// `str::get`, so a header with non-ASCII text never panics.
+pub fn extract_iso_date(line: &str) -> Option<String> {
+    if line.len() < 10 {
+        return None;
+    }
+    (0..=line.len() - 10)
+        .filter_map(|i| line.get(i..i + 10))
+        .find(|w| is_iso_date(w))
+        .map(str::to_string)
+}
+
+/// True when `line` opens or closes a fenced code block (its
+/// first non-whitespace run is ```` ``` ```` or `~~~`). Callers
+/// toggle fence state on each such line so markdown headers
+/// *inside* a code fence are not mistaken for structure.
+pub fn is_fence(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with("```") || t.starts_with("~~~")
+}
+
+/// Repo-relative path of the template-feedback file. Single
+/// source of truth shared by the backfeed, feedback, and sync
+/// commands (the last via its never-sync set).
+pub const FEEDBACK_REL: &str = "docs/developer/template-feedback.md";
+
+/// Repo-relative path of the machine-owned backfeed ledger.
+pub const BACKFEED_LEDGER_REL: &str = "docs/developer/backfeed-ledger.toml";
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn civil_from_days_epoch_and_known_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(31), (1970, 2, 1));
+        // 2026-07-16 is 20650 days after the epoch.
+        assert_eq!(civil_from_days(20650), (2026, 7, 16));
+    }
+
+    #[test]
+    fn today_iso_is_well_formed() {
+        assert!(is_iso_date(&today_iso()));
+    }
+
+    #[test]
+    fn is_iso_date_accepts_valid_and_rejects_junk() {
+        assert!(is_iso_date("2026-07-16"));
+        assert!(is_iso_date("1999-12-31"));
+        assert!(!is_iso_date("2026-13-01")); // month 13
+        assert!(!is_iso_date("2026-07-32")); // day 32
+        assert!(!is_iso_date("2026-7-16")); // not zero-padded
+        assert!(!is_iso_date("2026/07/16")); // wrong separator
+        assert!(!is_iso_date("not a date"));
+        assert!(!is_iso_date("2026-07-16 "));
+    }
+
+    #[test]
+    fn extract_iso_date_finds_embedded_date() {
+        assert_eq!(
+            extract_iso_date("### 2026-07-16 -- some title"),
+            Some("2026-07-16".to_string())
+        );
+        assert_eq!(extract_iso_date("## Open divergences"), None);
+        assert_eq!(
+            extract_iso_date("### fixed on 2026-01-02!"),
+            Some("2026-01-02".to_string())
+        );
+        assert_eq!(extract_iso_date("short"), None);
+    }
+
+    #[test]
+    fn extract_iso_date_handles_non_ascii_without_panic() {
+        // Multibyte chars before/around the window must not
+        // panic on a non-char-boundary slice (RT-1).
+        assert_eq!(extract_iso_date("### Café UI regression"), None);
+        assert_eq!(
+            extract_iso_date("### café then 2026-07-16"),
+            Some("2026-07-16".to_string())
+        );
+        assert_eq!(extract_iso_date("— em-dash lead —"), None);
+    }
+
+    #[test]
+    fn is_fence_detects_both_markers() {
+        assert!(is_fence("```"));
+        assert!(is_fence("```rust"));
+        assert!(is_fence("  ~~~"));
+        assert!(!is_fence("### heading"));
+        assert!(!is_fence("plain"));
+    }
 
     #[test]
     fn pair_with_locations_keeps_kept_lines_and_following_arrows() {

@@ -7,6 +7,31 @@ reverse chronological order.
 
 ### 2026-07-16
 
+- Template tooling: determinism moved into `cargo xtask`
+
+    Made `/template-backfeed`, `/template-improve`, and
+    `/template-sync` scalable by moving delta determination and
+    log bookkeeping out of the LLM into deterministic,
+    unit-tested `cargo xtask` commands; the LLM keeps only the
+    judgment. Four new subcommands: `backfeed-diff` (downstream
+    feedback entries on/after a ledger watermark) and
+    `backfeed-record` (advance the watermark) in
+    `xtask/src/backfeed.rs`; `feedback-add` (append a
+    `template-feedback.md` entry with a minted
+    `tf-<date>-<slug>` ID, section-top insert, dedup) in
+    `xtask/src/feedback.rs`; `sync-candidates` (categorized
+    `git diff --name-status` delta minus a never-sync
+    bookkeeping set) in `xtask/src/sync.rs`. New machine-owned
+    `docs/developer/backfeed-ledger.toml` (hand-parsed, no
+    `toml` dep) seeded with jutro=2026-07-14,
+    clockdump=2026-07-15 so their history is never re-scanned.
+    Shared `today_iso` / `is_iso_date` / `extract_iso_date`
+    date helpers added to `helpers.rs`. Rewrote the three
+    slash commands to call the new commands, and recorded the
+    determinism-vs-judgment principle in `CLAUDE.md`. Full
+    `cargo xtask validate` green (11/11). Implements
+    `template-tooling-cli-redesign`.
+
 - Coverage ignores configurable via workspace metadata
 
     `cargo xtask coverage` now merges

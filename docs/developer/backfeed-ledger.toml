@@ -1,0 +1,23 @@
+# Backfeed ledger -- machine-owned by `cargo xtask backfeed-record`.
+#
+# One table per downstream rustbase-derived project. It records
+# how far `/template-backfeed` has already evaluated that
+# downstream's `template-feedback.md`, so a run never re-scans
+# history it has already judged:
+#
+#   watermark        newest feedback-entry date already evaluated
+#                    (YYYY-MM-DD); `backfeed-diff` shows only
+#                    entries on or after this date
+#   downstream-head  the downstream commit SHA seen at last run
+#                    (provenance; best-effort, read from <ds>/.git)
+#   last-run         the date this ledger entry was last updated
+#
+# Do not hand-edit; `cargo xtask backfeed-record` rewrites it.
+# Seeded 2026-07-16 with the two known downstreams so their
+# pre-existing feedback history is never re-scanned.
+
+[clockdump]
+watermark = "2026-07-15"
+
+[jutro]
+watermark = "2026-07-14"
