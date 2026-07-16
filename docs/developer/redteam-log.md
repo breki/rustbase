@@ -14,3 +14,20 @@ and a short description.
 red team review is warranted before continuing feature work.
 
 ---
+
+### rt-2026-07-16-deploy-guard-toctou
+
+**Category:** Security (TOCTOU)
+
+`deploy_guard::require_release_tag` checks
+`working_tree_clean` at the top of `deploy()`, but the tree
+is not re-read until `sync_source` tars the sources and
+`build_frontend` builds moments later. A change to the tree
+in that window ships un-verified content under a tag that
+vouches for the clean state. Low severity: operator-only
+threat model (self-inflicted race, not an adversary), and the
+binary is rebuilt from the tarred sources, not a stale
+artifact. If tightening is wanted, re-assert
+`working_tree_clean` immediately before `sync_source`, or tar
+from `git archive <tag>` so the shipped source is provably the
+tagged commit.

@@ -6,6 +6,7 @@ mod coverage;
 mod dep_age;
 mod deploy;
 mod deploy_config;
+mod deploy_guard;
 mod deploy_remote;
 mod deploy_setup;
 mod dupes;

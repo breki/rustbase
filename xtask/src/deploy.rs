@@ -14,10 +14,16 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use crate::deploy_config;
+use crate::deploy_guard;
 use crate::deploy_remote;
 use crate::helpers::workspace_root;
 
 pub fn deploy() -> Result<(), String> {
+    // Ship only a released commit: HEAD on a vX.Y.Z tag
+    // matching Cargo.toml, clean tree. Ties deploy to
+    // `/release` (see deploy_guard). Checked before any work.
+    deploy_guard::require_release_tag()?;
+
     let project_root = workspace_root();
     let cfg = deploy_config::load(&project_root)?;
     let remote = cfg.remote();

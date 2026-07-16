@@ -12,6 +12,22 @@ and this project adheres to
 
 ### Added
 
+- `/release` command -- a SemVer release workflow that pairs
+  with `/commit`. It infers the bump from the accumulated
+  `[Unreleased]` CHANGELOG entries (`**BREAKING:**` or a
+  non-empty `### Removed` -> major, `### Added` -> minor, else
+  patch; override available), bumps
+  `crates/rustbase/Cargo.toml`, promotes `[Unreleased]` to a
+  dated section, runs `cargo xtask validate` as the release
+  gate, commits the bookkeeping directly, and creates an
+  annotated `vX.Y.Z` tag. `/release` is the sole version-bumper.
+- `/html-report` command + `docs/ai-agents/html-report-template.html`
+  -- produce a polished, self-contained local HTML page
+  (analysis / report / reference) from the in-repo template and
+  open it in the browser. All CSS/JS inlined, images as `data:`
+  URIs, CSP-`<meta>`-enforced, dual light/dark theming, one
+  `--fs-*` type scale; fetched content is HTML-escaped as data;
+  never a cloud Artifact.
 - `cargo xtask dep-preflight` -- pre-compile cooldown
   remediation for the Rust dependency tree. After adding or
   bumping a dependency (via `cargo add`, which updates the
@@ -90,6 +106,16 @@ and this project adheres to
 
 ### Changed
 
+- `/commit` is now a save-point: it no longer bumps the
+  version, syncs `Cargo.lock`, or runs `cargo xtask validate`.
+  Those move to the new `/release` command. Multiple commits
+  land between releases; `/release` computes one bump from the
+  accumulated `[Unreleased]` entries.
+- `cargo xtask deploy` now refuses to run unless `HEAD` is on a
+  `vX.Y.Z` annotated tag matching `crates/rustbase/Cargo.toml`
+  and the working tree is clean -- tying "publish to
+  production" to "cut a release" (`/release`). Run `/release`
+  before deploying.
 - Refreshed third-party dependencies within the 14-day
   cooldown. Frontend major bumps: `typescript ^5 -> ^6`
   (6.0.3), `jscpd ^4 -> ^5` (5.0.11), `prettier-plugin-svelte

@@ -5,6 +5,40 @@ reverse chronological order.
 
 ---
 
+### 2026-07-16
+
+- `/release` workflow + save-point `/commit` + deploy tag-guard
+
+    Backfed from jutro's template feedback. Split the
+    commit/release workflow: `/commit` becomes a save-point
+    (review + diary + CHANGELOG `[Unreleased]`, no version
+    bump, no `Cargo.lock` sync, no auto-validate), and a new
+    `/release` command is the sole version-bumper -- it
+    infers the bump from the accumulated `[Unreleased]`
+    entries, promotes them to a dated section, runs `validate`
+    as the release gate, commits the bookkeeping, and creates
+    an annotated tag. Added `xtask/src/deploy_guard.rs`: a
+    release-tag guard that refuses `cargo xtask deploy` unless
+    `HEAD` is on a `vX.Y.Z` annotated tag matching
+    `Cargo.toml` with a clean tree, with a `[section]`-aware
+    TOML version parser so a dependency's `version` cannot
+    shadow `[package]`. The pure parse + decision are
+    unit-tested; the git queries are thin. Generalized
+    jutro's `cargo generate-lockfile` to `cargo update -p
+    rustbase` (the former trips `dep-age-check`).
+
+- `/html-report` command for self-contained local HTML pages
+
+    Backfed from jutro. A `/html-report` command plus its
+    single-source-of-truth design asset
+    `docs/ai-agents/html-report-template.html` produce a
+    polished, self-contained local HTML page (all CSS/JS
+    inlined, images as `data:` URIs, CSP-`<meta>`-enforced,
+    dual light/dark theming, one `--fs-*` type scale) opened
+    in the browser -- never a cloud Artifact. Fetched content
+    is treated as data and HTML-escaped; the output slug is
+    sanitized to `[a-z0-9-]+`.
+
 ### 2026-07-15
 
 - `cargo xtask dep-preflight` -- pre-compile cooldown

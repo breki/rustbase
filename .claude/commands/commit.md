@@ -1,10 +1,20 @@
 ---
 description: Commit current changes following project conventions
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(cargo xtask validate*), Bash(cargo xtask fmt*), Bash(cargo update:*), Bash(scripts/e2e.sh*), Read, Edit, Agent, AskUserQuestion, Skill(retrospect)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(scripts/e2e.sh*), Read, Edit, Agent, AskUserQuestion, Skill(retrospect)
 ---
 
 Commit the current changes following the project's git commit
 conventions.
+
+`/commit` is a save-point, not a release event. It does **not**
+bump the version, sync `Cargo.lock`, or run
+`cargo xtask validate`. Those belong to `/release`, which is
+invoked separately (and is required before
+`cargo xtask deploy`). `/commit` itself never runs
+`cargo xtask validate`; if you want the full gate on a
+work-in-progress, run it manually at your own shell (outside
+this flow). `/release` runs it as the authoritative release
+gate.
 
 ## Instructions
 
@@ -20,31 +30,7 @@ conventions.
    - A concise subject line (imperative mood, no period)
    - A brief body explaining what and why
 
-3. **Bump version** (for feat, fix, perf commits):
-   - Read the current version from
-     `crates/rustbase/Cargo.toml`
-   - Bump according to commit type:
-     - `feat` -> **minor** bump (0.1.0 -> 0.2.0)
-     - `fix`, `perf` -> **patch** bump (0.1.0 -> 0.1.1)
-   - Edit `crates/rustbase/Cargo.toml` to update the version
-   - Run `cargo update -p <crate>` (e.g.
-     `cargo update -p rustbase`) to sync `Cargo.lock` to the
-     new version. This updates only that package's entry.
-     Do **not** use `cargo generate-lockfile` -- it refreshes
-     every transitive dependency, folding an unrelated
-     workspace-wide dependency bump into a scoped commit
-     (hard to bisect/revert, hides a supply-chain surface
-     change from review).
-   - Include both files in staged files
-   - Skip version bump for: docs, test, refactor, chore, style
-
-4. **Validate** (when version was bumped in step 3):
-   - Run `cargo xtask validate` to ensure all checks pass
-   - If validation **fails**, ask the user whether to commit
-     anyway or abort. Wait for their answer before proceeding.
-   - Skip this step if no version bump occurred
-
-5. **Code review** -- Before E2E tests, spawn **two** AI
+3. **Code review** -- Before E2E tests, spawn **two** AI
    agents **in parallel** (in a single message with two
    Agent tool calls). Both read the source files but do
    not modify them.
@@ -161,7 +147,7 @@ conventions.
    either backlog, tell the user a full-codebase review
    is warranted.
 
-6. **Update development diary** (for significant changes):
+4. **Update development diary** (for significant changes):
    - Read `docs/developer/DIARY.md` to see format and
      recent entries
    - Add an entry for:
@@ -172,14 +158,14 @@ conventions.
      first)
    - Merge entries for the same day under one
      `### YYYY-MM-DD` heading
-   - Attach the version to each entry title, not the
-     date heading: `- Entry title (vX.Y.Z)` (use the
-     version **after** the bump from step 3)
+   - Title entries by topic only (no `(vX.Y.Z)` suffix).
+     The version is unknown at commit time -- it is
+     assigned later by `/release` when the changes ship.
    - Use backticks for technical terms
    - Skip diary update for: docs, style, test, refactor,
      minor chores
 
-7. **Update CHANGELOG.md** (for user-observable
+5. **Update CHANGELOG.md** (for user-observable
    changes):
    - The trigger is the **observable effect**, not the
      commit type. If a user of the software would see
@@ -191,12 +177,16 @@ conventions.
      `Removed`) -- **even if the commit type is
      `chore`** (e.g., a `chore:` that changes a default
      port still needs a `Changed` entry).
+   - **Mark breaking changes** with a leading
+     `**BREAKING:**` on the bullet, so `/release` infers
+     a major bump from the accumulated `[Unreleased]`
+     entries.
    - Skip only for commits with no user-observable
      effect: pure refactors, internal tooling, test-
      only changes, CI/lint config tweaks invisible to
      users, docs-only edits.
 
-8. **E2E tests** -- Run `scripts/e2e.sh` to verify the
+6. **E2E tests** -- Run `scripts/e2e.sh` to verify the
    full stack works end-to-end. The script kills stale
    servers and runs Playwright, which auto-starts both
    backend and frontend using test data (not production
@@ -205,15 +195,15 @@ conventions.
      commit anyway or abort.
    - Skip if no frontend or API changes in the diff.
 
-9. **Fix line endings** - After staging, check for CRLF
+7. **Fix line endings** - After staging, check for CRLF
    warnings. All text files must use LF line endings.
 
-10. **Stage files** - Add specific files by name (avoid
+8. **Stage files** - Add specific files by name (avoid
    `git add -A` or `git add .`). Never commit sensitive
    files (.env, credentials, etc.). Include diary and
    changelog if updated.
 
-11. **Commit** using this exact format (use HEREDOC):
+9. **Commit** using this exact format (use HEREDOC):
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -226,7 +216,7 @@ EOF
 )"
 ```
 
-12. **Workflow retrospective** -- delegate to
+10. **Workflow retrospective** -- delegate to
     `/retrospect` (runs *after* the commit lands so
     it cannot block shipping).
 
@@ -251,14 +241,21 @@ EOF
 - Use the AI-Generated footer format shown above
 - If no changes to commit, inform the user
 - If changes look incomplete or risky, ask before committing
+- Never bump `crates/rustbase/Cargo.toml` from `/commit`.
+  That is `/release`'s job.
 
 ## Commit Types
 
-- `feat`: New feature (minor version bump)
-- `fix`: Bug fix (patch version bump)
-- `perf`: Performance improvement (patch version bump)
-- `chore`: Maintenance, tooling, dependencies (no bump)
-- `refactor`: Code restructuring (no bump)
-- `docs`: Documentation only (no bump)
-- `test`: Adding or updating tests (no bump)
-- `style`: Formatting, whitespace (no bump)
+The commit type no longer drives a version bump directly.
+`/release` computes the bump from the accumulated
+`[Unreleased]` CHANGELOG entries since the last release --
+the "eventually" below refers to that later `/release`.
+
+- `feat`: New feature (eventually a minor bump at release)
+- `fix`: Bug fix (eventually a patch bump at release)
+- `perf`: Performance improvement (eventually a patch bump)
+- `chore`: Maintenance, tooling, dependencies
+- `refactor`: Code restructuring
+- `docs`: Documentation only
+- `test`: Adding or updating tests
+- `style`: Formatting, whitespace

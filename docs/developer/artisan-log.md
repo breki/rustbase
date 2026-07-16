@@ -16,6 +16,27 @@ Artisan review is warranted before continuing feature work.
 
 ---
 
+### aq-2026-07-16-shared-git-capture-helper
+
+**Category:** Duplication (shared helper)
+
+`deploy_guard::working_tree_clean` and `head_release_tag`
+each re-spell the
+`Command::new("git").current_dir(root).args(...).output()` +
+UTF-8-decode + status-check pattern that
+`dep_age::gate::git_show` already implements, and the
+"run via `current_dir`, not `git -C`, to stay coverable by a
+blanket permission rule" rationale is restated at each site.
+`helpers.rs` has cargo runners (`run_cargo_capture`) but no
+git equivalent. Consider a shared
+`helpers::git_capture(root, args) -> Result<Output, String>`
+carrying the rationale once, with `working_tree_clean`,
+`head_release_tag`, and `git_show` built on top. Deferred: the
+return shapes differ (`Option` vs `Result`,
+`from_utf8` vs `from_utf8_lossy`), so it is low-severity
+structural spread, not copy-paste; unifying it touches
+`gate.rs` outside the current diff.
+
 ### aq-2026-07-15-preflight-report-structured-records
 
 **Category:** Type Safety

@@ -73,6 +73,61 @@ individual projects.
 
 ## Resolved
 
+### 2026-07-16 -- no `/release` SemVer workflow; `/commit` bundled version bumping
+
+Surfaced from jutro's template feedback (2026-07-14 /
+2026-05-21). `/commit` bumped the version, synced
+`Cargo.lock`, and ran `validate` on every feat/fix/perf --
+treating every functional commit as a release, which does
+not survive contact with real projects (many commits land
+between deploys). **Fix:** split the workflow. Added
+`.claude/commands/release.md` -- the sole version-bumper: it
+infers the bump from the accumulated `[Unreleased]` CHANGELOG
+entries (`**BREAKING:**`/`### Removed` -> major, `### Added`
+-> minor, else patch), promotes `[Unreleased]` to a dated
+section, runs `validate` as the release gate, commits the
+bookkeeping directly, and creates an annotated tag.
+Restructured `commit.md` into a save-point (no bump, no
+`Cargo.lock` sync, no auto-validate; diary entries drop the
+`(vX.Y.Z)` suffix; CHANGELOG bullets mark breaking changes).
+Added a `deploy_guard` (`xtask/src/deploy_guard.rs`) that
+refuses `cargo xtask deploy` unless `HEAD` is on a `vX.Y.Z`
+annotated tag matching `Cargo.toml` with a clean tree -- with
+a `[section]`-tracking TOML version parser so a dependency's
+`version` cannot shadow `[package]`. Generalized jutro's
+`cargo generate-lockfile` to `cargo update -p rustbase`
+(template canon forbids the former; it would trip
+`dep-age-check`). Updated CLAUDE.md "Commits and releases",
+"Semantic Versioning", "Release Notes", and the Skills table.
+
+### 2026-07-16 -- no local HTML-report command (only the cloud Artifact path)
+
+Surfaced from jutro's template feedback (2026-07-14). The
+template's only visual-document path was the cloud `Artifact`
+tool; operators who need a page to stay on the machine had no
+built-in option. **Fix:** shipped `.claude/commands/
+html-report.md` plus its single-source-of-truth design asset
+`docs/ai-agents/html-report-template.html`. The command copies
+the in-repo template, swaps palette + content, and opens a
+self-contained local file (all CSS/JS inlined, images as
+`data:` URIs, CSP-`<meta>`-enforced; fetched content treated
+as data and HTML-escaped; a `[a-z0-9-]+` slug guard; one
+`--fs-*` type scale; dual theming). Generalized jutro's two
+project-specific examples ("journal contents", "malina host")
+to generic "personal data / deploy hostnames and paths".
+
+### 2026-07-16 -- stub integration tests were unmarked replace-me scaffolding
+
+Surfaced from jutro's template feedback (2026-06-07). The
+`Hello from`/`verbose mode` assertions in
+`crates/rustbase/tests/integration_test.rs` are pinned to the
+stub binary's example output and must be rewritten the moment
+a real subcommand lands, but nothing said so. **Fix:** added a
+header comment marking those two tests as replace-me
+scaffolding and pointing to `cli_version_flag` /
+`cli_help_flag` (which assert only version/help and survive
+the first real command) as the model for new tests.
+
 ### 2026-07-15 -- dependency cooldown was post-resolution only (no build-host protection)
 
 Surfaced from clockdump's template feedback (2026-07-15).

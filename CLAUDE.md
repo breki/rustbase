@@ -319,11 +319,41 @@ unnecessary red step is low; the cost of skipping a
 real red step (and shipping a test that always
 passed) is high.
 
-## Commits
+## Commits and releases
 
 **All commits must go through the `/commit` skill.**
 Never use `git commit` directly. No "Co-Authored-By",
-no emoji.
+no emoji. (The sole exception is `/release`, which makes
+one direct bookkeeping commit for the version bump.)
+
+Committing and releasing are separate:
+
+- **`/commit`** is a save-point. It reviews, updates the
+  diary and the `CHANGELOG.md` `[Unreleased]` block, and
+  commits. It does **not** bump the version, touch
+  `Cargo.lock`, or run `cargo xtask validate` -- multiple
+  commits land between releases, and forcing each one to
+  make a SemVer decision turns the version field into
+  accounting rather than a description of what users run.
+  `/commit` never runs `cargo xtask validate`; run it
+  manually at your own shell when you want the full gate on a
+  work-in-progress.
+- **`/release`** is the sole version-bumper. It infers the
+  bump from the accumulated `[Unreleased]` entries
+  (`**BREAKING:**` or a non-empty `### Removed` -> major,
+  `### Added` -> minor, else patch; override available),
+  bumps `crates/rustbase/Cargo.toml`, promotes
+  `[Unreleased]` to a dated section, runs
+  `cargo xtask validate` as the **release gate**, commits
+  the bookkeeping, and creates an **annotated** tag
+  (`git tag -a vX.Y.Z`; a lightweight tag is invisible to
+  the deploy guard's `git describe --exact-match`).
+- **`cargo xtask deploy`** refuses to ship unless `HEAD`
+  is on a `vX.Y.Z` annotated tag matching
+  `crates/rustbase/Cargo.toml` and the working tree is
+  clean -- so "publish to production" is tied to "cut a
+  release" by the build, not by memory. Run `/release`
+  first.
 
 ## Definition of Done
 
@@ -385,7 +415,10 @@ Follow [Semantic Versioning 2.0.0](https://semver.org/):
 - **PATCH** -- bug fixes, documentation, internal refactors
 
 The version lives in `crates/rustbase/Cargo.toml` and is
-the **single source of truth**.
+the **single source of truth**. `/release` is the only thing
+that changes it; it computes the bump from the accumulated
+`[Unreleased]` CHANGELOG entries (see "Commits and
+releases").
 
 ## Release Notes
 
@@ -394,7 +427,11 @@ Maintain `CHANGELOG.md` using the
 format. Group changes under: **Added**, **Changed**,
 **Fixed**, **Removed**.
 
-Always keep an `[Unreleased]` section at the top.
+Always keep an `[Unreleased]` section at the top. `/commit`
+appends bullets there (marking breaking changes with a
+leading `**BREAKING:**`); `/release` promotes the whole
+block to a dated `## [X.Y.Z] - YYYY-MM-DD` section and opens
+a fresh empty `[Unreleased]` above it.
 
 ## Skills
 
@@ -403,7 +440,8 @@ Always keep an `[Unreleased]` section at the top.
 | `/check` | Fast compilation check (no tests) |
 | `/test` | Run tests with agent-friendly output |
 | `/validate` | Full quality pipeline with stepwise progress |
-| `/commit` | Commit with versioning, diary, and code review |
+| `/commit` | Save-point commit with diary, CHANGELOG, and code review (no version bump) |
+| `/release` | Cut a SemVer release: bump the version, promote `[Unreleased]`, validate, commit, and tag |
 | `/retrospect` | Workflow retrospective (Efficiency / Quality / Speed / Cleanup). Invoked automatically by `/commit`; also callable manually mid-session |
 | `/todo` | Capture a work item into `docs/todo.md` (no implementation) |
 | `/implement` | Plan + implement a captured item; writes `docs/issues/<slug>.md` |
@@ -411,6 +449,7 @@ Always keep an `[Unreleased]` section at the top.
 | `/simplify` | Review changed code for quality |
 | `/architect` | Project overview and architecture guide |
 | `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |
+| `/html-report` | Produce a self-contained local HTML report from the in-repo template (never a cloud Artifact) |
 | `/template-improve` | Log feedback for the rustbase template |
 | `/template-sync` | Sync upstream template changes |
 | `/template-backfeed` | Apply downstream feedback back into this template (template repo only) |
