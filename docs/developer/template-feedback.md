@@ -73,6 +73,26 @@ individual projects.
 
 ## Resolved
 
+### tf-2026-07-18-harden-template-sync-judge-tooling-by-consumer-m -- Harden /template-sync: judge tooling by consumer, measure divergence, adapt absent-machinery refs
+
+Surfaced from clockdump's template feedback (2026-07-18).
+During a v0.14 -> v0.17 sync, three gaps in
+`.claude/commands/template-sync.md` made the run harder than
+it should have been. First, incoming `xtask` tooling and
+command reworks were nearly skipped as "template-internal"
+even though they back commands derived projects run
+(`sync-candidates`/`feedback-add`); step 5 now judges tooling
+by its consumer and treats a command rework and its backing
+subcommand as coupled. Second, local divergence was
+eyeballed rather than measured; step 7 now runs
+`git diff <last-synced>:<file> HEAD:<file>` to classify
+clean-adopt vs genuine merge. Third, adaptation was limited
+to the crate-name rename; step 7 now greps applied files for
+project-absent machinery (e.g. `cargo xtask deploy` in a CLI
+that removed its deploy flow) and adapts or drops those
+references. clockdump applied all three locally before
+suggesting them upstream.
+
 ### tf-2026-07-16-dep-age-check-moved-to-first-validate-step -- dep-age-check moved to first validate step
 
 Surfaced from ledgerstone's template feedback (2026-07-16).

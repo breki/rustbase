@@ -85,6 +85,19 @@ this project.
      7), read their per-file diff
      (`git diff <last-synced>..template/main -- <file>`)
      rather than dumping the whole diff up front.
+   - **Judge new tooling / command reworks by their
+     consumer, not by "template-internal" appearance.** An
+     incoming `xtask` subcommand or slash-command rework is
+     *not* automatically inapplicable just because it looks
+     like template plumbing. Judge it by whether a command
+     *this* project actually runs consumes it: `sync-candidates`
+     and `feedback-add` back `/template-sync` and
+     `/template-improve` (commands every derived project runs),
+     so they apply; a subcommand used solely by the
+     template-repo-only `/template-backfeed` does not. Treat a
+     command rework and its backing `xtask` subcommand as
+     **coupled** -- apply or skip them together, never one
+     without the other.
    - **Cross-reference declared divergences.** Read
      `docs/developer/template-feedback.md` and parse
      its **Open divergences** section. For each
@@ -133,11 +146,22 @@ this project.
    - If the file is **unchanged in the project** since
      the template base: apply the template version
      directly via Edit or Write
-   - If the file has **local modifications**: read both
-     the template diff and the local file, then
-     intelligently merge the template changes while
-     preserving project customizations. Explain each
+   - If the file has **local modifications**: **measure the
+     divergence, don't eyeball it.** Run
+     `git diff <last-synced>:<file> HEAD:<file>` to see
+     exactly how the project's copy has drifted from the
+     template base since the last sync. An empty diff means
+     the file is a clean adopt (apply the template version
+     directly); a non-empty diff is a genuine merge -- read
+     both that local-drift diff and the incoming template
+     diff, then intelligently merge the template changes
+     while preserving project customizations, explaining each
      conflict or adaptation to the user.
+     **Windows note:** the `<rev>:<file>` colon form can fail
+     on shells that mangle the `:` separator (see step 9); if
+     it does, fall back to comparing the working-tree file
+     against the base with
+     `git diff <last-synced> -- <file>`.
    - If the file is **new in the template**: add it
    - If the file was **deleted in the template**: ask
      the user whether to remove it
@@ -145,6 +169,18 @@ this project.
      has renamed: detect the project's actual crate name
      from `Cargo.toml` and adapt template references
      accordingly
+   - **Adapt references to project-absent machinery, not
+     just the crate name.** A reworked template file may
+     mention commands, `xtask` subcommands, or services a
+     derived project has removed -- e.g. a CLI-only project
+     that deleted its deploy flow still receiving text that
+     references `cargo xtask deploy`, or a project that
+     dropped the web crate receiving `frontend` / `e2e`
+     references. After applying a file, grep the applied
+     text for such project-absent references and either adapt
+     them to the project's reality or drop them. Do not ship
+     instructions that point at machinery this project does
+     not have.
    - Use Edit to apply changes (never overwrite whole
      files blindly)
 

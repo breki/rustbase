@@ -15,7 +15,9 @@
 # Do not hand-edit; `cargo xtask backfeed-record` rewrites it.
 
 [clockdump]
-watermark = "2026-07-15"
+watermark = "2026-07-18"
+downstream-head = "f7905878f8b264fbcdd25f624ec5b90b0dae6ef3"
+last-run = "2026-07-18"
 
 [jutro]
 watermark = "2026-07-14"
