@@ -1,5 +1,6 @@
 mod audit;
 mod backfeed;
+mod changelog;
 mod check;
 mod clean_cache;
 mod clippy_cmd;
@@ -21,6 +22,7 @@ mod frontend_test;
 mod helpers;
 mod sync;
 mod test_cmd;
+mod todo;
 mod validate;
 
 use clap::{Parser, Subcommand};
@@ -167,6 +169,18 @@ enum XCommand {
         /// The `last-synced` SHA from `.template-sync.toml`
         last_synced: String,
     },
+    /// Mechanically edit `CHANGELOG.md` (used by `/commit`) --
+    /// insert a bullet under the right `[Unreleased]` subsection
+    Changelog {
+        #[command(subcommand)]
+        action: changelog::ChangelogAction,
+    },
+    /// Mechanically read/edit `docs/todo.md` (used by `/todo` and
+    /// `/implement`) -- list, add, or complete a captured item
+    Todo {
+        #[command(subcommand)]
+        action: todo::TodoAction,
+    },
 }
 
 fn main() {
@@ -235,6 +249,8 @@ fn main() {
         XCommand::SyncCandidates { last_synced } => {
             sync::sync_candidates(&last_synced)
         }
+        XCommand::Changelog { action } => changelog::changelog(action),
+        XCommand::Todo { action } => todo::todo(action),
     };
 
     if let Err(e) = result {

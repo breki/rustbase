@@ -73,6 +73,72 @@ individual projects.
 
 ## Resolved
 
+### tf-2026-07-24-implement-pre-launch-signal-for-undo-inverse-opt -- Implement pre-launch signal for undo/inverse/optimistic-concurrency
+
+Surfaced from jutro's template feedback (2026-07-23). The
+`/implement` Phase 3 pre-launch step lists signals that a diff
+is review-volatile (so pre-launching reviewers would waste the
+work), but it did not name the design shapes reviewers most
+often reshape. Added "introduces an undo / inverse /
+optimistic-concurrency path" to that signal list: those designs
+hinge on a backend contract an adversarial review routinely
+overturns -- an undo that looks right for the simple case but
+breaks the recurring / concurrent one -- so the diff gets
+reshaped after review and the heavy gates would otherwise run
+twice. Edit is in `.claude/commands/implement.md` step 5.
+
+### tf-2026-07-24-retrospect-findings-restructured-into-short-long -- Retrospect findings restructured into Short/Long/Fix
+
+Surfaced from jutro's template feedback (2026-07-23). The
+`/retrospect` report emitted a free-form description blob per
+finding, which was hard to skim and let awareness-only items
+("be aware of X") slip in without a concrete action. Restructured
+each finding into three explicit fields -- a one-line **Short**
+(skimmable claim), a **Long** (detail with turn/tool refs), and
+a concrete **Fix** (the specific edit/command/deletion) -- and
+made a concrete fix mandatory: a finding with no actionable fix
+is dropped during surfacing and never shown. Updated the Tagging,
+Presenting (example output), and Rules sections of
+`retrospect.md`; the template's existing four buckets were kept
+(jutro's extra "Architectural insights" bucket was not part of
+this entry).
+
+### tf-2026-07-24-mechanical-changelog-todo-xtask-commands -- Mechanical changelog + todo xtask commands
+
+Surfaced from jutro's template feedback (2026-07-23).
+`CHANGELOG.md` and `docs/todo.md` were hand-edited, hitting the
+documented "grep the `### ` headings first or you split a block"
+CHANGELOG footgun and forcing a full read of a large `todo.md`
+just to append one bullet or check a slug. Added
+`cargo xtask changelog add --kind <k> [--breaking] "text"`
+(finds the right `[Unreleased]` subsection, creating it in
+canonical order only if absent) and `cargo xtask todo
+<list|add|done>` (list prints `slug -- summary`; add appends
+with a slug-uniqueness check; done moves a bullet to the top of
+`## Done`, dated and issue-linked), both built on new shared
+`helpers.rs` markdown primitives (`wrap_markdown`, `rejoin`,
+`section_bounds`, `to_owned_lines`, `MARKDOWN_WIDTH`). Wired
+`/commit` (CHANGELOG step), `/todo`, and `/implement` (Done
+move) to call them. jutro's `changelog infer-bump`/`promote`
+subcommands were left out -- they overlap the template's
+`/release` design and were outside this feedback's scope.
+
+### tf-2026-07-24-promote-code-reviewers-to-first-class-read-only -- Promote code reviewers to first-class read-only agents
+
+Surfaced from jutro's template feedback (2026-07-23). The Red
+Team and Artisan reviewer prompts shipped as inline quote blocks
+inside `code-reviewers.md`, spawned as generic agents, so
+"do not modify files" was only an instruction and the persona
+lived tangled with the orchestration. Promoted each to a
+first-class subagent under `.claude/agents/` (`red-team.md`,
+`artisan.md`) with read-only tool sets -- `red-team` keeps
+`Bash` for its `git log` history pass; `artisan` has no shell
+and is read-only by construction. `code-reviewers.md` is now a
+small gating-rules doc, and `/commit` (step 3) and `/implement`
+(Phase 3 pre-launch) spawn the reviewers by `subagent_type`.
+jutro's project-specific `dogfooder`/`mobile-ux` agents were
+deliberately not backfed.
+
 ### tf-2026-07-18-harden-template-sync-judge-tooling-by-consumer-m -- Harden /template-sync: judge tooling by consumer, measure divergence, adapt absent-machinery refs
 
 Surfaced from clockdump's template feedback (2026-07-18).

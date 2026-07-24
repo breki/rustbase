@@ -253,18 +253,32 @@ fn boundary_levels(lines: &[&str]) -> Vec<Option<usize>> {
         .collect()
 }
 
-/// Split feedback markdown into entry blocks. An entry is a
-/// level-3 (`###`) header and every following line up to the
-/// next level-1/2/3 header. Level-2 section headers and the
-/// level-1 title are boundaries but not themselves entries.
-/// Headers inside fenced code blocks are ignored.
+/// Split feedback markdown into entry blocks. A block starts at
+/// either a level-3 (`###`) header -- the per-entry convention
+/// `feedback-add` emits -- or a **dated** level-2 (`##`) header,
+/// which is how older downstreams (jutro) date a whole section
+/// and list its entries as bullets beneath. A block runs up to
+/// the next level-1/2/3 header. The level-1 title and *undated*
+/// level-2 section headers (`## Resolved`, `## Open divergences`)
+/// are boundaries but never block starts. Headers inside fenced
+/// code blocks are ignored.
+///
+/// Tolerating both shapes is deliberate: backfeed is read-only
+/// on the downstream, so the reader must accept whatever format a
+/// project historically adopted rather than assume the canonical
+/// `###` one.
 fn entry_blocks(md: &str) -> Vec<String> {
     let lines: Vec<&str> = md.lines().collect();
     let boundary = boundary_levels(&lines);
+    let is_block_start = |i: usize| match boundary[i] {
+        Some(3) => true,
+        Some(2) => extract_iso_date(lines[i]).is_some(),
+        _ => false,
+    };
     let mut blocks = Vec::new();
     let mut i = 0;
     while i < lines.len() {
-        if boundary[i] == Some(3) {
+        if is_block_start(i) {
             let start = i;
             i += 1;
             while i < lines.len() && boundary[i].is_none() {
@@ -573,6 +587,46 @@ Body with no date.
 
 Body of older.
 ";
+
+    // A downstream that predates the per-entry `###` convention
+    // dates a whole `##` section and lists entries as bullets
+    // beneath it (jutro's format). Each dated `##` section is one
+    // block; the level-1 title and undated `##` sections are not.
+    const SAMPLE_L2: &str = "\
+# Template feedback
+
+## 2026-07-23
+
+- **First entry.** Body of first.
+- **Second entry.** Body of second.
+
+## 2026-07-14
+
+- **Older entry.** Body.
+
+## 2026-07-10
+
+- **Oldest entry.** Body.
+";
+
+    #[test]
+    fn entry_blocks_splits_on_dated_level_two_sections() {
+        let blocks = entry_blocks(SAMPLE_L2);
+        assert_eq!(blocks.len(), 3);
+        assert!(blocks[0].starts_with("## 2026-07-23"));
+        assert!(blocks[0].contains("First entry"));
+        assert!(blocks[0].contains("Second entry"));
+        assert!(blocks[1].starts_with("## 2026-07-14"));
+        assert!(blocks[2].starts_with("## 2026-07-10"));
+    }
+
+    #[test]
+    fn entries_in_scope_cuts_dated_level_two_by_watermark() {
+        let scoped = entries_in_scope(SAMPLE_L2, Some("2026-07-14"));
+        assert_eq!(scoped.len(), 2);
+        assert!(scoped[0].starts_with("## 2026-07-23"));
+        assert!(scoped[1].starts_with("## 2026-07-14"));
+    }
 
     #[test]
     fn entry_blocks_splits_on_level_three_only() {

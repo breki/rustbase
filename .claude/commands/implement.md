@@ -130,11 +130,17 @@ particular:
      links to changed files (path:line where
      useful), follow-ups.
 
-4. In `docs/todo.md`:
-   - Move the bullet from `## Pending` to `## Done`,
-     keeping the slug, with `(<today's date>)`
-     appended.
-   - Link the slug to `issues/<slug>.md`.
+4. In `docs/todo.md`, move the item to Done
+   mechanically (do not hand-edit the file):
+
+   ```
+   cargo xtask todo done <slug> --date <today's date>
+   ```
+
+   The command moves the bullet to the top of `## Done`
+   (newest first), stamps the date, and links the slug
+   to `issues/<slug>.md`. Pass `--summary "<text>"` to
+   override the pending summary for the Done entry.
 
 5. **Pre-launch code reviewers in the background**
    (optional optimisation). The next `/commit` runs
@@ -142,12 +148,13 @@ particular:
    diff this implementation produces. When the diff
    is *likely to stay stable* through user
    verification, you can spawn both agents now with
-   `run_in_background: true`, passing the
-   working-tree diff. Use the shared prompts in
-   `.claude/commands/code-reviewers.md` (the same file
-   `/commit` step 5 uses, so the pre-launch and the
-   commit-time review are identical). Note the agent IDs
-   in conversation context so `/commit` can reuse the
+   `run_in_background: true` -- `subagent_type: red-team`
+   and `subagent_type: artisan` (pass `artisan` the
+   captured diff; `red-team` reads it itself). Follow the
+   gating rules in `.claude/commands/code-reviewers.md`
+   (the same file `/commit` step 3 uses, so the pre-launch
+   and the commit-time review are identical). Note the agent
+   IDs in conversation context so `/commit` can reuse the
    results.
 
    **Skip the pre-launch** when:
@@ -156,12 +163,19 @@ particular:
    - User verification at step 6 is likely to
      invalidate the diff. Signals: the change
      introduces inference / heuristic logic, has
-     open clarifying questions, or involves user
-     data the agent hasn't seen. Stale pre-launched
-     findings are worse than no pre-launch -- they
-     describe code that no longer exists. When in
-     doubt, skip; `/commit` will spawn fresh
-     reviewers when it runs.
+     open clarifying questions, involves user data
+     the agent hasn't seen, or introduces an undo /
+     inverse / optimistic-concurrency path. That
+     last shape is review-volatile because it hinges
+     on a backend contract an adversarial review
+     routinely overturns -- an undo or inverse that
+     looks right for the simple case but breaks the
+     recurring / concurrent one, so the design gets
+     reshaped after review and the heavy gates would
+     run twice. Stale pre-launched findings are worse
+     than no pre-launch -- they describe code that no
+     longer exists. When in doubt, skip; `/commit`
+     will spawn fresh reviewers when it runs.
 
 6. Verify the change manually. For UI / API
    changes, exercise the feature in a browser (run

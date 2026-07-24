@@ -20,7 +20,9 @@ downstream-head = "f7905878f8b264fbcdd25f624ec5b90b0dae6ef3"
 last-run = "2026-07-18"
 
 [jutro]
-watermark = "2026-07-14"
+watermark = "2026-07-23"
+downstream-head = "ab709316f9002b5d711cd3c0d83e59166f4ffbd4"
+last-run = "2026-07-24"
 
 [ledgerstone]
 watermark = "2026-07-16"

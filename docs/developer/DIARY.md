@@ -5,7 +5,39 @@ reverse chronological order.
 
 ---
 
-### 2026-07-16
+### 2026-07-24
+
+- Backfed jutro template feedback (4 entries)
+
+    Applied four improvements surfaced by the `jutro`
+    downstream's template feedback. (1) Promoted the Red Team
+    and Artisan code reviewers to first-class read-only
+    subagents under `.claude/agents/` (spawned by
+    `subagent_type` from `/commit` and `/implement`), leaving
+    `code-reviewers.md` as a small gating-rules doc; `artisan`
+    has no shell and is read-only by construction, `red-team`
+    keeps `Bash` for its `git log` pass. (2) Added
+    `cargo xtask changelog add` and `cargo xtask todo`
+    (`list`/`add`/`done`) so `CHANGELOG.md` and `docs/todo.md`
+    are edited mechanically, plus shared `helpers.rs` markdown
+    primitives (`wrap_markdown`, `rejoin`, `section_bounds`,
+    `to_owned_lines`, `require_nonempty`, `MARKDOWN_WIDTH`);
+    wired `/commit`, `/todo`, and `/implement` to call them.
+    (3) Restructured `/retrospect` findings into Short / Long /
+    Fix with a concrete-fix-or-drop rule. (4) Added the
+    undo/inverse/optimistic-concurrency shape to `/implement`'s
+    review-volatile signal list.
+
+- Fixed backfeed-diff parser for `##`-dated feedback
+
+    `cargo xtask backfeed-diff` reported zero entries for
+    downstreams (like jutro) whose `template-feedback.md` dates
+    a whole `## <date>` section with bullet entries beneath,
+    rather than using `### ` per-entry headers: `entry_blocks`
+    only started a block on `###`. It now also starts on a
+    *dated* `##` section, keeping the canonical `###` layout and
+    undated `##` section headers working. This bug had silently
+    masked jutro's entire feedback backlog.
 
 - Backfed ledgerstone template feedback
 

@@ -1,11 +1,17 @@
 ---
 description: Capture an issue or idea into the TODO list (no implementation)
-allowed-tools: Read, Write, Edit, Grep
+allowed-tools: Bash(cargo xtask*), Read, Grep
 ---
 
 Collect an issue or idea into `docs/todo.md`. This
 command **only captures** -- it never implements. Use
 `/implement` to act on a captured item.
+
+The mechanical work -- slug-uniqueness check, bullet
+placement, listing, wrapping to 80 columns -- lives in
+`cargo xtask todo`, so this skill never hand-edits
+`docs/todo.md`. The skill owns the *judgment*: turning
+the user's words into a slug and a summary.
 
 ## Behaviour
 
@@ -13,14 +19,11 @@ command **only captures** -- it never implements. Use
   add the text as a new pending item with a generated
   slug.
 - **Without arguments** (just `/todo`): list the
-  current pending items (slug + first line) so the
-  user can see what is queued, then stop.
+  current pending items, then stop.
 
 ## Adding an item
 
-1. Read `docs/todo.md`.
-
-2. **Generate a slug** from the user's text:
+1. **Generate a slug** from the user's text:
    - Lowercase, ASCII only, words joined by `-`.
    - Drop filler words (`a`, `the`, `to`, `for`,
      `is`, `of`, `in`, `on`, `and`, `or`).
@@ -28,37 +31,38 @@ command **only captures** -- it never implements. Use
    - Should read as a topic, not a sentence:
      `search-bar-perf`, not
      `make-the-search-bar-faster`.
-   - If the slug collides with an existing pending or
-     done entry in `docs/todo.md`, append `-2`,
-     `-3`, etc.
 
-3. Append a bullet under `## Pending` in this exact
-   form:
+2. Add it mechanically:
 
    ```
-   - **<slug>** -- <one-line summary, <= 80 chars>
-     <optional extra lines, indented 2 spaces, wrapped
-     at 80>
+   cargo xtask todo add --slug <slug> \
+     --summary "<one-line summary, <= 80 chars>"
    ```
 
-   Keep the user's wording. Do not paraphrase or
+   Add `--body "<longer text>"` when the user gave
+   more than a one-liner (kept verbatim, wrapped by the
+   command). The command refuses a slug that already
+   exists (pending or done); if it errors on a
+   collision, append `-2` / `-3` to the slug and retry.
+   Keep the user's wording -- do not paraphrase or
    expand.
 
-4. Confirm: print the slug and the line that was
-   added. Mention `/implement <slug>` as the next
-   step. Do not start implementing.
+3. Confirm: print the slug the command reported. Mention
+   `/implement <slug>` as the next step. Do not start
+   implementing.
 
 ## Listing pending items
 
-When called with no arguments:
-
-- Read `docs/todo.md`.
-- Print each pending entry as `<slug> -- <summary>`,
-  one per line. Nothing else.
+When called with no arguments, run `cargo xtask todo
+list` and show its output (each line is
+`<slug> -- <summary>`). Nothing else.
 
 ## Rules
 
-- Never edit the `## Done` section from this command.
+- Never hand-edit `docs/todo.md`; go through
+  `cargo xtask todo`.
+- Never edit the `## Done` section from this command
+  (`todo done` is `/implement`'s finalise step).
 - Never create files in `docs/issues/` from this
   command -- that is `/implement`'s job.
 - Never run tests, builds, or git commands.

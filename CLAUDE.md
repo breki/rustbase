@@ -80,6 +80,8 @@ cargo xtask backfeed-diff <ds-path>      # downstream feedback since watermark
 cargo xtask backfeed-record <ds-path> --watermark <date>  # advance watermark
 cargo xtask feedback-add --section <s> --title <t>  # append feedback entry
 cargo xtask sync-candidates <last-synced>  # categorized sync delta, filtered
+cargo xtask changelog add --kind <k> [--breaking] "text"  # insert [Unreleased] bullet
+cargo xtask todo <list|add|done> ...       # mechanical docs/todo.md edits
 ```
 
 Never use raw `cargo test` or `cargo clippy` -- always

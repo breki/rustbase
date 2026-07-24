@@ -41,6 +41,14 @@ Walk the session (or the just-committed work) and
 collect findings in four buckets. Aim for 0-3
 findings per bucket; do not invent filler.
 
+**Every finding must name a concrete proposed
+fix** -- a specific edit, command, or deletion (see
+the **Fix** field under Tagging). A pure observation
+with no fix attached ("be aware of X", "this went
+fine") is not a finding: drop it, do not show it to
+the user. The retro lists only items the user can act
+on.
+
 1. **Efficiency** -- tool calls that wasted budget.
    Examples:
    - Reading the same file twice when the first read
@@ -112,6 +120,22 @@ For each finding, assign:
 - **ID:** `<N>-<slug>` (e.g. `1-redundant-reads`,
   `2-serial-agents`). Single digit per session; the
   N resets each retro.
+- **Short:** a one-line summary of the issue -- the
+  compressed label a reader skims (e.g. "read
+  `coverage.rs` twice"). The claim only: no rationale,
+  no fix.
+- **Long:** two or three sentences with the detail --
+  what happened, why it matters, and turn numbers or
+  tool names so the user can verify.
+- **Fix:** one line naming the concrete change
+  proposed -- the file to edit and what to
+  add/remove/merge, the command to run, the entry to
+  delete. State the destination explicitly (e.g.
+  "add a clause to `CLAUDE.md ## Build Commands`",
+  "delete `foo.md` from memory"). "Be aware of X" /
+  "consider Y" / "this went fine" are NOT fixes. **If
+  you cannot name a concrete fix, the finding is not
+  actionable -- omit it entirely; do not show it.**
 - **Tag:**
   - `[trivial]` if the fix is a single tool call
     right now (append a clause to a doc, add a
@@ -122,6 +146,14 @@ For each finding, assign:
 
 ## Presenting
 
+Every shown finding is presented as three lines --
+`Short:` (short description), `Long:` (longer
+description), and `Fix:` (proposed fix) -- under its
+`ID [tag]` header. Findings without a concrete fix
+were already dropped during surfacing, so they never
+appear here. A bucket with no actionable findings
+shows `(none)` -- do not pad it with observations.
+
 Output a short report like:
 
 ```
@@ -129,26 +161,38 @@ Workflow retrospective
 
 Efficiency:
   1-redundant-reads [trivial]
-    Read coverage.rs twice (turns 3 and 7). The
-    first read was still in context. Suggestion:
-    note already-read files before reading again.
+    Short: read `coverage.rs` twice.
+    Long: read coverage.rs at turns 3 and 7; the
+      first read was still in context, so the second
+      round-trip was wasted budget.
+    Fix: note already-read files before re-reading.
 
 Quality:
-  (none surfaced)
+  (none)
 
 Speed:
   2-serial-reviewers [propose]
-    Red Team and Artisan ran in one parallel
-    message in /commit, but the second iteration
-    of fixes ran serial cargo xtask validate then
-    fmt then validate. Could fold fmt into the
-    validate wrapper.
+    Short: fix iteration ran gates serially.
+    Long: Red Team and Artisan ran in parallel, but
+      the follow-up fixes ran validate/fmt/validate
+      one at a time (turns 8-11), roughly doubling the
+      wall time of that stretch.
+    Fix: add a clause to `CLAUDE.md ## Build Commands`
+      to fold fmt into the validate wrapper.
 
 Cleanup:
   3-stale-skill-ref [trivial]
-    web-dev skill still names playwright.config.js;
-    the file is playwright.config.ts. One-line fix.
+    Short: `web-dev` names a renamed config file.
+    Long: the web-dev skill still names
+      `playwright.config.js`; the file is
+      `playwright.config.ts`.
+    Fix: rename the reference in the web-dev skill.
 ```
+
+Every shown finding names a concrete edit / command /
+deletion in its `Fix:` line. An item whose only "fix"
+would be "be aware of X" has no concrete fix, so it is
+dropped during surfacing and never reaches this report.
 
 End the report with one of:
 
@@ -181,6 +225,12 @@ findings anywhere. The transcript is the record.
 - Be specific. "Could have been faster" is not a
   finding; "the two Agent calls in turn N had no
   dependency and could have run in one message" is.
+- Every shown finding carries all three lines --
+  `Short:`, `Long:`, and a concrete `Fix:` (a specific
+  edit, command, or deletion). If a finding has no
+  concrete fix -- it is pure awareness or a "went fine"
+  note -- omit it entirely. Never show the user an item
+  they cannot act on.
 - Cite turn numbers or tool names when possible so
   the user can verify.
 - Do not duplicate Red Team / Artisan findings.

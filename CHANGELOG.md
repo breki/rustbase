@@ -12,9 +12,21 @@ and this project adheres to
 
 ### Added
 
+- `cargo xtask changelog add` and `cargo xtask todo` (list/add/done) commands
+  that edit CHANGELOG.md and docs/todo.md mechanically, so `/commit`, `/todo`,
+  and `/implement` no longer hand-edit those files.
+
 ### Changed
 
+- Code reviewers (Red Team, Artisan) are now first-class read-only agents under
+  `.claude/agents/`, spawned by `subagent_type`; `/retrospect` findings gained
+  explicit Short/Long/Fix fields.
+
 ### Fixed
+
+- `cargo xtask backfeed-diff` now recognizes downstream feedback files that date
+  `##` section headers (not only `###` per-entry headers), which previously made
+  it report zero entries for such downstreams.
 
 ### Removed
 

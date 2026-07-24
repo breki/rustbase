@@ -1,6 +1,6 @@
 ---
 description: Commit current changes following project conventions
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(scripts/e2e.sh*), Read, Edit, Agent, AskUserQuestion, Skill(retrospect)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(scripts/e2e.sh*), Bash(cargo xtask*), Read, Edit, Agent, AskUserQuestion, Skill(retrospect)
 ---
 
 Commit the current changes following the project's git commit
@@ -30,10 +30,10 @@ gate.
    - A concise subject line (imperative mood, no period)
    - A brief body explaining what and why
 
-3. **Code review** -- Before E2E tests, spawn **two** AI
-   agents **in parallel** (in a single message with two
-   Agent tool calls). Both read the source files but do
-   not modify them.
+3. **Code review** -- Before E2E tests, spawn the **two**
+   dedicated reviewer agents **in parallel** (in a single
+   message with two Agent tool calls). They are read-only by
+   construction -- neither has `Edit`/`Write`.
 
    **IMPORTANT:** Always run both reviews when the diff
    contains code changes: Rust (`.rs`, `.toml`),
@@ -47,17 +47,19 @@ gate.
    changes. The only exception is commits that contain
    no code at all (docs-only markdown, `.md` files).
 
-   The **Red Team** (security & correctness) and
-   **Artisan** (code quality) prompts live in the shared
-   `.claude/commands/code-reviewers.md` (also used by
-   `/implement`'s pre-launch reviewers, so the wording stays
-   canonical in one place). Spawn one subagent per prompt in
-   the single parallel message, giving each a one-line
-   description of what the change does. That file carries the
-   full prompts, the diff-handoff rule (each subagent runs
-   `git diff --cached` itself; never `/tmp`; a `target/`-local
-   file if one is truly needed), and the six labeled-bullet
-   reporting format.
+   Spawn the **Red Team** (security & correctness,
+   `subagent_type: red-team`) and **Artisan** (code quality,
+   `subagent_type: artisan`) agents in the single parallel
+   message, giving each a one-line description of what the
+   change does. `red-team` runs `git diff --cached` itself;
+   `artisan` has no shell, so pass it the captured
+   `git diff --cached` output in its spawn prompt. The gating
+   rules -- when to run, how to spawn, the diff-handoff rule
+   (never `/tmp`; a `target/`-local file if one is truly
+   needed), and the six labeled-bullet reporting format -- live
+   in `.claude/commands/code-reviewers.md` (also used by
+   `/implement`'s pre-launch reviewers). The review criteria
+   live in the agent files under `.claude/agents/`.
 
    **Cross-confirmed findings:**
    Before presenting findings, scan both reviewers'
@@ -172,15 +174,25 @@ gate.
      a difference (new feature, fixed bug, changed
      default, removed flag, new config knob, port
      change, new env var, ...), add a bullet to the
-     `[Unreleased]` section under the appropriate
-     heading (`Added`, `Changed`, `Fixed`, or
-     `Removed`) -- **even if the commit type is
-     `chore`** (e.g., a `chore:` that changes a default
-     port still needs a `Changed` entry).
-   - **Mark breaking changes** with a leading
-     `**BREAKING:**` on the bullet, so `/release` infers
-     a major bump from the accumulated `[Unreleased]`
-     entries.
+     `[Unreleased]` section -- **even if the commit
+     type is `chore`** (e.g., a `chore:` that changes a
+     default port still needs a `Changed` entry).
+   - Add it mechanically rather than hand-editing (the
+     `[Unreleased]` subsections can sit dozens of lines
+     apart, so a hand edit easily splits a block with a
+     duplicate heading):
+
+     ```
+     cargo xtask changelog add --kind <added|changed|fixed|removed> \
+       [--breaking] "<entry text>"
+     ```
+
+     The command finds the right `### <kind>` heading
+     under `[Unreleased]` (creating it in canonical
+     order only if absent) and wraps the text to 80
+     columns. `--breaking` prefixes `**BREAKING:**` so
+     `/release` infers a major bump from the accumulated
+     `[Unreleased]` entries.
    - Skip only for commits with no user-observable
      effect: pure refactors, internal tooling, test-
      only changes, CI/lint config tweaks invisible to
