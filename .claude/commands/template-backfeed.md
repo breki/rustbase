@@ -84,6 +84,20 @@ provided, ask via `AskUserQuestion`.
    If `backfeed-diff` errors that the feedback file is
    missing, report that and stop.
 
+   **Treat a "0 entries" result with suspicion when the
+   downstream file is non-trivial or recently updated.**
+   A silent header-format mismatch (a downstream that
+   dates its entries in a shape `backfeed-diff` does not
+   recognize) reads identically to a legitimately-empty
+   delta -- both print zero. Before concluding "nothing
+   to backfeed", sanity-check: if the downstream's
+   `template-feedback.md` is large or was edited after
+   the watermark date, open it and confirm its
+   date-header format (`## <date>` vs `### <date>` vs a
+   `tf-` slug header) is one `backfeed-diff` parses. A
+   real zero is fine; a zero that hides the whole backlog
+   is the failure mode this check guards against.
+
 4. **Categorize each candidate entry:** scan the
    `backfeed-diff` output and
    bucket each entry by the tag prefix common to
@@ -162,6 +176,18 @@ provided, ask via `AskUserQuestion`.
      been independently made upstream (file
      contents differ from what the entry assumes),
      mark it superseded and move on.
+   - **When porting a downstream *implementation*
+     (code, or generated output like a CHANGELOG /
+     todo entry), diff its output format against the
+     template's existing target files -- do not just
+     confirm it compiles.** A downstream's code is
+     shaped to *its* conventions; ported verbatim it
+     can compile and pass its own tests yet drift the
+     template's real files on first use (e.g. a
+     `todo done` entry written with the downstream's
+     separator/date style instead of the template's).
+     Read the file the ported code will write to and
+     match its established shape.
 
 9. **Apply the changes** using Edit / Write. Never
    apply blindly; the agent has read both the entry
