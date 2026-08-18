@@ -23,7 +23,7 @@ use std::process::Command;
 
 use serde_json::Value;
 
-use crate::helpers::run_cargo_capture;
+use crate::helpers::{is_missing_subcommand, run_cargo_capture};
 
 /// Parsed `cargo audit --json` result.
 #[derive(Debug, PartialEq, Eq)]
@@ -104,7 +104,7 @@ fn run_cargo_audit() -> Result<CargoAudit, String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     if stdout.trim().is_empty() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.contains("no such") || stderr.contains("not installed") {
+        if is_missing_subcommand(&stderr) {
             return Err("cargo-audit is not installed -- \
                  install with: cargo install cargo-audit"
                 .into());

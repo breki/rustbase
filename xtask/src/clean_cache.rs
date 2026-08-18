@@ -30,9 +30,14 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::helpers::{
-    dir_size, fmt_bytes, is_reparse_or_symlink_meta, workspace_root,
-};
+use crate::helpers::{dir_size, fmt_bytes, workspace_root};
+// Used only in the `#[cfg(windows)]` branch of
+// `is_reparse_or_symlink_path`. Gating the import to match its
+// single use site keeps `warnings = "deny"` from turning it
+// into an unused-import *compile error* on Linux and macOS
+// (the two platforms a Windows-only developer never builds).
+#[cfg(windows)]
+use crate::helpers::is_reparse_or_symlink_meta;
 
 /// Incremental cache subdirectories under `target/`.
 const INCREMENTAL_DIRS: &[&str] =
@@ -191,6 +196,15 @@ fn delete_entry(
 /// used by deletion. Avoids the extra
 /// `symlink_metadata` call on Unix by short-circuiting
 /// on `file_type.is_symlink()` directly.
+///
+/// The `Result` is load-bearing on Windows, where
+/// `symlink_metadata` can fail, and one signature has to serve
+/// both platforms because the caller propagates the error with
+/// `?`. Off Windows the body never returns `Err`, which trips
+/// `clippy::unnecessary_wraps` -- correct about the non-Windows
+/// build, wrong about the function -- so the lint is scoped off
+/// there and left active on Windows.
+#[cfg_attr(not(windows), allow(clippy::unnecessary_wraps))]
 fn is_reparse_or_symlink_path(
     path: &Path,
     file_type: std::fs::FileType,

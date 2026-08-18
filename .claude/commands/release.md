@@ -1,6 +1,6 @@
 ---
 description: Cut a SemVer release from accumulated [Unreleased] CHANGELOG entries
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo update:*), Read, Edit, AskUserQuestion
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo xtask audit*), Bash(cargo clippy:*), Bash(rustup target add:*), Bash(cargo update:*), Read, Edit, AskUserQuestion
 ---
 
 Cut a SemVer release: bump the version, promote the
@@ -93,9 +93,41 @@ the deploy task refuses to ship a `HEAD` that is not on a
      (Subheadings with no bullets can be left in place;
      they signal the categories for future entries.)
 
-8. **Validate** -- run `cargo xtask validate`. This is
-   the release gate. If it fails, abort and tell the
-   user what failed; do not commit a broken release.
+8. **Run the release gates** -- three checks, all before
+   the tag, because the tag is what `cargo xtask deploy`
+   trusts:
+   - **`cargo xtask validate`** -- the umbrella gate. If it
+     fails, abort and tell the user what failed; do not
+     commit a broken release.
+   - **Cross-platform clippy.** `validate` lints only the
+     platform you are on, but the template claims Windows,
+     Linux and macOS as first-class. A release cut after a
+     green local `validate` can still fail CI on the two
+     platforms nobody checked -- so lint another target
+     before the tag, not after:
+     ```bash
+     rustup target add x86_64-unknown-linux-gnu
+     cargo clippy --workspace --all-targets \
+       --target x86_64-unknown-linux-gnu -- -D warnings
+     ```
+     It must be **clippy**, not `cargo check --target`:
+     `check --target` compiles and runs no lints, so it
+     proves the build and says nothing about the lints
+     (exactly how a cross-target check that had just run can
+     still miss a lint failure). No linker for the other
+     platform is needed -- only the cfg analysis and lints
+     run -- so this costs seconds on a warm target dir. Add
+     `aarch64-apple-darwin` too if you develop off macOS and
+     ship to it.
+   - **Standalone `cargo xtask audit`.** `validate`'s audit
+     step degrades to a *warning* on a missing tool or an
+     unreachable advisory DB, so "Validate OK" does **not**
+     by itself mean the dependencies were audited. The
+     standalone command errors on both, and a release is
+     exactly when that answer must be trustworthy -- an
+     advisory is almost always filed against already-shipped
+     code, so no changed-deps check (`dep-age-check`
+     included) can catch it. Abort if it fails.
 
 9. **Stage and commit:**
    - Stage `crates/rustbase/Cargo.toml`, `Cargo.lock`,

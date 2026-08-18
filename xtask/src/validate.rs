@@ -3,6 +3,7 @@ use std::time::Instant;
 use crate::audit;
 use crate::clippy_cmd;
 use crate::coverage;
+use crate::deny;
 use crate::dep_age;
 use crate::dupes;
 use crate::fmt_cmd;
@@ -13,8 +14,104 @@ use crate::frontend_test;
 use crate::helpers::{elapsed_str, step_output};
 use crate::test_cmd;
 
-/// Total number of validation steps.
-const TOTAL_STEPS: usize = 11;
+/// A single validation step: a display name, the standalone
+/// xtask subcommand that runs it alone (the `iterate with`
+/// hint), and the closure that performs it.
+struct Step {
+    name: &'static str,
+    cmd: &'static str,
+    run: Box<dyn FnOnce() -> Result<String, String>>,
+}
+
+/// Build the ordered list of validation steps.
+///
+/// Both the per-step index and the total derive from this one
+/// list, so inserting a gate is a single line here -- there is
+/// no hand-maintained `TOTAL_STEPS` counter and no per-call
+/// index to renumber (and silently get wrong, printing
+/// `[5/9]` twice). A unit test resolves every `cmd` through the
+/// real CLI, so a renamed subcommand cannot leave the
+/// `iterate with` hint pointing at a command that no longer
+/// exists.
+///
+/// Ordering rationale: Dep-age first, then cheap static gates,
+/// then the expensive dynamic gates -- see [`validate`].
+fn steps(check: bool) -> Vec<Step> {
+    fn boxed(
+        f: impl FnOnce() -> Result<String, String> + 'static,
+    ) -> Box<dyn FnOnce() -> Result<String, String>> {
+        Box::new(f)
+    }
+    vec![
+        // Fail fast on a within-cooldown dependency before
+        // compiling it.
+        Step {
+            name: "Dep-age",
+            cmd: "dep-age-check",
+            run: boxed(run_dep_age),
+        },
+        // Cheap static gates first ...
+        Step {
+            name: "Fmt",
+            cmd: "fmt",
+            run: boxed(move || run_fmt(check)),
+        },
+        Step {
+            name: "Duplication",
+            cmd: "dupes",
+            run: boxed(run_duplication),
+        },
+        Step {
+            name: "Clippy",
+            cmd: "clippy",
+            run: boxed(run_clippy),
+        },
+        // Offline supply-chain gate -- see Audit (network) at the
+        // end. Placed among the static gates because it compiles
+        // nothing and reaches no network.
+        Step {
+            name: "Deny",
+            cmd: "deny",
+            run: boxed(run_deny),
+        },
+        Step {
+            name: "Frontend fmt",
+            cmd: "frontend-fmt",
+            run: boxed(move || run_frontend_fmt(check)),
+        },
+        Step {
+            name: "Frontend check",
+            cmd: "frontend-check",
+            run: boxed(run_frontend_check),
+        },
+        Step {
+            name: "Frontend dupes",
+            cmd: "frontend-dupes",
+            run: boxed(run_frontend_dupes),
+        },
+        // ... expensive dynamic gates last.
+        Step {
+            name: "Frontend test",
+            cmd: "frontend-test",
+            run: boxed(run_frontend_test),
+        },
+        Step {
+            name: "Test (xtask only)",
+            cmd: "test",
+            run: boxed(run_test),
+        },
+        Step {
+            name: "Coverage",
+            cmd: "coverage",
+            run: boxed(run_coverage),
+        },
+        Step {
+            name: "Audit",
+            cmd: "audit",
+            run: boxed(run_audit),
+        },
+    ]
+}
 
 /// Run all validation steps with concise stepwise
 /// output.
@@ -49,24 +146,11 @@ const TOTAL_STEPS: usize = 11;
 pub fn validate(check: bool) -> Result<(), String> {
     let overall_start = Instant::now();
 
-    // Fail fast on a within-cooldown dependency before compiling it.
-    run_step(1, "Dep-age", "dep-age-check", run_dep_age)?;
-
-    // Cheap static gates first ...
-    run_step(2, "Fmt", "fmt", || run_fmt(check))?;
-    run_step(3, "Duplication", "dupes", run_duplication)?;
-    run_step(4, "Clippy", "clippy", run_clippy)?;
-    run_step(5, "Frontend fmt", "frontend-fmt", || {
-        run_frontend_fmt(check)
-    })?;
-    run_step(6, "Frontend check", "frontend-check", run_frontend_check)?;
-    run_step(7, "Frontend dupes", "frontend-dupes", run_frontend_dupes)?;
-
-    // ... expensive dynamic gates last.
-    run_step(8, "Frontend test", "frontend-test", run_frontend_test)?;
-    run_step(9, "Test (xtask only)", "test", run_test)?;
-    run_step(10, "Coverage", "coverage", run_coverage)?;
-    run_step(11, "Audit", "audit", run_audit)?;
+    let steps = steps(check);
+    let total = steps.len();
+    for (i, step) in steps.into_iter().enumerate() {
+        run_step(i + 1, total, step.name, step.cmd, step.run)?;
+    }
 
     println!("Validate OK ({})", elapsed_str(overall_start));
     Ok(())
@@ -74,11 +158,19 @@ pub fn validate(check: bool) -> Result<(), String> {
 
 /// Run a single step, printing the `[N/T]` result line.
 ///
-/// `cmd` is the standalone xtask subcommand for this step;
-/// on failure it is printed as an iterate-with hint so the
-/// user re-runs the single failing gate (seconds) instead
-/// of the whole pipeline (minutes).
-fn run_step<F>(step: usize, name: &str, cmd: &str, f: F) -> Result<(), String>
+/// `total` is the step count (`steps().len()`), so the `[N/T]`
+/// denominator tracks the list automatically. `cmd` is the
+/// standalone xtask subcommand for this step; on failure it is
+/// printed as an iterate-with hint so the user re-runs the
+/// single failing gate (seconds) instead of the whole pipeline
+/// (minutes).
+fn run_step<F>(
+    step: usize,
+    total: usize,
+    name: &str,
+    cmd: &str,
+    f: F,
+) -> Result<(), String>
 where
     F: FnOnce() -> Result<String, String>,
 {
@@ -91,11 +183,11 @@ where
             } else {
                 format!("{detail}, {time}")
             };
-            step_output(step, TOTAL_STEPS, name, "OK", &full);
+            step_output(step, total, name, "OK", &full);
             Ok(())
         }
         Err(e) => {
-            step_output(step, TOTAL_STEPS, name, "FAILED", "");
+            step_output(step, total, name, "FAILED", "");
             eprintln!("  -> iterate with: cargo xtask {cmd}");
             Err(e)
         }
@@ -155,6 +247,16 @@ fn run_audit() -> Result<String, String> {
         eprintln!("  warning: {w}");
     }
     Ok(r.detail)
+}
+
+/// Deny step -- offline licence/bans/sources gate. Unlike Audit
+/// it needs no network, so it runs here (and on every push in CI)
+/// rather than only at release. A missing `cargo-deny` is a hard
+/// error, not a degrade-to-warning: with no network to be down, a
+/// machine that cannot run it is simply missing a tool.
+fn run_deny() -> Result<String, String> {
+    deny::deny()?;
+    Ok(String::new())
 }
 
 /// Dep-age step -- cooldown-checks only dependencies added or
@@ -230,5 +332,39 @@ fn format_frontend(
         None if r.skipped => Ok(format!("skipped: {}", r.detail)),
         None => Ok(r.detail),
         Some(err) => Err(err),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::*;
+
+    #[test]
+    fn every_step_hint_resolves_to_a_subcommand() {
+        // Each Step's `cmd` is printed as the
+        // `iterate with: cargo xtask <cmd>` hint on failure.
+        // Resolve every one through the actual CLI so a renamed
+        // or removed subcommand cannot leave the hint pointing at
+        // a command that does not exist. `check` does not affect
+        // the cmd strings, so either value exercises them all.
+        let cli = crate::Cli::command();
+        for step in steps(false) {
+            assert!(
+                cli.find_subcommand(step.cmd).is_some(),
+                "validate step {:?} hints `cargo xtask {}`, \
+                 which is not a real subcommand",
+                step.name,
+                step.cmd,
+            );
+        }
+    }
+
+    #[test]
+    fn steps_list_is_non_empty() {
+        // The `[N/total]` denominator derives from this length;
+        // an empty list would silently disable the whole gate.
+        assert!(!steps(false).is_empty());
     }
 }

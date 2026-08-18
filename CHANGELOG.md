@@ -15,18 +15,38 @@ and this project adheres to
 - `cargo xtask changelog add` and `cargo xtask todo` (list/add/done) commands
   that edit CHANGELOG.md and docs/todo.md mechanically, so `/commit`, `/todo`,
   and `/implement` no longer hand-edit those files.
+- cargo xtask deny -- an offline cargo-deny licence/bans/sources gate configured
+  by deny.toml, wired into validate and every-push CI (a missing cargo-deny is a
+  hard error, not a warning).
+- GitHub Actions workflows: ci.yml (test across Windows/Linux/macOS, fmt,
+  clippy, deny, frontend gates) and release.yml (coverage, duplication and a
+  standalone audit on tag).
+- /template-improve sweep mode: run with no argument to mine commits since the
+  feedback file was last touched for template feedback, instead of only logging
+  what the operator volunteers.
 
 ### Changed
 
 - Code reviewers (Red Team, Artisan) are now first-class read-only agents under
   `.claude/agents/`, spawned by `subagent_type`; `/retrospect` findings gained
   explicit Short/Long/Fix fields.
+- cargo xtask check now compiles all targets (--all-targets), so a broken test
+  call site (an altered signature) is caught by check rather than surfacing
+  later under test.
+- C:/Program Files/Git/release now runs a cross-platform clippy and a standalone
+  cargo xtask audit before the tag, because validate lints only the current
+  platform and its audit degrades to a warning.
 
 ### Fixed
 
 - `cargo xtask backfeed-diff` now recognizes downstream feedback files that date
   `##` section headers (not only `###` per-entry headers), which previously made
   it report zero entries for such downstreams.
+- xtask now compiles on Linux and macOS: clean_cache.rs had an import used only
+  under cfg(windows) (an unused-import error under warnings = deny) and tripped
+  unnecessary_wraps off Windows.
+- cargo xtask validate derives its [N/M] step numbers from a single step table,
+  so adding a gate can no longer print a wrong or duplicated step count.
 
 ### Removed
 

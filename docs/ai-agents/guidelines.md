@@ -111,7 +111,7 @@ Check preconditions at the start:
 
 | Command | Description |
 |---------|-------------|
-| `/check` | Fast compilation check |
+| `/check` | Type-check all targets (runs no tests) |
 | `/test` | Run tests with minimal output |
 | `/validate` | Full quality pipeline |
 | `/commit` | Git commit with project conventions |

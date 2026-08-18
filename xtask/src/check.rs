@@ -1,5 +1,22 @@
 use crate::helpers::run_cargo_capture;
 
+/// Arguments for the `cargo check` invocation.
+///
+/// `--all-targets` is load-bearing: without it cargo compiles
+/// only the library and binary targets and skips tests, benches,
+/// and examples -- so a change that breaks a test call site (an
+/// altered function signature, say) still prints `Check OK` here
+/// and only fails later under `cargo xtask test`. Compiling every
+/// target is what makes `check` an honest type-check. A unit test
+/// pins the flag so a later "make check faster" edit cannot
+/// quietly drop it.
+const CHECK_ARGS: &[&str] = &[
+    "check",
+    "--workspace",
+    "--all-targets",
+    "--message-format=short",
+];
+
 /// Maximum number of error lines to display.
 const MAX_ERROR_LINES: usize = 10;
 
@@ -14,8 +31,7 @@ const STDERR_TAIL_LINES: usize = 20;
 /// Prints `Check OK` on success or `FAILED: N error(s)`
 /// with the first few error lines on failure.
 pub fn check() -> Result<(), String> {
-    let output =
-        run_cargo_capture(&["check", "--workspace", "--message-format=short"])?;
+    let output = run_cargo_capture(CHECK_ARGS)?;
 
     if output.status.success() {
         println!("Check OK");
@@ -98,6 +114,17 @@ error[E0308]: mismatched types
 warning: unused variable: `x`
  --> xtask/src/main.rs:10:9
 error: aborting due to 2 previous errors";
+
+    #[test]
+    fn check_args_compile_all_targets() {
+        // `--all-targets` must stay in the argv: it is what makes
+        // `check` compile tests/benches/examples and so catch a
+        // broken call site that the lib+bin-only default misses.
+        assert!(
+            CHECK_ARGS.contains(&"--all-targets"),
+            "check must compile all targets, not just lib+bin"
+        );
+    }
 
     #[test]
     fn extracts_only_error_bracket_lines() {

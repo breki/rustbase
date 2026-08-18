@@ -73,6 +73,169 @@ individual projects.
 
 ## Resolved
 
+### tf-2026-08-18-template-improve-only-logged-what-it-was-told -- template-improve only logged what it was told
+
+Surfaced from bombyx's template feedback (2026-08-18).
+`/template-improve` only recorded what the operator happened to
+remember, losing observations already written into commits during a
+session. Ported bombyx's sweep mode: with no argument the command
+establishes a boundary from the feedback file's last commit, reads
+four sources (commit bodies, the diary, the two review backlogs, and
+thin-message diffs) plus the uncommitted working tree, applies three
+judgement questions to each candidate, dedups against the file and
+both backlogs, and offers the survivors for multi-select.
+
+### tf-2026-08-18-validate-audit-could-pass-without-auditing -- validate audit could pass without auditing
+
+Surfaced from bombyx's template feedback (2026-08-18). `validate`'s
+audit step degrades to a *warning* on a missing tool or an unreachable
+advisory DB, so "Validate OK" does not by itself mean the dependencies
+were audited -- and a release is exactly when that answer must be
+trustworthy, since an advisory is almost always filed against
+already-shipped code that no changed-deps check can catch. Added a
+standalone `cargo xtask audit` step to `/release` (and the release CI
+job), which errors on both conditions, and noted the overstatement in
+CLAUDE.md.
+
+### tf-2026-08-18-nothing-checked-a-second-platform-before-release -- nothing checked a second platform before release
+
+Surfaced from bombyx's template feedback (2026-08-18). Both `validate`
+and `/release` ran only on the developer's platform, though the
+template claims Windows, Linux and macOS as first-class -- so a green
+local release could fail CI on the two platforms nobody checked. Added
+a cross-platform clippy step to `/release` before the tag
+(`cargo clippy --all-targets --target x86_64-unknown-linux-gnu --
+-D warnings`, which must be clippy rather than `check --target`, since
+`check --target` runs no lints), backed by the 3-platform CI matrix.
+
+### tf-2026-08-18-template-shipped-no-ci-or-release-workflow -- template shipped no CI or release workflow
+
+Surfaced from bombyx's template feedback (2026-08-18). The template
+shipped no `.github` directory, so quality gates ran only where a
+developer ran them and nothing checked a second platform before a
+release. Added `ci.yml` (3-platform `test`, `fmt`, `clippy`, offline
+`deny`, and a `frontend` job) and a minimal `release.yml` running the
+release-only gates (coverage, duplication, standalone audit) on tag,
+with least-privilege permissions and the cargo-deny/cargo-audit tools
+installed uncached because each *is* its gate. bombyx's cross-platform
+binary build/publish matrix and self-update idempotency guard were not
+ported -- the template deploys rather than shipping installable
+binaries.
+
+### tf-2026-08-18-no-licence-gate-or-attribution-tooling -- no licence gate or attribution tooling
+
+Surfaced from bombyx's template feedback (2026-08-18). The template
+guarded the dependency tree for vulnerabilities and freshness but not
+licences. Added `deny.toml` and a `cargo xtask deny` command -- an
+offline cargo-deny licences/bans/sources gate wired into `validate`
+and every-push CI, with an allow-list matched to the tree
+(`unused-allowed-license = "deny"`), no `publish = false` exemption
+(so `xtask` gained a `license` field), and a `helpers::
+is_missing_subcommand` check so a missing cargo-deny is a hard error,
+never a silent pass. bombyx's binary-archive attribution generator
+(`licenses`) was deliberately not ported: the template distributes via
+`cargo xtask deploy`, not published archives.
+
+### tf-2026-08-18-commit-could-mark-breaking-before-checking-for-a -- commit could mark breaking before checking for a release
+
+Surfaced from bombyx's template feedback (2026-08-13). `commit.md`'s
+CHANGELOG step explained how to add `--breaking` / `--kind removed`
+but not when not to; on a pre-1.0 scaffold, filing never-shipped
+behaviour as breaking would force a spurious first release to 1.0.0.
+Added a guard: confirm the behaviour actually shipped (`git tag`, or
+`git log <tag>..HEAD` / the `[Unreleased]` block) before feeding the
+major-bump inference, guard both `--breaking` and `--kind removed`,
+and treat correcting an existing `[Unreleased]` bullet as the one
+sanctioned hand edit.
+
+### tf-2026-08-18-deferred-findings-backlog-had-no-closing-convent -- deferred-findings backlog had no closing convention
+
+Surfaced from bombyx's template feedback (2026-08-18). `commit.md`
+defined how to mint a deferred-findings backlog ID but said nothing
+about retiring an entry, so annotate-vs-delete both looked correct and
+a delete stranded a greppable ID cited from another doc. Added the
+closing half of the convention: a fixed item leaves no entry (its
+resolution is in the commit message), a standing decision moves into a
+comment beside the code it governs with its revisit condition, and
+`grep -rn "<id>" .` runs before any deletion.
+
+### tf-2026-08-18-agent-editing-and-measurement-rules-worth-shippi -- agent editing and measurement rules worth shipping
+
+Surfaced from bombyx's template feedback (2026-08-18). Two agent
+habits each cost real time downstream: a slurp-mode regex
+(`perl -0pi`) over YAML or code adjacent to a `///` doc comment lands
+in the wrong block and fails silently, and an environment claim
+written from expectation rather than measurement is a plausible wrong
+answer nothing catches. Added both rules to CLAUDE.md Collaboration --
+use `Edit` not a slurp regex near indentation/doc-comments, and print
+the variable before claiming what it holds.
+
+### tf-2026-08-18-powershell-expands-dollar-vars-in-xtask-prose-ar -- PowerShell expands dollar vars in xtask prose args
+
+Surfaced from bombyx's template feedback (2026-08-13). On Windows a
+double-quoted PowerShell string passed to `changelog add`,
+`feedback-add --title` or `todo add` is expanded before the program
+sees it: a known variable like `$HOME` leaks a real home path into a
+tracked file, and an unknown one like `$XDG_CONFIG_HOME` silently
+becomes the empty string. Added an Environment Constraints note
+prescribing a single-quoted PowerShell string (or a Bash heredoc) for
+`$`-bearing xtask prose, covering both failure modes.
+
+### tf-2026-08-18-cli-only-prune-stranded-skills-json-and-command -- CLI-only prune stranded skills.json and command prose
+
+Surfaced from bombyx's template feedback (2026-08-18 and 2026-08-10).
+Pruning to a CLI-only project removed crates and xtask code but left
+`.claude/skills.json` registering a `web-dev` skill (dangling path
+plus a false Axum/Svelte/Vite description) and frontend assumptions
+woven through `.claude/commands/*.md` prose -- neither of which the
+compiler can find. Added a `skills.json` edit step and a prose-sweep
+step (grep `.claude/`, `CLAUDE.md`, `llms.txt`, `README.md`, `docs/`
+for the removed names) to the CLI-prune checklist.
+
+### tf-2026-08-18-clean-cache-did-not-compile-off-windows -- clean_cache did not compile off Windows
+
+Surfaced from bombyx's template feedback (2026-08-18).
+`clean_cache.rs` imported `is_reparse_or_symlink_meta` unconditionally
+but used it only in the `#[cfg(windows)]` branch, so under the
+workspace `warnings = "deny"` it was an unused-import *compile error*
+on Linux and macOS; and off Windows the wrapper never returns `Err`,
+tripping `clippy::unnecessary_wraps`. Gated the import to its use site
+and added a `cfg_attr(not(windows))` allow, verified with a
+cross-target `cargo clippy --target x86_64-unknown-linux-gnu` run.
+
+### tf-2026-08-18-validate-step-numbers-were-hand-maintained-liter -- validate step numbers were hand-maintained literals
+
+Surfaced from bombyx's template feedback (2026-08-18). `validate.rs`
+held a `TOTAL_STEPS` const and passed each step its own literal index,
+so adding a gate meant renumbering every later call and a miss printed
+`[5/9]` twice with no test failing. Replaced with a `Step` table whose
+per-step index and total both derive from one list, and added a test
+resolving every step's iterate-with `cmd` through the real CLI so a
+renamed subcommand cannot leave the hint pointing at a command that no
+longer exists.
+
+### tf-2026-08-18-crate-manifest-readme-pointed-outside-the-packag -- crate manifest readme pointed outside the package
+
+Surfaced from bombyx's template feedback (2026-08-10). The primary
+crate's `readme = "../../README.md"` points outside the package root,
+so `cargo package` ships a manifest referencing a file not in the
+crate; clippy's `cargo` lint group also requires `package.readme`, so
+the key cannot simply be dropped -- the trap only surfaces at publish
+time, which the local validate gate never reaches. Shipped a short
+`crates/rustbase/README.md` and repointed the key to it.
+
+### tf-2026-08-18-xtask-check-compiled-only-lib-and-bin-targets -- xtask check compiled only lib and bin targets
+
+Surfaced from bombyx's template feedback (2026-08-13). `cargo xtask
+check` ran `cargo check --workspace` with no `--all-targets`, so it
+compiled only the library and binary and skipped tests/benches/
+examples -- a broken test call site (an altered signature) still
+printed `Check OK` and only failed later under `cargo xtask test`.
+Added `--all-targets` in a named `CHECK_ARGS` const with a unit test
+pinning the flag, and corrected the now-misleading "fast / no tests"
+wording across CLAUDE.md, llms.txt, README.md, the clap help, and the
+`/check` command doc.
+
 ### tf-2026-07-24-implement-pre-launch-signal-for-undo-inverse-opt -- Implement pre-launch signal for undo/inverse/optimistic-concurrency
 
 Surfaced from jutro's template feedback (2026-07-23). The

@@ -17,7 +17,7 @@ Frontend: Svelte 5 + Vite in `frontend/` (optional).
 
 ```
 cargo xtask validate          # fmt + clippy + tests + coverage + dupes + frontend
-cargo xtask check             # fast compile-only check (no tests)
+cargo xtask check             # type-check all targets (compiles tests, runs none)
 cargo xtask test [filter]     # tests only
 cargo xtask clippy            # lint only
 cargo xtask fmt               # format code
@@ -39,7 +39,7 @@ Slash commands shipped under `.claude/commands/`:
 
 | Skill | Purpose |
 |-------|---------|
-| `/check` | Fast compile-only check (`cargo xtask check`) |
+| `/check` | Type-check all targets (`cargo xtask check`) |
 | `/test` | Run tests with agent-friendly output |
 | `/validate` | Full quality pipeline with stepwise progress |
 | `/commit` | Commit with versioning, diary, CHANGELOG, parallel Red Team + Artisan code reviews (with cross-confirmed-finding detection), and a post-commit workflow retrospective |

@@ -37,6 +37,18 @@ plan, decisions, and outcome.
   planning doc up front. Sourced from kozmotic's
   template feedback (2026-05-04).
 
+- **coverage-excluded-lines** -- report lines excluded by the coverage regex
+  From bombyx template feedback (2026-08-18,
+  tf-2026-08-18-coverage-gate-cannot-see-src-bin). cargo xtask coverage prints
+  e.g. "98.0%" but never says the IGNORE_REGEX hid all of src/bin/ from the
+  denominator, so the number reads as a statement about the whole project. Have
+  coverage report what was excluded -- a file/line count beside the percentage,
+  e.g. "98.0% of 2,102 lines; 640 lines in 1 file excluded". Design decision:
+  computing the excluded count needs either a second llvm-cov pass without the
+  ignore filter (doubles the slowest gate) or counting the excluded files
+  line-by-line; MODULE_THRESHOLD has the same blind spot. Not a mechanical port
+  -- bombyx only suggested it, never implemented it.
+
 ## Done
 
 - [**template-tooling-cli-redesign**](issues/template-tooling-cli-redesign.md)

@@ -1,0 +1,72 @@
+# cargo-deny configuration -- the licence gate.
+#
+# `cargo xtask deny` runs the `licenses`, `bans` and `sources`
+# checks. All three are **offline**: they read `Cargo.lock` and the
+# crate metadata already on disk and reach no network. That is why
+# this gate can run on every push, where `audit` cannot -- an
+# advisory published overnight would otherwise fail a pull request
+# that changed nothing.
+#
+# Advisories stay with `cargo xtask audit` (cargo-audit) rather than
+# moving here. One tool per job, and that one is already wired into
+# `validate`.
+
+[licenses]
+# Every licence this project will distribute under. An expression is
+# satisfied if *any* allowed identifier in it matches, so a crate
+# offering `MIT OR Apache-2.0 OR LGPL-2.1-or-later` resolves to MIT
+# and LGPL is deliberately absent: a crate that is LGPL-only fails
+# this gate rather than silently shipping.
+#
+# Derived projects: this list must match your dependency tree
+# exactly (`unused-allowed-license = "deny"` below). Run
+# `cargo xtask deny` after adding a dependency and add or remove
+# identifiers as it reports them.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    # A permissive BSD variant; present in the web stack's transitive
+    # tree (a crate offering `MIT AND BSD-3-Clause` needs both).
+    "BSD-3-Clause",
+    # rustix / linux-raw-sys. The exception only *loosens*
+    # Apache-2.0, removing the requirement to carry the licence into
+    # derived binaries.
+    "Apache-2.0 WITH LLVM-exception",
+    # unicode-ident, as `(MIT OR Apache-2.0) AND Unicode-3.0` -- the
+    # `AND` means these terms apply on top, so this is required
+    # rather than optional. Permissive, attribution only.
+    "Unicode-3.0",
+    # A public-domain dedication with an MIT fallback.
+    "Unlicense",
+]
+
+# No `private.ignore`. It reads as "skip our own unpublished crates"
+# and is not: cargo-deny skips *any* package whose manifest carries
+# `publish = false`, wherever it lives -- so a GPL-only path
+# dependency outside the workspace would pass with that line and
+# fail without it. A forked or vendored crate is the most likely way
+# an unvetted licence enters a tree, so it is the last thing to
+# exempt. The workspace members carry a `license` field instead.
+
+# The allow-list is meant to be exactly the tree, so an entry that
+# matches nothing is a stale entry.
+unused-allowed-license = "deny"
+confidence-threshold = 0.9
+
+[bans]
+# Two copies of one crate is not an error here -- a transitive tree
+# this size routinely has them, and forbidding it would fail for
+# reasons unrelated to this project. Reported so the growth is
+# visible.
+multiple-versions = "warn"
+# Nothing is banned outright yet. This section exists so the day
+# something should be, there is a place for it.
+deny = []
+
+[sources]
+# Only crates.io. A git dependency would bypass the cooldown gate
+# (`dep-age-check` reads registry publish dates) and the checksum in
+# `Cargo.lock`, so it has to be a deliberate act.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

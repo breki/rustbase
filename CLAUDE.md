@@ -43,7 +43,15 @@ broken if reversed:
 3. **Edit `build.ps1`** -- prune the `frontend`
    and `e2e` subcommands plus any helpers they
    call.
-4. **Delete the now-unreferenced files**:
+4. **Edit `.claude/skills.json`** -- remove the
+   `web-dev` skill entry (and any other
+   frontend/E2E skill). It is *data*, not code, so
+   no build step objects to a dangling `path` or a
+   description advertising Axum/Svelte/Vite/
+   Playwright the project no longer has -- and a
+   stale skill description is exactly the kind of
+   prose the compiler cannot find.
+5. **Delete the now-unreferenced files**:
    - `crates/rustbase-web/`
    - `frontend/`
    - `e2e/`, `playwright.config.*`, `.ports`,
@@ -51,7 +59,20 @@ broken if reversed:
    - `scripts/e2e.sh`
    - `.mise.toml` (toolchain pin for Node /
      Playwright)
-5. **Run `cargo xtask validate`** to confirm the
+6. **Sweep the surviving prose.** Removing a
+   subsystem strands its instructions in
+   markdown, and nothing type-checks prose: grep
+   `.claude/` and `CLAUDE.md` (and `llms.txt`,
+   `README.md`, `docs/`) for the removed names
+   (`frontend`, `e2e`, `playwright`, `svelte`,
+   `vite`, `npm`) and confirm every surviving hit
+   is deliberate. In practice the frontend
+   assumptions in `.claude/commands/*.md` --
+   `commit.md`'s `scripts/e2e.sh` step,
+   `implement.md`'s frontend gates, `update-deps.md`'s
+   whole npm phase -- all read as still-present until
+   this sweep catches them.
+7. **Run `cargo xtask validate`** to confirm the
    workspace still builds and tests pass.
 
 `/template-sync` will then default these paths to
@@ -61,7 +82,7 @@ locally.
 ## Build Commands
 
 ```bash
-cargo xtask check             # fast compile check
+cargo xtask check             # type-check all targets (compiles tests, runs none)
 cargo xtask validate          # fmt + clippy + tests + coverage
 cargo xtask test [filter]     # tests only
 cargo xtask test --ignored    # run #[ignore]-tagged tests
@@ -70,6 +91,7 @@ cargo xtask coverage          # coverage only (>=90%)
 cargo xtask fmt               # format code
 cargo xtask dupes             # code duplication check
 cargo xtask audit             # security-advisory audit (RUSTSEC + npm)
+cargo xtask deny              # offline licence/bans/sources gate (cargo-deny)
 cargo xtask dep-age <eco> <pkg> [ver]  # one package's publish age
 cargo xtask dep-age <eco> <pkg> --latest-aged  # newest ver past cooldown
 cargo xtask dep-age-check     # cooldown-gate changed deps (vs HEAD)
@@ -235,6 +257,32 @@ shape:
   (`xtask`) for scripting." Replace with this project's
   actual constraints, or leave empty if none.
 
+**PowerShell expands `$` inside double quotes -- use single
+quotes for xtask prose.** This template targets Windows as a
+first-class platform, and several `cargo xtask` commands take
+prose as an argument (`changelog add`, `feedback-add --title`,
+`todo add`). On Windows those arguments are usually typed into
+a *double-quoted* PowerShell string, which PowerShell expands
+before the program ever sees it -- and the expansion is
+invisible in the diff you are about to commit, so the rule has
+to be known in advance rather than learned from the symptom.
+The two failure modes differ, and the quieter one is worse:
+
+- A variable PowerShell *knows* (`$HOME`) expands to a path, so
+  a real home directory lands in a tracked file (a privacy
+  leak).
+- One it does *not* know (`$XDG_CONFIG_HOME`) expands to the
+  **empty string silently**, leaving plausible-looking but
+  wrong text behind.
+
+So text containing `$` that is passed to an xtask command must
+use a **single-quoted** PowerShell string (`'...$FOO...'`) or a
+Bash heredoc. Backslash does not escape `$` in PowerShell;
+backtick does, which is not the reflex a Unix-trained author
+has. "Avoid `$HOME`" is not enough -- every *undefined*
+variable (the majority of POSIX-path mentions on Windows) is
+bitten too.
+
 ## Collaboration
 
 - **Write plainly.** One idea per sentence; lead with the
@@ -260,6 +308,29 @@ shape:
   problem statement (save those for the option
   descriptions). It states *what the decision means*, not
   *how it is implemented*.
+- **Edit with `Edit`, not a slurp-mode regex, for YAML and
+  anything next to a doc comment.** A whole-file
+  `perl -0pi -e 's/.../.../'` has no idea which block it
+  landed in. Two shapes are reliably dangerous. Indentation
+  -carrying formats (YAML, TOML tables): a wrong-block match
+  still parses, so it fails *silently* -- a substitution
+  aimed at one workflow job splices into another and only
+  surfaces steps later. And anything adjacent to a `///`
+  block: inserting before an item reassigns the comment above
+  it to the new item, so a function ends up documented as
+  doing the opposite of what it does, with both rustdoc
+  passes clean. `sed`/`perl` remain fine for flat text and
+  one-line substitutions; reach for `Edit` the moment
+  indentation or a doc comment is in play.
+- **Print the variable before claiming what it holds.** A
+  claim about what an environment variable, a file, or a
+  platform actually contains has to arrive with the command
+  that read it -- `echo $HOME`, `cat /sys/class/dmi/id/sys_vendor`,
+  `gh repo view --json visibility`. The failure mode is a
+  *plausible* wrong answer, not an error: "this platform does
+  not expose X" is the easiest kind of statement to invent,
+  nothing fails when it is wrong, and it gets written into
+  several files and believed. Measure, then state.
 
 ## Coding Standards
 
@@ -349,11 +420,16 @@ Committing and releasing are separate:
   (`**BREAKING:**` or a non-empty `### Removed` -> major,
   `### Added` -> minor, else patch; override available),
   bumps `crates/rustbase/Cargo.toml`, promotes
-  `[Unreleased]` to a dated section, runs
-  `cargo xtask validate` as the **release gate**, commits
-  the bookkeeping, and creates an **annotated** tag
-  (`git tag -a vX.Y.Z`; a lightweight tag is invisible to
-  the deploy guard's `git describe --exact-match`).
+  `[Unreleased]` to a dated section, runs the **release
+  gates** (`cargo xtask validate`, plus a **cross-platform
+  clippy** on another target and a **standalone `cargo xtask
+  audit`** -- because `validate` lints only the current
+  platform and its audit step degrades to a *warning* when
+  the advisory DB is unreachable, so "Validate OK" alone
+  guarantees neither), commits the bookkeeping, and creates
+  an **annotated** tag (`git tag -a vX.Y.Z`; a lightweight
+  tag is invisible to the deploy guard's `git
+  describe --exact-match`).
 - **`cargo xtask deploy`** refuses to ship unless `HEAD`
   is on a `vX.Y.Z` annotated tag matching
   `crates/rustbase/Cargo.toml` and the working tree is
@@ -393,10 +469,17 @@ just when the code compiles:
 7. **Frontend type check** (svelte-check)
 8. **Frontend duplication** (jscpd, threshold 6%)
 9. **Frontend unit tests** (vitest)
-10. **Security audit** (RUSTSEC + npm; `cargo xtask audit`) --
+10. **Licence gate** (`cargo xtask deny`; requires
+    cargo-deny) -- offline licence/bans/sources check via
+    cargo-deny over `deny.toml`. A disallowed licence, a
+    banned crate, or a non-crates.io source fails it. Unlike
+    the audit it needs no network, so a **missing cargo-deny
+    is a hard error, not a warning** -- install it with
+    `cargo install --locked cargo-deny`
+11. **Security audit** (RUSTSEC + npm; `cargo xtask audit`) --
     a positive vulnerability fails; an unreachable advisory
     DB degrades to a warning
-11. **Dependency cooldown** (`cargo xtask dep-age-check`) --
+12. **Dependency cooldown** (`cargo xtask dep-age-check`) --
     fails when a dependency added or bumped since `HEAD` was
     published within the 14-day window; unchanged lockfiles
     make it a no-op
@@ -446,7 +529,7 @@ a fresh empty `[Unreleased]` above it.
 
 | Skill | Purpose |
 |-------|---------|
-| `/check` | Fast compilation check (no tests) |
+| `/check` | Type-check all targets (compiles tests, runs none) |
 | `/test` | Run tests with agent-friendly output |
 | `/validate` | Full quality pipeline with stepwise progress |
 | `/commit` | Save-point commit with diary, CHANGELOG, and code review (no version bump) |
@@ -749,8 +832,23 @@ for the frontend; CLI binaries can use `env!("CARGO_PKG_VERSION")`).
 
 ## Supply-chain hygiene
 
-Four `cargo xtask` commands guard the dependency tree:
+Five `cargo xtask` commands guard the dependency tree:
 
+- **`cargo xtask deny`** runs `cargo deny check licenses bans
+  sources` over `Cargo.lock` and the on-disk crate metadata,
+  configured by `deny.toml` at the workspace root. It is
+  **offline** -- it reaches no network -- which is what lets it
+  run on every push in CI as well as in `validate`, where the
+  advisory `audit` cannot. A disallowed licence, a banned crate,
+  or a non-crates.io source fails it. Because there is no network
+  to be down, a **missing `cargo-deny` is a hard error**, not a
+  degrade-to-warning like `audit` (`cargo install --locked
+  cargo-deny`). The allow-list in `deny.toml` is meant to match
+  the tree exactly (`unused-allowed-license = "deny"`), so after
+  adding a dependency, run `cargo xtask deny` and adjust the
+  list as it reports. Note that `deny` does **not** exempt
+  `publish = false` crates, so every workspace member carries a
+  `license` field.
 - **`cargo xtask audit`** runs `cargo audit` (RUSTSEC) over
   `Cargo.lock` and `npm audit` over the frontend, failing on
   any vulnerability (advisory *warnings* -- unsound /

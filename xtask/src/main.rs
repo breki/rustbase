@@ -5,6 +5,7 @@ mod check;
 mod clean_cache;
 mod clippy_cmd;
 mod coverage;
+mod deny;
 mod dep_age;
 mod deploy;
 mod deploy_config;
@@ -36,7 +37,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum XCommand {
-    /// Fast compilation check (no tests)
+    /// Type-check all targets (compiles tests, runs none)
     Check,
     /// Run clippy (deny warnings)
     Clippy,
@@ -70,6 +71,9 @@ enum XCommand {
     /// Security-advisory audit (RUSTSEC + npm); requires
     /// cargo-audit
     Audit,
+    /// Licence, bans and sources gate (offline); requires
+    /// cargo-deny
+    Deny,
     /// Report a dependency version's age and flag it if
     /// within the publish cooldown (on-demand; requires curl)
     DepAge {
@@ -203,6 +207,7 @@ fn main() {
         XCommand::Coverage => coverage::coverage(),
         XCommand::Dupes => dupes::dupes(),
         XCommand::Audit => audit::audit(),
+        XCommand::Deny => deny::deny(),
         XCommand::DepAge {
             ecosystem,
             package,

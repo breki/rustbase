@@ -149,6 +149,25 @@ gate.
    either backlog, tell the user a full-codebase review
    is warranted.
 
+   **Closing a backlog item.** The opening convention
+   above is silent about what happens to an entry when
+   someone acts on it, and two contradictory habits both
+   look correct under that silence -- annotate the entry
+   as resolved, or delete it. The rule:
+   - A **fixed** item leaves no entry -- its resolution
+     is in the commit message, exactly as a fixed finding
+     never gets logged in the first place.
+   - A **standing decision** ("keep this, and here is the
+     condition that would change it") does not belong in
+     a *deferred* backlog at all: move it into a comment
+     beside the code it governs, carrying its revisit
+     condition, and delete the backlog entry.
+   - **Before deleting any entry, run `grep -rn "<id>" .`**
+     The IDs are greppable *by design* so other documents
+     (a `docs/issues/*.md`, another commit) can point at
+     them -- which means a delete can strand a pointer.
+     Grep first, and update or remove every cite you find.
+
 4. **Update development diary** (for significant changes):
    - Read `docs/developer/DIARY.md` to see format and
      recent entries
@@ -193,6 +212,25 @@ gate.
      columns. `--breaking` prefixes `**BREAKING:**` so
      `/release` infers a major bump from the accumulated
      `[Unreleased]` entries.
+   - **Confirm the behaviour shipped before feeding the
+     major-bump inference.** `--breaking` *and*
+     `--kind removed` both make `/release` infer a major
+     bump, so a change that removes or breaks behaviour
+     which **never shipped in a release** would force a
+     spurious major bump to protect users who never had
+     it. This bites hardest pre-1.0 (every fresh scaffold):
+     check `git tag` -- no tags means nothing has ever
+     been released -- and, when tags exist,
+     `git log <latest-tag>..HEAD` or the `[Unreleased]`
+     block, since behaviour introduced since the last
+     release never shipped either. When it never shipped,
+     do not mark it breaking and do not file it under
+     `### Removed`; instead **correct the existing
+     `[Unreleased]` bullets** that describe the old
+     design. That correction is the one sanctioned hand
+     edit of `[Unreleased]` (the `changelog` command only
+     appends) -- after it, re-check for a split subsection
+     or a duplicated `### <kind>` heading.
    - Skip only for commits with no user-observable
      effect: pure refactors, internal tooling, test-
      only changes, CI/lint config tweaks invisible to

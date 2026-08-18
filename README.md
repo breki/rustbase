@@ -48,7 +48,7 @@ integration and quality gates.
     coverage failures include uncovered-line ranges
     per failing module)
   - `cargo xtask test [filter]`, `clippy`, `fmt`,
-    `check` (fast compile-only)
+    `check` (type-check all targets)
   - `cargo xtask coverage` (90% workspace floor, 85%
     per module; structured failure reporting via
     `CoverageFailure` enum)

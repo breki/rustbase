@@ -5,6 +5,47 @@ reverse chronological order.
 
 ---
 
+### 2026-08-18
+
+- Backfed bombyx template feedback (first-run full history)
+
+    First-run full-history backfeed from the `bombyx`
+    downstream (21 entries evaluated; watermark recorded at
+    `2026-08-18` in `backfeed-ledger.toml`). Fifteen entries
+    applied and logged to the Resolved section of
+    `template-feedback.md`. New tooling: `cargo xtask deny` --
+    an offline cargo-deny licence/bans/sources gate
+    (`deny.rs` + `deny.toml`) wired into `validate` (as a new
+    step in the step table) and every-push CI, with a shared
+    `helpers::is_missing_subcommand` now used by both `deny`
+    and `audit`; `xtask` gained a `license` field so the gate
+    (which does not exempt `publish = false`) passes. Fixes:
+    `cargo xtask check` now compiles all targets
+    (`--all-targets`, so a broken test call site is caught by
+    `check`); `clean_cache.rs` now compiles off Windows (the
+    `is_reparse_or_symlink_meta` import was gated to its
+    `cfg(windows)` use site and `unnecessary_wraps` scoped
+    off there, verified with a cross-target linux clippy);
+    and `validate.rs` was refactored from literal step numbers
+    to a `Step` table whose index and total derive from one
+    list, with a test resolving each step's `iterate with`
+    hint through the real CLI. Infra: added `.github/workflows/
+    ci.yml` (3-platform test, fmt, clippy, deny, frontend) and
+    `release.yml` (coverage, duplication and a standalone audit
+    on tag). Command/doc hardening: `/template-improve` gained
+    a commit-sweep mode; `/release` runs cross-platform clippy
+    and a standalone audit before the tag; `/commit` gained a
+    backlog closing convention and a pre-1.0 breaking-change
+    guard; and CLAUDE.md picked up the CLI-prune `skills.json`/
+    prose-sweep steps, the PowerShell `$`-expansion note, and
+    the agent editing/measurement rules. bombyx's self-update
+    idempotency guard, TOML-error entry, binary-release matrix,
+    and attribution generator were declined as not applicable
+    to this template's deploy-based distribution; its `todo`
+    redesign was declined as conflicting with the template's
+    deliberate current design; and its coverage-excluded-lines
+    suggestion was captured as a `docs/todo.md` item.
+
 ### 2026-07-24
 
 - Backfed jutro template feedback (4 entries)

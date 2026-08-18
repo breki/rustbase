@@ -1,0 +1,160 @@
+name: CI
+
+# Read-only for every job. None of them needs to write, and the
+# deny job compiles and runs a freshly installed third-party binary
+# -- not somewhere to leave an ambient write token.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Tests run on all three platforms the template claims as
+  # first-class: a suite that only ran on Linux would never
+  # exercise the Windows/macOS path handling and process spawning
+  # that xtask and any real CLI depend on.
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      # `cargo xtask test`, not `cargo test`: CLAUDE.md requires
+      # every invocation to go through xtask, so CI runs the same
+      # command a developer does and cannot drift from it.
+      - name: Test
+        run: cargo xtask test
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup show active-toolchain || rustup toolchain install
+      # The read-only form. `cargo xtask fmt` rewrites files in
+      # place, which in CI would report success on a tree it had
+      # just fixed.
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-clippy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-clippy-
+      - name: Clippy
+        run: cargo xtask clippy
+
+  # The licence, bans and sources gate.
+  #
+  # In every-push CI, unlike `audit`, because it is **offline**: it
+  # reads `Cargo.lock` and the metadata already on disk and reaches
+  # no network. An advisory published overnight can fail a pull
+  # request that changed nothing; a licence cannot change under you
+  # that way, so this belongs on every push and `audit` does not.
+  deny:
+    name: Licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup show active-toolchain || rustup toolchain install
+
+      # **No `~/.cargo` cache in this job.** cargo-deny is the tool
+      # the gate consists of, and cargo trusts an already-extracted
+      # `registry/src/<crate>` tree with only a `.cargo-ok` marker,
+      # re-verifying no checksum -- so compiling it from a restored
+      # cache would let a poisoned entry produce a binary that
+      # reports `Deny OK` for anything, and `restore-keys` would
+      # make a stale default-branch entry reachable from any PR run.
+      # Only `target` is cached, which the gate never reads.
+      - uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-deny-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-deny-target-
+
+      - name: Install cargo-deny
+        run: |
+          cargo install --locked --force cargo-deny@0.20.2
+          cargo deny --version
+
+      # Its own step, so the download is visibly *not* part of the
+      # gate. `--locked` verifies each checksum against Cargo.lock
+      # on the way in; the gate then reads only what landed.
+      - name: Fetch dependencies
+        run: cargo fetch --locked
+
+      - name: Licences, bans and sources
+        run: cargo xtask deny
+
+  # Frontend gates. This job assumes a `frontend/` directory; a
+  # project pruned to CLI-only (see "Workspace Crates" in
+  # CLAUDE.md) deletes this job along with the frontend itself.
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # `npm ci` from **inside** `frontend/`, not
+      # `npm --prefix frontend ci` from the repo root: the latter
+      # resolves relative specifiers against the caller's cwd (see
+      # the `file:`-dependency trap in CLAUDE.md).
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # xtask's frontend detection is cwd-relative, so run these
+      # from the repo root (not from `frontend/`).
+      - name: Frontend format
+        run: cargo xtask frontend-fmt --check
+      - name: Frontend type check
+        run: cargo xtask frontend-check
+      - name: Frontend duplication
+        run: cargo xtask frontend-dupes
+      - name: Frontend unit tests
+        run: cargo xtask frontend-test
