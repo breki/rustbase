@@ -1,8 +1,7 @@
 use crate::helpers::run_cargo_capture;
-use crate::validate::Step;
+use crate::step::Step;
 
-/// Clippy argument list, shared between standalone and
-/// check modes.
+/// Arguments of the workspace pass.
 const CLIPPY_ARGS: &[&str] = &[
     "clippy",
     "--workspace",
@@ -14,6 +13,10 @@ const CLIPPY_ARGS: &[&str] = &[
 
 /// Maximum number of warning lines to display.
 const MAX_WARNING_LINES: usize = 10;
+
+/// Warning lines the `validate` step shows, fewer than the
+/// standalone command because they sit among other steps.
+const STEP_WARNING_LINES: usize = 5;
 
 /// Run clippy with concise output.
 ///
@@ -49,7 +52,7 @@ pub fn step() -> Step {
         match r.error {
             None => Ok(String::new()),
             Some(err) => {
-                for line in r.items.iter().take(5) {
+                for line in r.items.iter().take(STEP_WARNING_LINES) {
                     eprintln!("  {line}");
                 }
                 Err(err)
@@ -58,7 +61,7 @@ pub fn step() -> Step {
     })
 }
 
-/// Result from a clippy run, for use by validate.
+/// Result from a clippy run, for this module's `step()`.
 pub struct ClippyResult {
     /// The warning/error lines (empty on success).
     pub items: Vec<String>,
@@ -87,7 +90,7 @@ pub fn clippy_check() -> Result<ClippyResult, String> {
     }
     let meta: serde_json::Value = serde_json::from_slice(&meta.stdout)
         .map_err(|e| format!("failed to parse cargo metadata: {e}"))?;
-    for set in feature_sets(&xtask_features(&meta)) {
+    for set in feature_sets(&xtask_features(&meta)?) {
         let mut args = vec!["clippy", "-p", "xtask", "--all-targets"];
         args.extend(set.iter().map(String::as_str));
         args.extend(["--", "-D", "warnings"]);
@@ -126,19 +129,27 @@ fn run_clippy(args: &[&str], error: &str) -> Result<ClippyResult, String> {
 /// The `xtask` package's optional features, sorted, from
 /// `cargo metadata` output. `default` is a list of the others,
 /// not a feature of its own.
-fn xtask_features(meta: &serde_json::Value) -> Vec<String> {
-    let mut features: Vec<String> = meta["packages"]
+///
+/// # Errors
+///
+/// Returns an error when the metadata holds no `xtask` package,
+/// so the feature passes cannot be skipped silently.
+fn xtask_features(meta: &serde_json::Value) -> Result<Vec<String>, String> {
+    let xtask = meta["packages"]
         .as_array()
         .into_iter()
         .flatten()
-        .filter(|p| p["name"] == "xtask")
-        .filter_map(|p| p["features"].as_object())
+        .find(|p| p["name"] == "xtask")
+        .ok_or("cargo metadata lists no `xtask` package")?;
+    let mut features: Vec<String> = xtask["features"]
+        .as_object()
+        .into_iter()
         .flat_map(serde_json::Map::keys)
         .filter(|k| *k != "default")
         .cloned()
         .collect();
     features.sort();
-    features
+    Ok(features)
 }
 
 /// The cargo arguments for each feature pass: all off, then
@@ -256,7 +267,7 @@ error: aborting due to 1 previous error";
                 "deploy": [],
             } },
         ] });
-        assert_eq!(xtask_features(&meta), vec!["deploy", "frontend"]);
+        assert_eq!(xtask_features(&meta).unwrap(), vec!["deploy", "frontend"]);
     }
 
     #[test]
@@ -264,7 +275,20 @@ error: aborting due to 1 previous error";
         let meta = serde_json::json!({ "packages": [
             { "name": "xtask", "features": {} },
         ] });
-        assert!(xtask_features(&meta).is_empty());
+        assert_eq!(xtask_features(&meta).unwrap(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn xtask_features_fails_without_an_xtask_package() {
+        // An empty list here would skip every feature pass while
+        // Clippy still reported OK.
+        let meta = serde_json::json!({ "packages": [
+            { "name": "rustbase", "features": {} },
+        ] });
+        let err = xtask_features(&meta).unwrap_err();
+        assert!(err.contains("xtask"), "{err}");
+        let err = xtask_features(&serde_json::json!({})).unwrap_err();
+        assert!(err.contains("xtask"), "{err}");
     }
 
     #[test]

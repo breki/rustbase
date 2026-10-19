@@ -18,6 +18,50 @@ work.
 
 ---
 
+### fr-2026-10-19-validate-order-rationale-copies
+
+**Category:** Duplication (one rule, four homes)
+
+Why `validate` runs its steps in their order is written four times:
+the `validate()` doc in `xtask/src/validate.rs`, the comments in
+`steps()` (which defer to it), the ordering paragraph after the
+Definition of Done list in `CLAUDE.md`, and per gate in each
+`step()` doc (Dep-age's network behaviour in
+`xtask/src/dep_age_gate.rs`). They had drifted: the `validate()`
+doc said Dep-age "never blocks", which is false under CI. That
+clause was fixed in place for issue #5. Consolidation is left to
+its own commit: state the order once, on `steps()`, cut the
+`validate()` doc to what it does, and leave each gate's network
+behaviour to its own `step()` doc.
+
+### fr-2026-10-19-history-comments-in-xtask
+
+**Category:** Comments (history and round-local IDs)
+
+Several xtask comments narrate history or cite review IDs that no
+backlog holds, so a reader has nothing to follow: `feedback.rs`
+("`/template-improve` used to hand-edit the feedback file"),
+`sync.rs` (the module doc's "already SHA-delta based, but ..."),
+`audit.rs` ("this is the RT-1 fix"), `coverage.rs` ("(RT-2 /
+AQ-2)", "(RT-3)") and `deny.rs` ("that shape let the distinction
+live in a string comparison"). Restate each as the present-tense
+reason and drop the round-local IDs. These predate issue #5,
+whose review found them.
+
+### fr-2026-10-19-gates-print-inside-validate
+
+**Category:** Output (behaviour; outside stage 3's lane)
+
+Two `validate` steps print their own output between the `[N/M]`
+lines: Deny's `step()` calls `deny()`, which prints `Deny OK
+(licenses, bans, sources)`, and Duplication streams
+`code-dupes`'s statistics. Every other step returns its detail
+silently. Both predate issue #5, whose review found the Deny case.
+Have Deny's step call a non-printing check, as the other gates
+do. `code-dupes` streams because it misdetects sources when its
+output is piped (see `dupes_check`), so that one needs its own
+decision.
+
 ### fr-2026-10-19-issue-grants-for-review
 
 **Category:** Procedure (`allowed-tools`)

@@ -3,14 +3,14 @@
 //! clean. `validate` runs it as its Doc step.
 
 use crate::helpers::{pair_with_locations, run_cargo_capture_env};
-use crate::validate::Step;
+use crate::step::Step;
 
 /// Maximum number of diagnostic lines to display.
 const MAX_DIAGNOSTIC_LINES: usize = 10;
 
 /// Lines of stderr shown when a pass fails with no located
-/// diagnostic. No larger than what `validate` prints (5), so the
-/// cause -- the last line -- is never cut off.
+/// diagnostic. The `validate` step prints this many lines too, so
+/// the cause -- the last line -- is never cut off.
 const STDERR_TAIL_LINES: usize = 5;
 
 /// Cargo's progress verbs, which say nothing about a failure.
@@ -85,9 +85,7 @@ pub fn step() -> Step {
     Step::new("Doc", "doc", || match doc_check()? {
         None => Ok(String::new()),
         Some(failure) => {
-            // Keep this at least STDERR_TAIL_LINES, or the
-            // fallback's last line -- the cause -- is cut off.
-            for line in failure.items.iter().take(5) {
+            for line in failure.items.iter().take(STDERR_TAIL_LINES) {
                 eprintln!("  {line}");
             }
             Err(failure.summary)

@@ -28,7 +28,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::helpers::{is_iso_date, workspace_root};
-use crate::validate::Step;
+use crate::step::Step;
 
 /// One thing canon claims that the tree does not support.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]

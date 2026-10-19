@@ -9,8 +9,8 @@ merged by hand into every project's copy?
 into a crates.io library behind each project's thin `xtask`, one
 module at a time, starting from the dependency-cooldown prototype on
 branch `feat/xtask-lib-dep-age`. Make feature selection work without
-code edits before extracting the coupled modules. Leave deploy
-project-owned until last.
+code edits before extracting the coupled modules (done in
+breki/rustbase#5). Leave deploy project-owned until last.
 
 ## Evidence
 
@@ -146,7 +146,7 @@ the library is a possible later step, not part of this plan.
 | `doc_cmd`, `canon` | library-ready; canon exemptions knob |
 | `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | library-ready (output parsing); take bombyx's and hoard's fixes |
 | `changelog`, `todo` | library-ready behind config; todo format pluggable (bombyx) |
-| `clean_cache`, `helpers` | split by user (done, #5); Windows-only code stays behind `cfg` |
+| `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
 | `validate` | step runner; each gate supplies its `step()` (done, #5) |
 | `frontend*` | library-ready, optional feature |
 | `deploy*` | last; generic pieces (remote run, tag guard, staging, crash check) only, with hooks |
@@ -160,10 +160,12 @@ signature check, `.ports` reader, worktree setup and log tee.
 ## Migration plan (one downstream: clockdump)
 
 1. Publish the library with the cooldown module.
-2. In clockdump: add the dependency, delete `xtask/src/dep_age*`,
-   and call the library from `main.rs` and `validate.rs` with
-   `Config::for_project("clockdump", workspace_root())` (the
-   prototype run: -1,773 / +26 lines).
+2. In clockdump: add the dependency, delete its vendored
+   `xtask/src/dep_age.rs` and `xtask/src/dep_age/`, and call the
+   library with `Config::for_project("clockdump",
+   workspace_root())` where the template does: `main.rs` and the
+   `dep_age_gate.rs` step. (The prototype run, made before the
+   step moved out of `validate.rs`, came to -1,773 / +26 lines.)
 3. Run `cargo xtask validate` and its CI; record the result.
 4. Repeat per module as each is extracted; the other downstreams
    follow once their copies are synced to a template version that

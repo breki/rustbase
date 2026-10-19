@@ -7,7 +7,7 @@
 use crate::frontend::{
     FrontendResult, report_cmd, run_npm_script, step_result,
 };
-use crate::validate::Step;
+use crate::step::Step;
 
 /// The `validate` step.
 pub fn step() -> Step {

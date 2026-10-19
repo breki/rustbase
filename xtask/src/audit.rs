@@ -24,7 +24,7 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::helpers::{is_missing_subcommand, run_cargo_capture};
-use crate::validate::Step;
+use crate::step::Step;
 
 /// Parsed `cargo audit --json` result.
 #[derive(Debug, PartialEq, Eq)]
@@ -46,7 +46,7 @@ pub struct NpmAudit {
     pub critical: u64,
 }
 
-/// Combined audit outcome for use by validate.
+/// Combined audit outcome, for this module's `step()`.
 pub struct AuditResult {
     /// Human-readable detail for the step line.
     pub detail: String,

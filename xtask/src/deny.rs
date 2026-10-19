@@ -19,7 +19,7 @@
 //! than passing quietly.
 
 use crate::helpers::{is_missing_subcommand, run_cargo_capture};
-use crate::validate::Step;
+use crate::step::Step;
 
 /// What `cargo deny` reported.
 ///
@@ -121,9 +121,8 @@ pub fn deny() -> Result<(), String> {
     }
 }
 
-/// The `validate` step. Unlike Audit it needs no network, so it
-/// runs on every push rather than only at release, and a missing
-/// `cargo-deny` is a hard error rather than a warning.
+/// The `validate` step. Unlike Audit it needs no network, so a
+/// missing `cargo-deny` is a hard error rather than a warning.
 pub fn step() -> Step {
     Step::new("Deny", "deny", || {
         deny()?;

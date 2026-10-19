@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::Instant;
 
 use crate::audit;
@@ -9,39 +10,13 @@ use crate::dep_age_gate;
 use crate::doc_cmd;
 use crate::dupes;
 use crate::fmt_cmd;
+use crate::step::Step;
 use crate::test_cmd;
 #[cfg(feature = "frontend")]
 use crate::{frontend_check, frontend_dupes, frontend_fmt, frontend_test};
 
 /// Width of the step name column (including dots).
 const STEP_NAME_WIDTH: usize = 14;
-
-/// A single validation step: a display name, the standalone
-/// xtask subcommand that runs it alone (the `iterate with`
-/// hint), and the closure that performs it. Each gate module
-/// builds its own with a `step()` function.
-pub struct Step {
-    name: &'static str,
-    cmd: &'static str,
-    run: Box<dyn FnOnce() -> Result<String, String>>,
-}
-
-impl Step {
-    /// A step named `name`, re-run alone with `cargo xtask
-    /// <cmd>`. `run` returns the detail printed after `OK`
-    /// (empty for none) or the error.
-    pub fn new(
-        name: &'static str,
-        cmd: &'static str,
-        run: impl FnOnce() -> Result<String, String> + 'static,
-    ) -> Self {
-        Self {
-            name,
-            cmd,
-            run: Box::new(run),
-        }
-    }
-}
 
 /// Build the ordered list of validation steps.
 ///
@@ -100,7 +75,8 @@ fn steps(check: bool) -> Vec<Step> {
 /// actually adopts a dependency, and even then a
 /// connectivity failure degrades to a warning (a genuine
 /// cooldown breach still fails; a transient outage does not),
-/// so it never blocks the local gates behind the network.
+/// except under CI or `RUSTBASE_DEP_AGE_STRICT=1`, where it
+/// fails -- see `dep_age_gate`.
 ///
 /// After Dep-age, steps run cheap static gates first and the
 /// expensive dynamic gates (Test, Coverage) last, so a fast
@@ -120,6 +96,10 @@ fn steps(check: bool) -> Vec<Step> {
 pub fn validate(check: bool) -> Result<(), String> {
     let overall_start = Instant::now();
 
+    frontend_feature_check(
+        cfg!(feature = "frontend"),
+        Path::new("frontend/package.json").exists(),
+    )?;
     let steps = steps(check);
     let total = steps.len();
     for (i, step) in steps.into_iter().enumerate() {
@@ -130,16 +110,34 @@ pub fn validate(check: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// Run a single step, printing the `[N/T]` result line.
+/// Refuse a frontend on disk when the `frontend` feature is off:
+/// its gates are then compiled out, and a run with none of them
+/// would read as a pass.
+fn frontend_feature_check(
+    feature_on: bool,
+    has_frontend: bool,
+) -> Result<(), String> {
+    if has_frontend && !feature_on {
+        return Err("frontend/ exists but xtask's `frontend` feature is \
+             off, so validate would run none of its gates -- add \
+             \"frontend\" to `default` in xtask/Cargo.toml, or delete \
+             frontend/"
+            .into());
+    }
+    Ok(())
+}
+
+/// Run a single step, printing the `[N/M]` result line.
 ///
-/// `total` is the step count (`steps().len()`), so the `[N/T]`
-/// denominator tracks the list automatically. On failure the
+/// `total` is the step count, so the `[N/M]` denominator tracks
+/// the list automatically. On failure the
 /// step's `cmd` is printed as an iterate-with hint so the user
 /// re-runs the single failing gate (seconds) instead of the
 /// whole pipeline (minutes).
 fn run_step(n: usize, total: usize, step: Step) -> Result<(), String> {
+    let (name, cmd) = (step.name(), step.cmd());
     let start = Instant::now();
-    match (step.run)() {
+    match step.run() {
         Ok(detail) => {
             let time = elapsed_str(start);
             let full = if detail.is_empty() {
@@ -147,12 +145,12 @@ fn run_step(n: usize, total: usize, step: Step) -> Result<(), String> {
             } else {
                 format!("{detail}, {time}")
             };
-            step_output(n, total, step.name, "OK", &full);
+            step_output(n, total, name, "OK", &full);
             Ok(())
         }
         Err(e) => {
-            step_output(n, total, step.name, "FAILED", "");
-            eprintln!("  -> iterate with: cargo xtask {}", step.cmd);
+            step_output(n, total, name, "FAILED", "");
+            eprintln!("  -> iterate with: cargo xtask {cmd}");
             Err(e)
         }
     }
@@ -215,18 +213,18 @@ mod tests {
         let cli = crate::Cli::command();
         for step in steps(false) {
             assert!(
-                cli.find_subcommand(step.cmd).is_some(),
+                cli.find_subcommand(step.cmd()).is_some(),
                 "validate step {:?} hints `cargo xtask {}`, \
                  which is not a real subcommand",
-                step.name,
-                step.cmd,
+                step.name(),
+                step.cmd(),
             );
         }
     }
 
     #[test]
     fn steps_list_is_non_empty() {
-        // The `[N/total]` denominator derives from this length;
+        // The `[N/M]` denominator derives from this length;
         // an empty list would silently disable the whole gate.
         assert!(!steps(false).is_empty(), "validate has no steps");
     }
@@ -236,9 +234,21 @@ mod tests {
         // The frontend gates are in the list exactly when the
         // feature compiles them in, so the `[N/M]` total counts
         // only gates that exist.
-        let has_frontend =
-            steps(false).iter().any(|s| s.cmd.starts_with("frontend-"));
+        let has_frontend = steps(false)
+            .iter()
+            .any(|s| s.cmd().starts_with("frontend-"));
         assert_eq!(has_frontend, cfg!(feature = "frontend"));
+    }
+
+    #[test]
+    fn frontend_on_disk_needs_the_frontend_feature() {
+        // With the feature off its gates are compiled out, so a
+        // frontend on disk would pass validate unchecked.
+        let err = frontend_feature_check(false, true).unwrap_err();
+        assert!(err.contains("`frontend` feature"), "{err}");
+        assert!(frontend_feature_check(true, true).is_ok());
+        assert!(frontend_feature_check(true, false).is_ok());
+        assert!(frontend_feature_check(false, false).is_ok());
     }
 
     #[test]

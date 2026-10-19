@@ -3,7 +3,7 @@
 use rustbase_xtask::dep_age;
 
 use crate::helpers::tasks_config;
-use crate::validate::Step;
+use crate::step::Step;
 
 /// Dep-age step -- cooldown-checks only dependencies added or
 /// bumped in the working tree versus HEAD. A within-cooldown

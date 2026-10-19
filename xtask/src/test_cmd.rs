@@ -1,5 +1,5 @@
 use crate::helpers::{run_cargo_capture, run_cargo_stream};
-use crate::validate::Step;
+use crate::step::Step;
 
 /// Maximum failure detail lines per test.
 const MAX_DETAIL_LINES: usize = 5;
@@ -9,8 +9,9 @@ const MAX_DETAIL_LINES: usize = 5;
 enum Scope {
     /// `--workspace` -- every crate in the workspace.
     Workspace,
-    /// `-p xtask` -- only the xtask crate. Used by
-    /// validate's Test step (see module docs there).
+    /// `-p xtask` -- only the xtask crate. The `validate`
+    /// Test step uses it because Coverage already runs every
+    /// other crate's tests.
     XtaskOnly,
 }
 

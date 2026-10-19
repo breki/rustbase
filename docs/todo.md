@@ -71,6 +71,19 @@ planning doc is removed.
   overrides block, run /update-deps for the frontend, and confirm npm audit and
   dep-age-check stay clean.
 
+- **cli-only-recipe-deploy** -- CLI-only recipe leaves deploy pointing at the
+  deleted rustbase-web
+  The CLAUDE.md CLI-only recipe ("Project Overview", steps 1-7) never handles
+  deploy: `cargo xtask deploy` builds and ships `rustbase-web`, which step 5
+  deletes, so after the recipe `deploy`, `deploy-setup`, build.ps1's deploy
+  targets, `deploy/rustbase-web.service`, `docs/deployment.md`, and the prose
+  that tells the operator to run `cargo xtask deploy` (CLAUDE.md "Commits and
+  releases", .claude/commands/release.md, commit.md, implement.md, README.md)
+  are all left pointing at a web server that no longer exists. Extend the
+  recipe: drop `deploy` from xtask's default features, prune build.ps1's deploy
+  targets, delete deploy/ and docs/deployment.md, add `deploy` to the step-6
+  sweep names. Found by red-team (RT-1) while reviewing issue #5.
+
 ## Done
 
 - [**template-tooling-cli-redesign**](issues/template-tooling-cli-redesign.md)

@@ -1,5 +1,4 @@
-//! Shared helpers for the frontend xtask wrappers
-//! (`frontend-check`, `frontend-fmt`, `frontend-dupes`).
+//! Shared helpers for the `frontend-*` xtask wrappers.
 //!
 //! Each runs an npm script in `frontend/`. All skip cleanly
 //! (pass) when there is genuinely no frontend, but error --
