@@ -1,6 +1,6 @@
 ---
 description: Run all quality checks with stepwise progress
-allowed-tools: Bash(cargo xtask:*)
+allowed-tools: Bash(cargo xtask:*), Bash(cargo -q xtask:*)
 ---
 
 Run the full validation pipeline with concise output.
@@ -23,5 +23,5 @@ Validate OK (32.2s)
 ## Implementation
 
 ```
-cargo xtask validate
+cargo -q xtask validate
 ```

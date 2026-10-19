@@ -430,8 +430,10 @@ dependencies = [
 
     #[test]
     fn parse_npm_lock_bad_json_is_empty() {
-        assert!(parse_npm_lock("not json").is_empty());
-        assert!(parse_npm_lock("{}").is_empty());
+        let got = parse_npm_lock("not json");
+        assert!(got.is_empty(), "{got:?}");
+        let got = parse_npm_lock("{}");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -462,15 +464,17 @@ dependencies = [
         assert_eq!(a.len(), 2);
         assert!(a.contains("serde@1.0.0"));
         assert!(a.contains("anyhow@1.0.80"));
-        assert!(parse_allow(None).is_empty());
-        assert!(parse_allow(Some("")).is_empty());
+        let got = parse_allow(None);
+        assert!(got.is_empty(), "{got:?}");
+        let got = parse_allow(Some(""));
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
     fn classify_dep_age_empty_is_clean() {
         let r = classify_dep_age(&[]);
         assert!(r.error.is_none());
-        assert!(r.warnings.is_empty());
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
         assert_eq!(r.detail, "no dependency changes");
     }
 

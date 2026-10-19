@@ -15,9 +15,9 @@
 # Do not hand-edit; `cargo xtask backfeed-record` rewrites it.
 
 [bombyx]
-watermark = "2026-08-18"
-downstream-head = "f14e93ccb4a1f16583c56e532de75a7a97e6cca5"
-last-run = "2026-08-18"
+watermark = "2026-10-19"
+downstream-head = "acaefce36712ebae93bc8c6f5ed7bcc92d8c0a1e"
+last-run = "2026-10-19"
 
 [clockdump]
 watermark = "2026-07-18"

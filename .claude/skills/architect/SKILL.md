@@ -64,9 +64,9 @@ rustbase/
   scripts/              # bash wrappers
   docs/
     developer/
-      DIARY.md          # development diary
       redteam-log.md    # security review findings
       artisan-log.md    # quality review findings
+      fresh-reader-log.md # comprehension review findings
 ```
 
 ## Crate Responsibilities

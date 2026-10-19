@@ -1,11 +1,12 @@
 ---
 description: Plan and implement a captured issue from docs/todo.md
-allowed-tools: Bash(cargo xtask*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(scripts/e2e.sh*), Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill(commit)
+allowed-tools: Bash(cargo xtask*), Bash(cargo -q xtask*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git rm:*), Bash(scripts/e2e.sh*), Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill(commit), Skill(review)
 ---
 
 Plan and implement an item captured by `/todo`. The
-plan lives at `docs/issues/<slug>.md` and is updated
-as the work progresses.
+plan lives at `docs/issues/<slug>.md` while the work is
+in flight: it is committed and updated as the work
+progresses, and removed when the item is done (Phase 3).
 
 ## Selecting the issue
 
@@ -114,7 +115,7 @@ particular:
 
 ## Phase 3 -- Finalise
 
-1. Run `cargo xtask validate`. All checks must pass
+1. Run `cargo -q xtask validate`. All checks must pass
    (fmt, clippy, tests, coverage >= 90%, duplication
    <= 6%, frontend type-check).
 
@@ -123,77 +124,65 @@ particular:
    and `docs/`. Clean up stale content while you are
    there.
 
-3. In `docs/issues/<slug>.md`:
-   - Set `Status:` to `Done`.
-   - Add `**Completed:** <today's date>`.
-   - Add a final `## Outcome` section: what shipped,
-     links to changed files (path:line where
-     useful), follow-ups.
+3. **Close out the issue doc.** `docs/issues/<slug>.md`
+   is a working document, not a permanent record: it
+   mixes reversed intermediate designs with what
+   shipped, and its `file:line` references go stale.
+   Before removing it, promote what must outlast it:
+   - A design or security decision with its rationale,
+     or a non-obvious constraint, goes into a reference
+     doc under `docs/` (create `docs/<topic>.md` when
+     none fits) or into a comment beside the code it
+     governs.
+   - What was and was not verified goes into the commit
+     body (and the PR body, if there is one).
+
+   Then remove the doc: `git rm docs/issues/<slug>.md`
+   when it was committed, otherwise delete the file.
 
 4. In `docs/todo.md`, move the item to Done
    mechanically (do not hand-edit the file):
 
    ```
-   cargo xtask todo done <slug> --date <today's date>
+   cargo -q xtask todo done <slug> --date <today's date>
    ```
 
    The command moves the bullet to the top of `## Done`
-   (newest first), stamps the date, and links the slug
-   to `issues/<slug>.md`. Pass `--summary "<text>"` to
-   override the pending summary for the Done entry.
+   (newest first) and stamps the date. It writes no link
+   unless you pass `--doc <path>` (relative to `docs/`),
+   which must name a file that exists -- so never pass
+   the issue doc you just removed. Pass
+   `--summary "<text>"` to override the pending summary
+   for the Done entry.
 
-5. **Pre-launch code reviewers in the background**
-   (optional optimisation). The next `/commit` runs
-   the Red Team and Artisan agents against the same
-   diff this implementation produces. When the diff
-   is *likely to stay stable* through user
-   verification, you can spawn both agents now with
-   `run_in_background: true` -- `subagent_type: red-team`
-   and `subagent_type: artisan` (pass `artisan` the
-   captured diff; `red-team` reads it itself). Follow the
-   gating rules in `.claude/commands/code-reviewers.md`
-   (the same file `/commit` step 3 uses, so the pre-launch
-   and the commit-time review are identical). Note the agent
-   IDs in conversation context so `/commit` can reuse the
-   results.
-
-   **Skip the pre-launch** when:
-   - The diff is docs-only (`*.md` only) -- no
-     reviewers run for docs-only commits anyway.
-   - User verification at step 6 is likely to
-     invalidate the diff. Signals: the change
-     introduces inference / heuristic logic, has
-     open clarifying questions, involves user data
-     the agent hasn't seen, or introduces an undo /
-     inverse / optimistic-concurrency path. That
-     last shape is review-volatile because it hinges
-     on a backend contract an adversarial review
-     routinely overturns -- an undo or inverse that
-     looks right for the simple case but breaks the
-     recurring / concurrent one, so the design gets
-     reshaped after review and the heavy gates would
-     run twice. Stale pre-launched findings are worse
-     than no pre-launch -- they describe code that no
-     longer exists. When in doubt, skip; `/commit`
-     will spawn fresh reviewers when it runs.
-
-6. Verify the change manually. For UI / API
+5. Verify the change manually. For UI / API
    changes, exercise the feature in a browser (run
    the backend + frontend dev servers; see
    `CLAUDE.md` "Frontend Development"). For
    deployment-affecting changes consider running
    `cargo xtask deploy` against a staging target.
 
-7. Commit with `/commit`. If pre-launched reviewers
-   from step 5 are still in flight, `/commit` should
-   wait for them rather than spawning duplicates.
-   If their findings already arrived, `/commit`
-   consumes them directly.
+6. **Review, if you want the work hardened.** Run
+   `/review` before committing; it is a separate
+   process from `/commit` (see `CLAUDE.md` under
+   **Reviewing is its own process**). Run it *after*
+   step 5 when that verification is likely to reshape
+   the design, so the reviewers do not read code that is
+   about to change. Signals: inference / heuristic
+   logic, open clarifying questions, user data the agent
+   has not seen, or an undo / inverse /
+   optimistic-concurrency path -- a shape an adversarial
+   review routinely overturns, because it looks right
+   for the simple case and breaks the recurring or
+   concurrent one.
+
+7. Commit with `/commit`.
 
 ## Rules
 
 - Never skip the plan phase, even for a small change.
-  The issue doc is the audit trail.
+  The issue doc is the working record while the item is
+  in flight; step 3 of Phase 3 retires it.
 - Never start implementing before the user explicitly
   approves the plan.
 - Never edit `## Done` items in `docs/todo.md` except

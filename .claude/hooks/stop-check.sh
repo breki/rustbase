@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # Stop hook: runs a fast-path subset of validate when
 # Rust files have been modified -- fmt-check + clippy
-# + tests.
+# + doc + tests.
+#
+# The doc gate (~1-2s warm, two rustdoc passes reusing
+# clippy's metadata) is here because a broken doc link is
+# only a rustdoc warning: it builds clean otherwise.
 #
 # Coverage and duplication are intentionally skipped:
 # coverage alone adds ~15s per invocation on a small
 # codebase, and the Stop hook fires often enough during
 # interactive work that the cost compounds. Full
-# `cargo xtask validate` still runs from /commit and
-# is available manually for explicit pre-flight checks.
+# `cargo xtask validate` runs from /release and is
+# available manually for explicit pre-flight checks.
 #
-# fmt-check is included (~0.2s) because /commit only
-# runs full validate for version-bumping commits;
-# chore / docs / refactor / test commits skip validate
-# entirely, so a fmt drift can otherwise slip through
+# fmt-check is included (~0.2s) because /commit never
+# runs validate, so a fmt drift can otherwise slip through
 # both interactive gates and land in CI as a fmt-check
 # failure (see commit 9d7b3ff for a worked example).
 #
@@ -67,5 +69,6 @@ run_stage() {
 
 run_stage "cargo fmt --check" cargo fmt --all -- --check \
   && run_stage "cargo xtask clippy" cargo xtask clippy \
+  && run_stage "cargo xtask doc" cargo xtask doc \
   && run_stage "cargo xtask test" cargo xtask test \
   || exit 2

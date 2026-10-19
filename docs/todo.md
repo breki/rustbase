@@ -8,9 +8,11 @@ Project work queue.
 - `/implement` (no arguments) lists pending items and asks
   which to act on.
 
-Each implemented item gets a planning doc at
-`docs/issues/<slug>.md` that captures the problem statement,
-plan, decisions, and outcome.
+While an item is in flight, `/implement` keeps a working
+planning doc at `docs/issues/<slug>.md` (problem, plan,
+decisions). When the item is done, anything durable is
+promoted to a reference doc or a code comment and the
+planning doc is removed.
 
 ## Pending
 
@@ -48,6 +50,17 @@ plan, decisions, and outcome.
   ignore filter (doubles the slowest gate) or counting the excluded files
   line-by-line; MODULE_THRESHOLD has the same blind spot. Not a mechanical port
   -- bombyx only suggested it, never implemented it.
+
+- **todo-edit-subcommand** -- Add `cargo xtask todo edit` to revise a captured
+  entry
+  The `/todo` rules forbid hand-editing `docs/todo.md`, but `todo` offers only
+  list/add/done, so a correction to a captured item forces a hand edit or a
+  duplicate slug describing the same work. Add `todo edit --slug <slug>` that
+  rewrites the summary, the body, or both through the existing wrap-and-render
+  path, so a revised entry is indistinguishable from a fresh one; the reader
+  already tolerates a multi-paragraph body, and the writer must preserve that.
+  Failing that, soften the rule in `.claude/commands/todo.md` to name the edit
+  the tooling cannot make. Sourced from bombyx template feedback (2026-08-30).
 
 ## Done
 

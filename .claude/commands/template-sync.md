@@ -1,6 +1,6 @@
 ---
 description: Sync upstream template changes into this project
-allowed-tools: Bash(git remote:*), Bash(git fetch:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git status:*), Bash(cargo xtask validate*), Bash(cargo xtask sync-candidates:*), Read, Edit, Write, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(git remote:*), Bash(git fetch:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git status:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask sync-candidates:*), Bash(cargo -q xtask sync-candidates:*), Read, Edit, Write, Grep, Glob, AskUserQuestion
 ---
 
 Sync changes from the upstream rustbase template into
@@ -64,11 +64,12 @@ this project.
      for commit context.
    - **Get the categorized candidate list deterministically
      -- do NOT hand-categorize the diff.** Run
-     `cargo xtask sync-candidates <last-synced>`. It runs
+     `cargo -q xtask sync-candidates <last-synced>`. It runs
      `git diff --name-status <last-synced>..template/main`,
      drops the template-internal never-sync set (CHANGELOG,
-     the feedback file, the backfeed ledger, the diary and
-     review logs, per-issue docs -- bookkeeping each project
+     the feedback file, the backfeed ledger, a legacy diary,
+     the review logs, per-issue docs, the `docs/todo.md`
+     backlog -- bookkeeping each project
      owns independently, so their growth is never sync
      noise), and prints a `status  category  path` table
      already bucketed into:
@@ -184,7 +185,7 @@ this project.
    - Use Edit to apply changes (never overwrite whole
      files blindly)
 
-8. **Validate** -- Run `cargo xtask validate` to check
+8. **Validate** -- Run `cargo -q xtask validate` to check
    that applied changes don't break the build. If
    validation fails, help the user fix issues before
    proceeding.

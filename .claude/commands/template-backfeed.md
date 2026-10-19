@@ -1,6 +1,6 @@
 ---
 description: Apply template-improvement suggestions from a downstream rustbase project back into this template
-allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(ls:*), Bash(cargo xtask validate*), Bash(cargo xtask check*), Bash(cargo xtask backfeed-diff:*), Bash(cargo xtask backfeed-record:*), Bash(cargo xtask feedback-add:*), Read, Edit, Write, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(git remote get-url:*), Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(ls:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask check*), Bash(cargo -q xtask check*), Bash(cargo xtask backfeed-diff:*), Bash(cargo -q xtask backfeed-diff:*), Bash(cargo xtask backfeed-record:*), Bash(cargo -q xtask backfeed-record:*), Bash(cargo xtask feedback-add:*), Bash(cargo -q xtask feedback-add:*), Read, Edit, Write, Grep, Glob, AskUserQuestion
 ---
 
 Apply template-improvement feedback that a downstream
@@ -39,10 +39,10 @@ provided, ask via `AskUserQuestion`.
      mismatch -- the downstream does not claim to
      be a rustbase derivative, so its feedback
      should not be auto-applied.
-   - Read `<path>/.git/HEAD` (or run `git -C` is
-     forbidden by CLAUDE.md; instead read the file
-     directly) only as a sanity check the path is
-     a git repo. Do not run any commands against
+   - Read `<path>/.git/HEAD` directly, only as a
+     sanity check the path is a git repo. CLAUDE.md
+     forbids `git -C`, and this command has no
+     `git -C` grant. Do not run any commands against
      the downstream's git -- only read its files.
 
 3. **Determine the delta deterministically -- do NOT
@@ -60,7 +60,7 @@ provided, ask via `AskUserQuestion`.
      `/template-sync`'s bootstrap:
      - **Start from now** -- skip retroactive backfeed;
        record today as the watermark
-       (`cargo xtask backfeed-record <path> --watermark
+       (`cargo -q xtask backfeed-record <path> --watermark
        <today>`) and stop. Use this when the
        downstream's history has already been backfed by
        hand or is not worth re-mining.
@@ -70,7 +70,7 @@ provided, ask via `AskUserQuestion`.
        at the end (step 12).
 
    - **Normal run:** run
-     `cargo xtask backfeed-diff <path>`. It reads the
+     `cargo -q xtask backfeed-diff <path>`. It reads the
      downstream feedback file plus the ledger watermark
      and prints (to stdout) only the entries dated on or
      after the watermark; a one-line summary goes to
@@ -229,7 +229,7 @@ provided, ask via `AskUserQuestion`.
     `tf-<date>-<slug>` ID and consistent placement:
 
     ```
-    cargo xtask feedback-add --section resolved \
+    cargo -q xtask feedback-add --section resolved \
       --title "<short title>" --body-file <tmp>
     ```
 
@@ -242,7 +242,7 @@ provided, ask via `AskUserQuestion`.
     record. The command inserts at the top of the
     **Resolved** section and dedups by ID.
 
-11. **Validate** -- Run `cargo xtask validate` to
+11. **Validate** -- Run `cargo -q xtask validate` to
     confirm nothing broke. If a slash-command-only
     change was made (`.claude/commands/*.md`,
     `CLAUDE.md`-only), `cargo xtask check` is
@@ -255,7 +255,7 @@ provided, ask via `AskUserQuestion`.
     next run starts from there:
 
     ```
-    cargo xtask backfeed-record <path> --watermark <date>
+    cargo -q xtask backfeed-record <path> --watermark <date>
     ```
 
     `<date>` is the newest entry date you evaluated

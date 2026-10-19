@@ -24,6 +24,16 @@ and this project adheres to
 - /template-improve sweep mode: run with no argument to mine commits since the
   feedback file was last touched for template feedback, instead of only logging
   what the operator volunteers.
+- `/review`: three reviewers in sequence (Artisan, Red Team, and a new Fresh
+  Reader agent), one lane each, against an immutable `target/` snapshot, with a
+  behaviour-defect stopping rule and a three-round cap. It commits nothing.
+- `cargo xtask doc`: rustdoc with `-D warnings` in a public and a private pass,
+  so a broken doc link fails `validate` and the Stop hook instead of building
+  clean.
+- `cargo xtask canon-check`: a markdown-only `validate` gate that fails on canon
+  prose naming a missing path, an unresolved cross-reference, an ungranted `git`
+  subcommand, an over-wide line, or a backlog ID cited in no backlog.
+- `/issue`, `/ask`, `/rundown` and `/short` commands.
 
 ### Changed
 
@@ -33,9 +43,18 @@ and this project adheres to
 - cargo xtask check now compiles all targets (--all-targets), so a broken test
   call site (an altered signature) is caught by check rather than surfacing
   later under test.
-- C:/Program Files/Git/release now runs a cross-platform clippy and a standalone
-  cargo xtask audit before the tag, because validate lints only the current
-  platform and its audit degrades to a warning.
+- `/release` now runs a cross-platform clippy on every installed target other
+  than the host, and a standalone `cargo xtask audit`, before the tag, because
+  validate lints only the current platform and its audit degrades to a warning.
+- `/commit` no longer runs the reviewers; reviewing is the separate `/review`
+  command. `/implement` likewise hands off to `/review` instead of pre-launching
+  reviewers.
+- `/implement` and `/issue` treat `docs/issues/<slug>.md` as a working document:
+  durable decisions are promoted to a reference doc or code comment and the
+  planning doc is removed when the item is done; `todo done` links only a
+  document named with `--doc`.
+- Command files invoke `cargo -q xtask ...`, so cargo compile progress no longer
+  precedes a command's output; their `allowed-tools` grant both spellings.
 
 ### Fixed
 
@@ -47,8 +66,18 @@ and this project adheres to
   unnecessary_wraps off Windows.
 - cargo xtask validate derives its [N/M] step numbers from a single step table,
   so adding a gate can no longer print a wrong or duplicated step count.
+- `cargo xtask backfeed-diff` no longer treats an indented `###` line in an
+  entry's code sample as a new entry header, which silently truncated that
+  entry.
+- `cargo xtask sync-candidates` no longer offers the per-project `docs/todo.md`
+  (or the new `fresh-reader-log.md`) as a sync candidate.
+- xtask tests pass Rust 1.99 Clippy's `assert_is_empty` lint, which turned the
+  gate red on the unpinned `stable` channel.
 
 ### Removed
+
+- The development diary (`docs/developer/DIARY.md`) and `/commit`'s step that
+  appended to it; commit bodies and `CHANGELOG.md` carry that record.
 
 ## [0.17.0] - 2026-07-16
 

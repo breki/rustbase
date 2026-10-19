@@ -115,7 +115,7 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["status"], "ready");
-        assert!(!json["version"].as_str().unwrap().is_empty());
+        assert_ne!(json["version"].as_str().unwrap(), "");
     }
 
     #[tokio::test]

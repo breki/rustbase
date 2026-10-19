@@ -302,7 +302,7 @@ mod tests {
     fn classify_clean_no_error_no_warnings() {
         let r = classify_audit(Ok(clean_cargo()), None);
         assert!(r.error.is_none());
-        assert!(r.warnings.is_empty());
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
         assert!(r.detail.contains("cargo: 0 vuln, 1 warn"));
     }
 

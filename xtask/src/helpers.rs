@@ -229,11 +229,23 @@ pub fn workspace_root() -> PathBuf {
 ///
 /// Strips ANSI codes via `CARGO_TERM_COLOR=never`.
 pub fn run_cargo_capture(args: &[&str]) -> Result<Output, String> {
+    run_cargo_capture_env(args, &[])
+}
+
+/// [`run_cargo_capture`] with extra environment variables, for
+/// settings cargo takes only from the environment (such as
+/// `RUSTDOCFLAGS`).
+pub fn run_cargo_capture_env(
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> Result<Output, String> {
     let bin = cargo_bin();
-    Command::new(&bin)
-        .args(args)
-        .env("CARGO_TERM_COLOR", "never")
-        .output()
+    let mut cmd = Command::new(&bin);
+    cmd.args(args).env("CARGO_TERM_COLOR", "never");
+    for (key, value) in env {
+        cmd.env(key, value);
+    }
+    cmd.output()
         .map_err(|e| format!("failed to run {bin}: {e}"))
 }
 
@@ -253,8 +265,7 @@ pub fn run_cargo_capture(args: &[&str]) -> Result<Output, String> {
 /// the operator to reinstall a tool that is already there
 /// instead of showing them the real error.
 pub fn is_missing_subcommand(stderr: &str) -> bool {
-    stderr.contains("no such command")
-        || stderr.contains("no such subcommand")
+    stderr.contains("no such command") || stderr.contains("no such subcommand")
 }
 
 /// Run a cargo command, streaming output to the
@@ -302,6 +313,26 @@ where
         }
     }
     out
+}
+
+/// True when `s` is a well-formed ISO `YYYY-MM-DD` date:
+/// exactly ten chars, `dddd-dd-dd`, with month `01..=12` and
+/// day `01..=31`. A shallow calendar check -- it does not
+/// reject Feb 30 -- which is enough for lexical watermark
+/// comparison (ISO dates sort lexically iff well-formed).
+pub fn is_iso_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+        return false;
+    }
+    let digits = |r: &[u8]| r.iter().all(u8::is_ascii_digit);
+    if !digits(&b[0..4]) || !digits(&b[5..7]) || !digits(&b[8..10]) {
+        return false;
+    }
+    let two = |a: u8, c: u8| (a - b'0') * 10 + (c - b'0');
+    let month = two(b[5], b[6]);
+    let day = two(b[8], b[9]);
+    (1..=12).contains(&month) && (1..=31).contains(&day)
 }
 
 /// Today's date as an ISO `YYYY-MM-DD` string (UTC).
@@ -453,6 +484,18 @@ pub fn wrap_markdown(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_iso_date_accepts_valid_and_rejects_junk() {
+        assert!(is_iso_date("2026-07-16"));
+        assert!(is_iso_date("1999-12-31"));
+        assert!(!is_iso_date("2026-13-01")); // month 13
+        assert!(!is_iso_date("2026-07-32")); // day 32
+        assert!(!is_iso_date("2026-7-16")); // not zero-padded
+        assert!(!is_iso_date("2026/07/16")); // wrong separator
+        assert!(!is_iso_date("not a date"));
+        assert!(!is_iso_date("2026-07-16 "));
+    }
 
     #[test]
     fn is_missing_subcommand_matches_cargo_wordings() {

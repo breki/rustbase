@@ -1,6 +1,6 @@
 ---
 description: Commit current changes following project conventions
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(scripts/e2e.sh*), Bash(cargo xtask*), Read, Edit, Agent, AskUserQuestion, Skill(retrospect)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git tag --list:*), Bash(git add:*), Bash(git commit:*), Bash(scripts/e2e.sh*), Bash(cargo xtask*), Bash(cargo -q xtask*), Read, Edit, AskUserQuestion, Skill(retrospect)
 ---
 
 Commit the current changes following the project's git commit
@@ -16,6 +16,10 @@ work-in-progress, run it manually at your own shell (outside
 this flow). `/release` runs it as the authoritative release
 gate.
 
+`/commit` does no reviewing either. Run `/review` first when
+you want the work hardened; `CLAUDE.md` under **Reviewing is
+its own process** says why the two are separate.
+
 ## Instructions
 
 1. **Analyze current state** - Run these commands in parallel:
@@ -30,163 +34,7 @@ gate.
    - A concise subject line (imperative mood, no period)
    - A brief body explaining what and why
 
-3. **Code review** -- Before E2E tests, spawn the **two**
-   dedicated reviewer agents **in parallel** (in a single
-   message with two Agent tool calls). They are read-only by
-   construction -- neither has `Edit`/`Write`.
-
-   **IMPORTANT:** Always run both reviews when the diff
-   contains code changes: Rust (`.rs`, `.toml`),
-   frontend (`.svelte`, `.js`, `.ts`, `.css`), config
-   files (`playwright.config.ts`, `vite.config.js`,
-   `vitest.config.js`, etc.), or
-   deployment/infrastructure files (`.service`,
-   `Dockerfile`, `docker-compose.yml`, `.conf`,
-   `.nginx`, `.env.example`, etc.).
-   Never skip them -- even for "straightforward"
-   changes. The only exception is commits that contain
-   no code at all (docs-only markdown, `.md` files).
-
-   Spawn the **Red Team** (security & correctness,
-   `subagent_type: red-team`) and **Artisan** (code quality,
-   `subagent_type: artisan`) agents in the single parallel
-   message, giving each a one-line description of what the
-   change does. `red-team` runs `git diff --cached` itself;
-   `artisan` has no shell, so pass it the captured
-   `git diff --cached` output in its spawn prompt. The gating
-   rules -- when to run, how to spawn, the diff-handoff rule
-   (never `/tmp`; a `target/`-local file if one is truly
-   needed), and the six labeled-bullet reporting format -- live
-   in `.claude/commands/code-reviewers.md` (also used by
-   `/implement`'s pre-launch reviewers). The review criteria
-   live in the agent files under `.claude/agents/`.
-
-   **Cross-confirmed findings:**
-   Before presenting findings, scan both reviewers'
-   output for overlap. Two findings are
-   **cross-confirmed** when they describe the same
-   root cause -- either:
-   - Same `file:line` reference (or overlapping line
-     ranges in the same file), OR
-   - Same defect described in different vocabulary
-     (e.g. Red Team flags "TOCTOU on `is_dir` then
-     `remove_dir_all`" while Artisan flags "follows
-     symlinks during deletion despite `dir_size`'s
-     guard" -- both pointing at the same line)
-
-   Cross-confirmed findings are a stronger signal
-   than unique ones. When found, present them under a
-   **Cross-confirmed** heading noting that both
-   reviewers flagged it independently. Empirically
-   (from sessions on this project's siblings) every
-   cross-confirmed finding has been selected for
-   fixing; unique findings have a lower hit rate.
-
-   **Truncated reviewer output:**
-   Before presenting findings, scan each reviewer's
-   reply for finding IDs that appear in its summary
-   or cross-references but whose full bodies (the
-   six labeled-bullet fields) are not present in the
-   returned text. Subagent replies are occasionally
-   truncated and a summary line like "RT-001
-   (permission globs), RT-002 (test robustness)" with
-   no matching body for those IDs is a strong signal
-   the body was dropped. In that case, use
-   `SendMessage` to the same agent (its ID is in the
-   tool result) and ask it to re-emit the missing
-   findings verbatim, with the same labeled-bullet
-   structure. Do this *before* presenting to the
-   user -- otherwise findings the reviewer actually
-   raised are silently dropped.
-
-   **Presenting findings to the user:**
-
-   Auto-apply is the default. Most findings are
-   mechanical (exact-match regression, missing
-   aria-label, rename a local, tighten a regex,
-   stale-doc fix); apply those directly and announce the
-   set you are applying so the user can interrupt. Only
-   escalate a finding via `AskUserQuestion` when it
-   crosses a threshold:
-   1. large rework (>5 files, >100 lines, or
-      out-of-diff churn),
-   2. two findings conflict with each other,
-   3. a genuine design tradeoff,
-   4. a public-surface or breaking change,
-   5. a new dependency,
-   6. out of scope for this commit.
-
-   Present each escalated finding in full (ID, Source,
-   Category, Description, Impact, Suggested fix) with
-   "Commit as-is" and "Abort" options; split across
-   questions (max 4 options each) if needed, and wait for
-   the answer before committing. Still surface **every**
-   finding -- applied or escalated -- in your summary;
-   never silently drop one. Cross-confirmed findings
-   (both reviewers, same root cause) are the strongest
-   signal -- note them as such.
-
-   **Deferred findings backlog:**
-
-   A **fixed** finding gets **no** log entry -- its
-   resolution lives in the commit message. Only a finding
-   deliberately *deferred* (real, but not fixed now) is
-   logged, as a backlog:
-   - `docs/developer/redteam-log.md` (Red Team)
-   - `docs/developer/artisan-log.md` (Artisan)
-
-   Both are newest-first; new entries go right after the
-   `---`. Use a self-describing date-slug ID --
-   `<rt|aq>-<YYYY-MM-DD>-<kebab-slug>` (e.g.
-   `rt-2026-07-14-fetch-no-timeout`) -- so there is no
-   central counter to maintain and the ID is greppable
-   from commit messages. Each entry is the ID heading, a
-   `**Category:**` line, and a short description of the
-   deferred issue. A later commit that acts on or
-   reverses a deferred item cites its ID inline
-   ("supersedes rt-2026-07-14-..."). Stage any changed
-   backlog file. **Threshold:** if 10+ items sit open in
-   either backlog, tell the user a full-codebase review
-   is warranted.
-
-   **Closing a backlog item.** The opening convention
-   above is silent about what happens to an entry when
-   someone acts on it, and two contradictory habits both
-   look correct under that silence -- annotate the entry
-   as resolved, or delete it. The rule:
-   - A **fixed** item leaves no entry -- its resolution
-     is in the commit message, exactly as a fixed finding
-     never gets logged in the first place.
-   - A **standing decision** ("keep this, and here is the
-     condition that would change it") does not belong in
-     a *deferred* backlog at all: move it into a comment
-     beside the code it governs, carrying its revisit
-     condition, and delete the backlog entry.
-   - **Before deleting any entry, run `grep -rn "<id>" .`**
-     The IDs are greppable *by design* so other documents
-     (a `docs/issues/*.md`, another commit) can point at
-     them -- which means a delete can strand a pointer.
-     Grep first, and update or remove every cite you find.
-
-4. **Update development diary** (for significant changes):
-   - Read `docs/developer/DIARY.md` to see format and
-     recent entries
-   - Add an entry for:
-     - `feat`, `fix`, `perf` commits (functional changes)
-     - Infrastructure/setup changes that affect developer
-       workflow
-   - Entries are in reverse chronological order (newest
-     first)
-   - Merge entries for the same day under one
-     `### YYYY-MM-DD` heading
-   - Title entries by topic only (no `(vX.Y.Z)` suffix).
-     The version is unknown at commit time -- it is
-     assigned later by `/release` when the changes ship.
-   - Use backticks for technical terms
-   - Skip diary update for: docs, style, test, refactor,
-     minor chores
-
-5. **Update CHANGELOG.md** (for user-observable
+3. **Update CHANGELOG.md** (for user-observable
    changes):
    - The trigger is the **observable effect**, not the
      commit type. If a user of the software would see
@@ -202,7 +50,7 @@ gate.
      duplicate heading):
 
      ```
-     cargo xtask changelog add --kind <added|changed|fixed|removed> \
+     cargo -q xtask changelog add --kind <added|changed|fixed|removed> \
        [--breaking] "<entry text>"
      ```
 
@@ -219,9 +67,11 @@ gate.
      which **never shipped in a release** would force a
      spurious major bump to protect users who never had
      it. This bites hardest pre-1.0 (every fresh scaffold):
-     check `git tag` -- no tags means nothing has ever
-     been released -- and, when tags exist,
-     `git log <latest-tag>..HEAD` or the `[Unreleased]`
+     check `git tag --list --sort=-v:refname` -- no tags
+     means nothing has ever been released; otherwise the
+     first line is the latest tag (a bare `git tag` sorts
+     alphabetically, putting `v0.9.0` after `v0.11.0`) --
+     and use `git log <latest-tag>..HEAD` or the `[Unreleased]`
      block, since behaviour introduced since the last
      release never shipped either. When it never shipped,
      do not mark it breaking and do not file it under
@@ -236,7 +86,7 @@ gate.
      only changes, CI/lint config tweaks invisible to
      users, docs-only edits.
 
-6. **E2E tests** -- Run `scripts/e2e.sh` to verify the
+4. **E2E tests** -- Run `scripts/e2e.sh` to verify the
    full stack works end-to-end. The script kills stale
    servers and runs Playwright, which auto-starts both
    backend and frontend using test data (not production
@@ -245,15 +95,15 @@ gate.
      commit anyway or abort.
    - Skip if no frontend or API changes in the diff.
 
-7. **Fix line endings** - After staging, check for CRLF
+5. **Fix line endings** - After staging, check for CRLF
    warnings. All text files must use LF line endings.
 
-8. **Stage files** - Add specific files by name (avoid
+6. **Stage files** - Add specific files by name (avoid
    `git add -A` or `git add .`). Never commit sensitive
-   files (.env, credentials, etc.). Include diary and
+   files (.env, credentials, etc.). Include the
    changelog if updated.
 
-9. **Commit** using this exact format (use HEREDOC):
+7. **Commit** using this exact format (use HEREDOC):
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -266,7 +116,7 @@ EOF
 )"
 ```
 
-10. **Workflow retrospective** -- delegate to
+8. **Workflow retrospective** -- delegate to
     `/retrospect` (runs *after* the commit lands so
     it cannot block shipping).
 

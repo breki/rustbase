@@ -8,8 +8,8 @@
 //! - `add` appends a new bullet under `## Pending`, refusing a
 //!   slug that already exists (pending or done).
 //! - `done` moves a pending bullet to the top of `## Done`
-//!   (newest first), stamping the date and linking it to
-//!   `issues/<slug>.md`.
+//!   (newest first), stamping the date. It links the entry only
+//!   to a document the caller names with `--doc`.
 //!
 //! The command owns *placement and mechanics*; the caller
 //! supplies the *content* (slug, summary, body).
@@ -19,8 +19,8 @@ use std::fs;
 use clap::Subcommand;
 
 use crate::helpers::{
-    MARKDOWN_WIDTH, rejoin, require_nonempty, section_bounds, to_owned_lines,
-    workspace_root, wrap_markdown,
+    MARKDOWN_WIDTH, is_iso_date, rejoin, require_nonempty, section_bounds,
+    to_owned_lines, workspace_root, wrap_markdown,
 };
 
 /// `todo` subcommands.
@@ -44,10 +44,6 @@ pub enum TodoAction {
         /// summary.
         #[arg(long)]
         body: Option<String>,
-        /// Render the slug as a link to `issues/<slug>.md` (for
-        /// an already-designed capture whose spec exists).
-        #[arg(long)]
-        issue: bool,
     },
     /// Move a pending entry to the top of `## Done`.
     Done {
@@ -61,6 +57,11 @@ pub enum TodoAction {
         /// would use UTC and mis-date near midnight).
         #[arg(long)]
         date: String,
+        /// Document to link the entry to, relative to `docs/`
+        /// (e.g. `architecture.md`). It must exist. Omit it for
+        /// no link.
+        #[arg(long)]
+        doc: Option<String>,
     },
 }
 
@@ -77,13 +78,13 @@ pub fn todo(action: TodoAction) -> Result<(), String> {
             slug,
             summary,
             body,
-            issue,
-        } => add(&slug, &summary, body.as_deref(), issue),
+        } => add(&slug, &summary, body.as_deref()),
         TodoAction::Done {
             slug,
             summary,
             date,
-        } => done_cmd(&slug, summary.as_deref(), &date),
+            doc,
+        } => done_cmd(&slug, summary.as_deref(), &date, doc.as_deref()),
     }
 }
 
@@ -116,13 +117,8 @@ fn list(done: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn add(
-    slug: &str,
-    summary: &str,
-    body: Option<&str>,
-    issue: bool,
-) -> Result<(), String> {
-    require_nonempty("todo --slug", slug)?;
+fn add(slug: &str, summary: &str, body: Option<&str>) -> Result<(), String> {
+    check_slug(slug)?;
     require_nonempty("todo --summary", summary)?;
     let content = read_todo()?;
     if slug_exists(&content, slug) {
@@ -130,13 +126,8 @@ fn add(
             "slug '{slug}' already exists in docs/todo.md; pick another"
         ));
     }
-    let label = if issue {
-        format!("[**{slug}**](issues/{slug}.md)")
-    } else {
-        format!("**{slug}**")
-    };
     let mut bullet = wrap_markdown(
-        &format!("{label} -- {summary}"),
+        &format!("**{slug}** -- {summary}"),
         "- ",
         "  ",
         MARKDOWN_WIDTH,
@@ -154,15 +145,87 @@ fn done_cmd(
     slug: &str,
     summary: Option<&str>,
     date: &str,
+    doc: Option<&str>,
 ) -> Result<(), String> {
+    check_slug(slug)?;
+    check_date(date)?;
+    if let Some(doc) = doc {
+        check_doc_target(doc)?;
+        if !workspace_root().join("docs").join(doc).is_file() {
+            return Err(format!("todo --doc: docs/{doc} does not exist"));
+        }
+    }
     let content = read_todo()?;
-    let updated = move_to_done(&content, slug, date, summary)?;
+    let updated = move_to_done(&content, slug, date, summary, doc)?;
     write_todo(&updated)?;
     println!("Moved '{slug}' to Done ({date}).");
     Ok(())
 }
 
 // ---- Pure helpers (unit-tested) -------------------------------
+
+/// A slug is lowercase ASCII letters, digits and `-`. Anything
+/// else -- a newline above all -- could fabricate a bullet.
+fn check_slug(slug: &str) -> Result<(), String> {
+    let ok = !slug.is_empty()
+        && slug
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+    if ok {
+        Ok(())
+    } else {
+        Err(format!("todo --slug: '{slug}' is not a kebab-case slug"))
+    }
+}
+
+/// The date is interpolated into the file, so it gets a shape
+/// check like every other argument that reaches it.
+fn check_date(date: &str) -> Result<(), String> {
+    if is_iso_date(date) {
+        Ok(())
+    } else {
+        Err(format!("todo --date: '{date}' is not YYYY-MM-DD"))
+    }
+}
+
+/// Shape rules for a `--doc` link target, relative to `docs/`.
+/// Existence is the caller's check, so this stays pure.
+///
+/// Rooted means a leading separator or a drive letter, matched
+/// directly: `Path::is_absolute` answers for the compiling host,
+/// and a markdown link is read on every other one. One `..` is
+/// allowed, reaching the repository root.
+fn check_doc_target(doc: &str) -> Result<(), String> {
+    let refuse = |why: &str| Err(format!("todo --doc: '{doc}' {why}"));
+    if doc.trim().is_empty() {
+        return refuse("is blank; omit --doc for no link");
+    }
+    let drive = doc.as_bytes().get(1) == Some(&b':')
+        && doc.as_bytes()[0].is_ascii_alphabetic();
+    if doc.starts_with(['/', '\\']) || drive {
+        return refuse("is rooted; give a path relative to docs/");
+    }
+    // Stated as the allowed set, so a character nobody thought of
+    // is refused rather than let through.
+    let renders = doc.bytes().all(|b| {
+        b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'/')
+    });
+    if !renders {
+        return refuse("may use only letters, digits, '-', '_', '.', '/'");
+    }
+    let mut depth: i32 = 0;
+    for part in doc.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => depth -= 1,
+            _ => depth += 1,
+        }
+        if depth < -1 {
+            return refuse("escapes the repository");
+        }
+    }
+    Ok(())
+}
 
 /// The `(body_start, body_end)` line range of a `## <heading>`
 /// section body (just after the heading to the next `## ` or
@@ -213,8 +276,10 @@ fn parse_section(content: &str, heading: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut i = start;
     while i < end {
-        let Some(slug) =
-            lines[i].starts_with("- ").then(|| parse_slug(&lines[i])).flatten()
+        let Some(slug) = lines[i]
+            .starts_with("- ")
+            .then(|| parse_slug(&lines[i]))
+            .flatten()
         else {
             i += 1;
             continue;
@@ -260,16 +325,16 @@ fn add_pending(content: &str, bullet: Vec<String>) -> Result<String, String> {
 }
 
 /// Move the pending bullet for `slug` to the top of `## Done`,
-/// in the project's Done convention: the issue link alone on the
-/// first line, a `  -- <summary>` continuation, then a trailing
-/// `  (<date>)` line. The entry always links to
-/// `issues/<slug>.md`; the only caller, `/implement`, creates
-/// that spec doc before finalising, so the link resolves.
+/// then a trailing `  (<date>)` line. With a `doc`, the link sits
+/// alone on the first line and the summary on a `  -- <summary>`
+/// continuation. Without one, the entry keeps the pending shape:
+/// `parse_slug` needs the ` -- ` on the slug's own line.
 fn move_to_done(
     content: &str,
     slug: &str,
     date: &str,
     summary: Option<&str>,
+    doc: Option<&str>,
 ) -> Result<String, String> {
     let ends_with_newline = content.ends_with('\n');
     let mut lines = to_owned_lines(content);
@@ -297,13 +362,24 @@ fn move_to_done(
     // Build and insert the Done entry at the top of `## Done`.
     let (d_start, _) = section_body(&lines, "## Done")
         .ok_or("docs/todo.md has no '## Done' section")?;
-    let mut entry = vec![format!("- [**{slug}**](issues/{slug}.md)")];
-    entry.extend(wrap_markdown(
-        &format!("-- {done_summary}"),
-        "  ",
-        "  ",
-        MARKDOWN_WIDTH,
-    ));
+    let mut entry = match doc {
+        Some(doc) => {
+            let mut e = vec![format!("- [**{slug}**]({doc})")];
+            e.extend(wrap_markdown(
+                &format!("-- {done_summary}"),
+                "  ",
+                "  ",
+                MARKDOWN_WIDTH,
+            ));
+            e
+        }
+        None => wrap_markdown(
+            &format!("**{slug}** -- {done_summary}"),
+            "- ",
+            "  ",
+            MARKDOWN_WIDTH,
+        ),
+    };
     entry.push(format!("  ({date})"));
     // `d_start` is the line after "## Done"; if it is the
     // customary blank, insert past it so we keep heading + blank.
@@ -392,8 +468,14 @@ mod tests {
 
     #[test]
     fn move_to_done_moves_multiline_block_and_stamps_date() {
-        let out =
-            move_to_done(SAMPLE, "alpha-task", "2026-07-23", None).unwrap();
+        let out = move_to_done(
+            SAMPLE,
+            "alpha-task",
+            "2026-07-23",
+            None,
+            Some("issues/alpha-task.md"),
+        )
+        .unwrap();
         // Gone from Pending (including its body line).
         assert!(!out.contains("- **alpha-task** -- do alpha"));
         assert!(!out.contains("more about alpha"));
@@ -416,14 +498,18 @@ mod tests {
             "beta-task",
             "2026-07-23",
             Some("a curated done summary"),
+            None,
         )
         .unwrap();
-        assert!(out.contains("  -- a curated done summary\n  (2026-07-23)"));
+        assert!(out.contains(
+            "- **beta-task** -- a curated done summary\n  (2026-07-23)"
+        ));
     }
 
     #[test]
     fn move_to_done_errors_on_unknown_slug() {
-        let err = move_to_done(SAMPLE, "nope", "2026-07-23", None).unwrap_err();
+        let err =
+            move_to_done(SAMPLE, "nope", "2026-07-23", None, None).unwrap_err();
         assert!(err.contains("nope"));
     }
 
@@ -431,8 +517,89 @@ mod tests {
     fn add_rejects_blank_summary_before_any_io() {
         // The guard fires before `read_todo`, so this never
         // touches the real `docs/todo.md`.
-        let err = add("real-slug", "   ", None, false).unwrap_err();
+        let err = add("real-slug", "   ", None).unwrap_err();
         assert!(err.contains("--summary"));
+    }
+
+    #[test]
+    fn move_to_done_without_a_doc_writes_no_link_and_parses_back() {
+        let out = move_to_done(SAMPLE, "alpha-task", "2026-07-23", None, None)
+            .unwrap();
+        assert!(
+            out.contains(
+                "## Done\n\n- **alpha-task** -- do alpha\n  (2026-07-23)"
+            ),
+            "{out}"
+        );
+        assert!(!out.contains("issues/alpha-task.md"), "{out}");
+        // The plain entry keeps its separator on the slug's line,
+        // so `list --done` and the duplicate-slug check see it.
+        let done = parse_section(&out, "## Done");
+        assert_eq!(done[0], ("alpha-task".to_owned(), "do alpha".to_owned()));
+        assert!(slug_exists(&out, "alpha-task"));
+    }
+
+    #[test]
+    fn doc_target_accepts_paths_under_docs_and_one_step_up() {
+        for ok in ["issues/a-plan.md", "architecture.md", "../README.md"] {
+            assert!(check_doc_target(ok).is_ok(), "{ok}");
+        }
+    }
+
+    #[test]
+    fn doc_target_refuses_blank_rooted_unrenderable_and_escaping() {
+        for bad in [
+            "",
+            "   ",
+            "/etc/passwd",
+            "\\docs\\plan.md",
+            "C:/docs/plan.md",
+            "c:plan.md",
+            "my plan.md",
+            "plan(1).md",
+            "issues\\plan.md",
+            "<plan.md>",
+            "plan.md#section",
+            "plan.md?x",
+            "plan%20.md",
+            "plan.md\n- **fake** -- injected",
+            "../../README.md",
+            "issues/../../../etc/passwd",
+        ] {
+            assert!(check_doc_target(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn slug_and_date_must_have_their_shape() {
+        assert!(check_slug("a-good-slug-2").is_ok());
+        for bad in ["", "Upper", "has space", "x\n- **fake** -- y", "a_b"] {
+            assert!(check_slug(bad).is_err(), "{bad:?}");
+        }
+        assert!(check_date("2026-07-23").is_ok());
+        for bad in ["", "2026-7-23", "2026-07-23\n- **fake** -- y"] {
+            assert!(check_date(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn done_refuses_a_doc_naming_no_file_before_any_io() {
+        // The existence check runs before `read_todo`, so this
+        // never touches the real `docs/todo.md`.
+        let err = done_cmd(
+            "real-slug",
+            None,
+            "2026-07-23",
+            Some("issues/no-such-plan-here.md"),
+        )
+        .unwrap_err();
+        assert!(err.contains("does not exist"), "{err}");
+    }
+
+    #[test]
+    fn add_refuses_a_malformed_slug_before_any_io() {
+        let err = add("x\n- **fake** -- y", "summary", None).unwrap_err();
+        assert!(err.contains("--slug"), "{err}");
     }
 
     #[test]

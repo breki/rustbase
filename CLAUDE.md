@@ -87,6 +87,8 @@ cargo xtask validate          # fmt + clippy + tests + coverage
 cargo xtask test [filter]     # tests only
 cargo xtask test --ignored    # run #[ignore]-tagged tests
 cargo xtask clippy            # lint only
+cargo xtask doc               # rustdoc twice (public + private), links must resolve
+cargo xtask canon-check       # claims canon prose makes: paths, xrefs, grants, width
 cargo xtask coverage          # coverage only (>=90%)
 cargo xtask fmt               # format code
 cargo xtask dupes             # code duplication check
@@ -108,6 +110,13 @@ cargo xtask todo <list|add|done> ...       # mechanical docs/todo.md edits
 
 Never use raw `cargo test` or `cargo clippy` -- always
 go through `xtask`.
+
+The command files under `.claude/commands/` write
+`cargo -q xtask ...` when they tell the agent to run one:
+`-q` drops cargo's own compile progress (dozens of
+`Compiling` lines after any change to `xtask/`) and leaves
+the subcommand's output, stderr and exit status untouched.
+Their `allowed-tools` grant both spellings.
 
 ### Frontend Development
 
@@ -331,6 +340,16 @@ bitten too.
   not expose X" is the easiest kind of statement to invent,
   nothing fails when it is wrong, and it gets written into
   several files and believed. Measure, then state.
+- **Open every reply with a tagged summary.** Under forty
+  words, wrapped in `[short]` and `[/short]` tags on their
+  own lines, before the body. The reader reads the summary
+  first and the body only when the summary sends them
+  there, and the fixed, tagged place lets a hook, notifier
+  or log scraper lift it out without parsing the reply. If
+  the summary may be spoken, put no backticks, paths or
+  symbols in it. `/short` applies the same budget on
+  demand. This is an optional convention: a derived project
+  that does not want it deletes this bullet.
 
 ## Coding Standards
 
@@ -342,8 +361,44 @@ bitten too.
   `anyhow` for CLI errors
 - Prefer `&str` over `String` in function signatures
 - All public items must have doc comments
+- **Reference a private item by a backticked name, not an
+  intra-doc `[link]`.** The public rustdoc pass of `cargo
+  xtask doc` rejects a link from a public page to a private
+  item.
 - Wrap markdown at 80 characters per line
 - Maximum code line width: 80 characters (`rustfmt.toml`)
+- **The toolchain channel is unpinned `stable`.**
+  `rust-toolchain.toml` takes the newest stable, so a new
+  Clippy lint can turn the gate red with no change in the
+  project (Rust 1.99's `assert_is_empty` did). Fix the
+  lint, or pin the channel and bump it deliberately.
+
+### Code comments
+
+The rule above sets a floor on quantity; these say what goes
+in one. Budget: **two or three lines** unless the comment
+earns more, and two things earn more -- a list, when the
+thing described really is a list, and an absence, which has
+to be stated and then located.
+
+- **One reason, not the chain.** Give the reason the code
+  sits where it does and stop; the reader reaches the
+  consequence.
+- **State the invariant, not the disaster.** "The host and
+  the settings always come from the same entry" is a fact to
+  rely on; "otherwise this boots on the wrong machine" reads
+  as a warning to check.
+- **Never inventory your callers.** That is what `grep`
+  answers, and the list is stale the next time one is added.
+- **No hypotheticals and no case for future work.** A
+  comment describes the code as it is.
+- **Say what looks wrong and is not.** A deliberate oddity
+  is the comment most worth keeping.
+
+Reasoning belongs in `docs/`, not in a comment, so there is
+one copy to keep true. The cost: a warning aimed at a future
+editor rather than a reader is not visible from the code, so
+it goes in an architecture-level doc under `docs/`.
 
 ## Test-Driven Development
 
@@ -405,9 +460,10 @@ one direct bookkeeping commit for the version bump.)
 
 Committing and releasing are separate:
 
-- **`/commit`** is a save-point. It reviews, updates the
-  diary and the `CHANGELOG.md` `[Unreleased]` block, and
-  commits. It does **not** bump the version, touch
+- **`/commit`** is a save-point. It updates the
+  `CHANGELOG.md` `[Unreleased]` block and commits. It does
+  **no reviewing** (see **Reviewing is its own process**
+  below). It does **not** bump the version, touch
   `Cargo.lock`, or run `cargo xtask validate` -- multiple
   commits land between releases, and forcing each one to
   make a SemVer decision turns the version field into
@@ -436,6 +492,32 @@ Committing and releasing are separate:
   clean -- so "publish to production" is tied to "cut a
   release" by the build, not by memory. Run `/release`
   first.
+
+### Reviewing is its own process
+
+`/review` reviews, `/commit` commits, and neither calls the
+other. Nothing requires a review: reach for `/review` when you
+want work hardened before it becomes a commit, and skip it when
+you do not. A project that wants a review on every commit runs
+the two in sequence.
+
+The split is deliberate. Reviewing inside `/commit` turned
+every save-point into a multi-round session -- fixes needing
+their own commits, the reviewers firing again on each -- and a
+save-point should be cheap.
+
+**The reviewers get an immutable target.** Reviewing a live
+working tree means reviewing something that changes while they
+read it, so `/review` writes a snapshot under `target/` and
+every reviewer reads that.
+
+**Stop when we would not fix anything the round found** --
+every finding deferred or declined. Reviewers always find
+something, so the stopping rule is agreement on what matters,
+not a clean sheet; a round's fixes make the next round's
+findings, so the count flattens well above zero. `/review`
+under **What earns another round** has the conditions and the
+three-round cap.
 
 ## Definition of Done
 
@@ -483,13 +565,30 @@ just when the code compiles:
     fails when a dependency added or bumped since `HEAD` was
     published within the 14-day window; unchanged lockfiles
     make it a no-op
+13. **Canon claims** (`cargo xtask canon-check`) -- reads
+    `CLAUDE.md`, `.claude/commands/` and `.claude/agents/`
+    and fails on a backticked repo path that does not
+    exist, a bold cross-reference introduced by "under" that names no
+    heading or bold lead, a `git` subcommand a command file
+    runs without granting it in `allowed-tools`, prose past
+    80 columns, or a backlog ID (`rt-`/`aq-`/`fr-`) cited in
+    no backlog (this last check also reads `docs/`). Paths
+    that are correctly absent go in its `ABSENT_ON_PURPOSE`
+    table, each with a reason. `.claude/skills/` and the rest
+    of `docs/` are unchecked; a green gate says nothing about
+    them
+14. **Doc links** (`cargo xtask doc`) -- rustdoc with
+    `-D warnings`, twice: once public and once with
+    `--document-private-items`, because each pass sees a
+    class of broken link the other cannot
 
 The frontend gates skip only when there is no frontend at
 all. The dependency-cooldown gate runs **first** (it is a
 no-op on unchanged lockfiles, and fails fast on a within
 -cooldown dependency before anything compiles it); after it
-the gates run cheapest-first (Fmt, Duplication, Clippy, then
-the frontend static gates) before the expensive dynamic gates
+the gates run cheapest-first (Fmt, Canon, Duplication,
+Clippy, Doc, Deny, then the frontend static gates) before the
+expensive dynamic gates
 (frontend + Rust tests, Coverage, then the network Audit), and
 a failed step prints the single command to re-run just that
 gate. On a fresh full-stack checkout, run
@@ -532,11 +631,16 @@ a fresh empty `[Unreleased]` above it.
 | `/check` | Type-check all targets (compiles tests, runs none) |
 | `/test` | Run tests with agent-friendly output |
 | `/validate` | Full quality pipeline with stepwise progress |
-| `/commit` | Save-point commit with diary, CHANGELOG, and code review (no version bump) |
+| `/commit` | Save-point commit with CHANGELOG entry (no review, no version bump) |
+| `/review` | Three reviewers in sequence, one lane each, against an immutable snapshot; commits nothing |
+| `/issue` | Work a GitHub issue end to end: verify, plan, TDD, review, PR (needs `gh`) |
+| `/ask` | Re-put the last decision raised in prose as a structured question |
+| `/rundown` | Grouped one-line rundown of the session, ending with what is open |
+| `/short` | Restate the reply above in under 40 words |
 | `/release` | Cut a SemVer release: bump the version, promote `[Unreleased]`, validate, commit, and tag |
 | `/retrospect` | Workflow retrospective (Efficiency / Quality / Speed / Cleanup). Invoked automatically by `/commit`; also callable manually mid-session |
 | `/todo` | Capture a work item into `docs/todo.md` (no implementation) |
-| `/implement` | Plan + implement a captured item; writes `docs/issues/<slug>.md` |
+| `/implement` | Plan + implement a captured item; keeps a working `docs/issues/<slug>.md` until done |
 | `/update-deps` | Upgrade third-party deps (Rust + frontend) to the newest versions outside the 14-day cooldown |
 | `/simplify` | Review changed code for quality |
 | `/architect` | Project overview and architecture guide |

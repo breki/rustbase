@@ -6,7 +6,7 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Read, Grep
 Reflect on the *process* of the work just completed
 (or in progress) and surface concrete improvements
 to how the session was run. This complements code
-reviews (Red Team / Artisan in `/commit`) which
+reviews (the `/review` reviewers) which
 critique the diff -- the retrospective critiques the
 *way* the diff was produced.
 
@@ -82,11 +82,9 @@ on.
    - Slow step ran in the foreground when
      `run_in_background: true` would have unblocked
      other work.
-   - Reviewer agents ran serially when they could
-     have been one parallel message.
-   - The /commit reviewers could have been
-     pre-launched during `/implement` Phase 3 so
-     `/commit` had results waiting.
+   - `/review` ran another stage-2 round although the
+     last round fixed no behaviour defect (its stop
+     rule says that ends the stage).
 
 4. **Cleanup** -- stale, duplicate, or redundant
    entries in canon or memory (including `.claude/`
@@ -171,11 +169,10 @@ Quality:
   (none)
 
 Speed:
-  2-serial-reviewers [propose]
+  2-serial-gates [propose]
     Short: fix iteration ran gates serially.
-    Long: Red Team and Artisan ran in parallel, but
-      the follow-up fixes ran validate/fmt/validate
-      one at a time (turns 8-11), roughly doubling the
+    Long: the follow-up fixes ran
+      validate/fmt/validate one at a time (turns 8-11), roughly doubling the
       wall time of that stretch.
     Fix: add a clause to `CLAUDE.md ## Build Commands`
       to fold fmt into the validate wrapper.
@@ -208,9 +205,9 @@ End the report with one of:
 discarded unless the user asks to escalate them. The
 escalation paths:
 
-- **Real RT/AQ finding:** append to
-  `docs/developer/redteam-log.md` or
-  `artisan-log.md` (only when the finding describes
+- **Real RT/AQ/FR finding:** append to
+  `docs/developer/redteam-log.md`, `artisan-log.md` or
+  `fresh-reader-log.md` (only when the finding describes
   a defect in shipped code, not a process gap).
 - **TODO item:** capture via `/todo <text>` for a
   follow-up implementation pass.
@@ -233,7 +230,7 @@ findings anywhere. The transcript is the record.
   they cannot act on.
 - Cite turn numbers or tool names when possible so
   the user can verify.
-- Do not duplicate Red Team / Artisan findings.
+- Do not duplicate the `/review` reviewers' findings.
   Those critique the code; this critiques the
   process.
 - Cap output at ~15 lines of finding text. Beyond

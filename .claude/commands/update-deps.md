@@ -1,6 +1,6 @@
 ---
 description: Upgrade third-party dependencies (Rust + frontend) within the cooldown
-allowed-tools: Bash(cargo update:*), Bash(cargo xtask:*), Bash(npm:*), Bash(npm --prefix:*), Bash(git status:*), Bash(git diff:*), Read, Edit, AskUserQuestion
+allowed-tools: Bash(cargo update:*), Bash(cargo xtask:*), Bash(cargo -q xtask:*), Bash(npm:*), Bash(npm --prefix:*), Bash(git status:*), Bash(git diff:*), Read, Edit, AskUserQuestion
 ---
 
 Upgrade third-party libraries across both ecosystems
@@ -55,12 +55,12 @@ Do not proceed until the scope is chosen.
 
 1. `cargo update` for the within-semver set (respects
    semver; stays same-major).
-2. `cargo xtask dep-age-check`. It reports every changed
+2. `cargo -q xtask dep-age-check`. It reports every changed
    registry crate as `aged` / `fresh`. If any are **fresh**
    (within the cooldown), do not adopt them as-is.
 3. For each fresh crate, find its pin target and apply it:
    ```
-   V=$(cargo xtask dep-age cargo <crate> --latest-aged)
+   V=$(cargo -q xtask dep-age cargo <crate> --latest-aged)
    cargo update -p <crate> --precise "$V"
    ```
    `--latest-aged` prints the **highest** version that has
@@ -69,7 +69,7 @@ Do not proceed until the scope is chosen.
    line). For a crate `cargo update` just moved into the
    cooldown, this is the newest safe version at or above the
    pre-update lock, so the crate still advances where it can.
-4. Re-run `cargo xtask dep-age-check` until it is
+4. Re-run `cargo -q xtask dep-age-check` until it is
    `0 fresh`. (Pinning one crate can pull a fresh transitive
    dep; repeat for any new arrivals.) `cargo xtask
    dep-preflight` automates this exact pin-and-re-resolve
@@ -87,7 +87,7 @@ Do not proceed until the scope is chosen.
 For each frontend package in scope:
 
 1. Resolve the pin target:
-   `cargo xtask dep-age npm <pkg> --latest-aged`. For a
+   `cargo -q xtask dep-age npm <pkg> --latest-aged`. For a
    **major** bump this may return a lower major than the
    absolute latest (the latest is often too fresh) -- adopt
    the newest aged one and note what was held back.
@@ -109,7 +109,7 @@ For each frontend package in scope:
    before any `cargo xtask` call -- xtask's frontend
    detection is cwd-relative and a lingering `cd frontend`
    makes every frontend gate falsely report "no frontend".
-5. `cargo xtask dep-age-check` again; re-pin any fresh
+5. `cargo -q xtask dep-age-check` again; re-pin any fresh
    transitive additions as in step 4.3.
 
 ### 6. Held-back (too-fresh) versions
@@ -127,7 +127,7 @@ brand-new major), **do not** silently drop it:
 
 ### 7. Verify
 
-Run `cargo xtask validate` (all gates, including `audit` and
+Run `cargo -q xtask validate` (all gates, including `audit` and
 `dep-age-check`). If a major bump broke a gate
 (`svelte-check` under a TypeScript major is the usual
 suspect), either back that one bump out to its previous
@@ -137,7 +137,7 @@ force-commit a red gate.
 ### 8. Hand off to /commit
 
 Invoke `/commit`. The change type is **`chore`** (no version
-bump, no diary). In the summary the commit body should list:
+bump). In the summary the commit body should list:
 the majors adopted, the count of Rust crates advanced, any
 `audit` warning cleared, and everything held back as too
 fresh with its age-out date.

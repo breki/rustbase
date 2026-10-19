@@ -1,6 +1,6 @@
 ---
 description: Cut a SemVer release from accumulated [Unreleased] CHANGELOG entries
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo xtask audit*), Bash(cargo clippy:*), Bash(rustup target add:*), Bash(cargo update:*), Read, Edit, AskUserQuestion
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask audit*), Bash(cargo -q xtask audit*), Bash(cargo clippy:*), Bash(rustc -vV), Bash(rustup target list:*), Bash(rustup target add:*), Bash(cargo update:*), Read, Edit, AskUserQuestion
 ---
 
 Cut a SemVer release: bump the version, promote the
@@ -96,20 +96,27 @@ the deploy task refuses to ship a `HEAD` that is not on a
 8. **Run the release gates** -- three checks, all before
    the tag, because the tag is what `cargo xtask deploy`
    trusts:
-   - **`cargo xtask validate`** -- the umbrella gate. If it
+   - **`cargo -q xtask validate`** -- the umbrella gate. If it
      fails, abort and tell the user what failed; do not
      commit a broken release.
    - **Cross-platform clippy.** `validate` lints only the
      platform you are on, but the template claims Windows,
      Linux and macOS as first-class. A release cut after a
      green local `validate` can still fail CI on the two
-     platforms nobody checked -- so lint another target
-     before the tag, not after:
+     platforms nobody checked -- so lint every installed
+     target **other than the host** before the tag, not
+     after. `rustc -vV` prints the host on its `host:` line;
+     `rustup target list --installed` lists the targets. On
+     a Linux host that means e.g. `x86_64-pc-windows-msvc`;
+     on a Windows host, `x86_64-unknown-linux-gnu`. For each:
      ```bash
-     rustup target add x86_64-unknown-linux-gnu
      cargo clippy --workspace --all-targets \
-       --target x86_64-unknown-linux-gnu -- -D warnings
+       --target <target> -- -D warnings
      ```
+     Linting the host's own target repeats what `validate`
+     just did and checks no other platform. If no target
+     other than the host is installed, add one with
+     `rustup target add <target>` rather than skip the step.
      It must be **clippy**, not `cargo check --target`:
      `check --target` compiles and runs no lints, so it
      proves the build and says nothing about the lints
@@ -119,7 +126,7 @@ the deploy task refuses to ship a `HEAD` that is not on a
      run -- so this costs seconds on a warm target dir. Add
      `aarch64-apple-darwin` too if you develop off macOS and
      ship to it.
-   - **Standalone `cargo xtask audit`.** `validate`'s audit
+   - **Standalone `cargo -q xtask audit`.** `validate`'s audit
      step degrades to a *warning* on a missing tool or an
      unreachable advisory DB, so "Validate OK" does **not**
      by itself mean the dependencies were audited. The
@@ -161,6 +168,8 @@ the deploy task refuses to ship a `HEAD` that is not on a
 11. **Tell the user what to do next** -- print:
     - The new version and tag name
     - The CHANGELOG bullets that were released
+    - The targets the cross-platform clippy linted, so a
+      platform that was never checked is visible
     - "Next: `cargo xtask deploy` will now accept this
       HEAD." (or "Push with `git push && git push
       --tags`" if appropriate)

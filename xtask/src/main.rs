@@ -1,5 +1,6 @@
 mod audit;
 mod backfeed;
+mod canon;
 mod changelog;
 mod check;
 mod clean_cache;
@@ -12,6 +13,7 @@ mod deploy_config;
 mod deploy_guard;
 mod deploy_remote;
 mod deploy_setup;
+mod doc_cmd;
 mod dupes;
 mod feedback;
 mod fmt_cmd;
@@ -39,8 +41,13 @@ struct Cli {
 enum XCommand {
     /// Type-check all targets (compiles tests, runs none)
     Check,
+    /// Check the claims canon prose makes (paths, cross-refs,
+    /// git grants, width, backlog IDs)
+    CanonCheck,
     /// Run clippy (deny warnings)
     Clippy,
+    /// Check doc comments build and doc links resolve
+    Doc,
     /// Run all tests
     Test {
         /// Optional test filter
@@ -192,6 +199,7 @@ fn main() {
 
     let result = match cli.command {
         XCommand::Check => check::check(),
+        XCommand::CanonCheck => canon::canon_check(),
         XCommand::Clippy => clippy_cmd::clippy(),
         XCommand::Test {
             filter,
@@ -204,6 +212,7 @@ fn main() {
         }),
         XCommand::Validate { check } => validate::validate(check),
         XCommand::Fmt => fmt_cmd::fmt(),
+        XCommand::Doc => doc_cmd::doc(),
         XCommand::Coverage => coverage::coverage(),
         XCommand::Dupes => dupes::dupes(),
         XCommand::Audit => audit::audit(),

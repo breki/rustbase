@@ -210,7 +210,14 @@ fn insert_new_block(
                 .is_some_and(|k| k.order() > kind.order())
         })
         .unwrap_or(u_end);
-    let mut block = vec![kind.heading().to_owned(), String::new()];
+    // A heading needs a blank line above it; at the section end
+    // the line above can be the previous block's last bullet.
+    let mut block = Vec::new();
+    if at > 0 && !lines[at - 1].trim().is_empty() {
+        block.push(String::new());
+    }
+    block.push(kind.heading().to_owned());
+    block.push(String::new());
     block.extend(bullet);
     block.push(String::new());
     lines.splice(at..at, block);
@@ -312,6 +319,27 @@ mod tests {
         let removed = out.find("### Removed").unwrap();
         assert!(added < fixed && fixed < removed);
         assert!(out.contains("### Fixed\n\n- a fix\n"));
+    }
+
+    #[test]
+    fn a_new_heading_at_the_section_end_keeps_its_blank_line() {
+        // `[Unreleased]` ends with a bullet, not a blank (here the
+        // file ends there), so a heading inserted at the section
+        // end must bring its own blank line.
+        let start = "\
+# Changelog
+
+## [Unreleased]
+
+### Changed
+
+- an existing entry
+";
+        let out = insert_bullet(start, ChangelogKind::Fixed, "a fix").unwrap();
+        assert!(
+            out.contains("- an existing entry\n\n### Fixed\n\n- a fix\n"),
+            "{out}"
+        );
     }
 
     #[test]

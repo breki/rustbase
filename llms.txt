@@ -42,19 +42,23 @@ Slash commands shipped under `.claude/commands/`:
 | `/check` | Type-check all targets (`cargo xtask check`) |
 | `/test` | Run tests with agent-friendly output |
 | `/validate` | Full quality pipeline with stepwise progress |
-| `/commit` | Commit with versioning, diary, CHANGELOG, parallel Red Team + Artisan code reviews (with cross-confirmed-finding detection), and a post-commit workflow retrospective |
+| `/commit` | Save-point commit: CHANGELOG entry and a post-commit workflow retrospective (no version bump, no review) |
+| `/review` | Three reviewers in sequence (Artisan, Red Team, Fresh Reader), one lane each, against an immutable snapshot, with a stopping rule; commits nothing |
+| `/issue` | Work a GitHub issue end to end: verify, plan, TDD, review, PR (needs `gh`) |
+| `/ask` | Re-put the last decision raised in prose as a structured question |
+| `/rundown` | Grouped one-line rundown of the session, ending with what is open |
+| `/short` | Restate the reply above in under 40 words |
 | `/retrospect` | Workflow retrospective on the session (Efficiency / Quality / Speed). Invoked automatically by `/commit`; also callable manually mid-session |
 | `/todo` | Capture a work item with a generated slug into `docs/todo.md` (capture only) |
-| `/implement` | Plan + execute a captured item. Phase 1 writes `docs/issues/<slug>.md`; Phase 2 codes with TDD; Phase 3 finalises and hands off to `/commit` |
+| `/implement` | Plan + execute a captured item. Phase 1 writes a working `docs/issues/<slug>.md` (removed at the end); Phase 2 codes with TDD; Phase 3 finalises and hands off to `/commit` |
 | `/template-sync` | Pull improvements from the upstream rustbase template into derived projects; cross-references open divergences from `template-feedback.md` so documented differences aren't re-proposed |
 | `/template-improve` | Log template feedback into one of three lifecycle sections (Open divergences / Resolved / Suggestions to flow back) |
 | `/architect` | Project overview and architecture guide |
 | `/web-dev` | Axum + Svelte 5 + Vite + Playwright patterns |
 
-Code-review findings logged in
-`docs/developer/redteam-{log,resolved}.md` and
-`artisan-{log,resolved}.md` (open / resolved pair,
-reverse-chronological).
+Deferred review findings are logged in
+`docs/developer/redteam-log.md`, `artisan-log.md` and
+`fresh-reader-log.md` (newest first).
 
 ## Template Sync
 
@@ -118,7 +122,6 @@ analysis and override recipe.
 - Semantic Versioning (version in
   `crates/rustbase/Cargo.toml`)
 - Keep a Changelog format in `CHANGELOG.md`
-- Development diary in `docs/developer/DIARY.md`
 - LF line endings, 80-char line width
 - TDD: behaviour changes follow strict red/green;
   structural additions (new self-contained modules)

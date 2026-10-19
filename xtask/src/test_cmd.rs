@@ -13,7 +13,7 @@ enum Scope {
     XtaskOnly,
 }
 
-/// Options for [`test`]. Grouped so adding the next flag
+/// Options for [`test`](fn@test). Grouped so adding the next flag
 /// (`--locked`, `--no-fail-fast`, ...) doesn't widen the
 /// function signature.
 #[derive(Clone, Copy, Default)]
@@ -283,7 +283,7 @@ test third::fail ... FAILED";
         let stdout = "test foo::bar ... ok\n\
             test result: ok. 1 passed";
         let names = extract_failed_names(stdout);
-        assert!(names.is_empty());
+        assert!(names.is_empty(), "{names:?}");
     }
 
     #[test]

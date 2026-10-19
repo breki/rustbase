@@ -586,7 +586,8 @@ mod tests {
     fn parse_coverage_ignore_empty_when_section_absent() {
         let toml = "[workspace]\nmembers = []\n\n\
                     [profile.release-fast]\ninherits = \"release\"\n";
-        assert!(parse_coverage_ignore(toml).is_empty());
+        let got = parse_coverage_ignore(toml);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -595,7 +596,8 @@ mod tests {
         // section's `ignore`-lookalike must not leak in.
         let toml = "[workspace.metadata.coverage]\nother = 1\n\n\
                     [other.section]\nignore = [\"nope.rs\"]\n";
-        assert!(parse_coverage_ignore(toml).is_empty());
+        let got = parse_coverage_ignore(toml);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -642,7 +644,8 @@ mod tests {
 
     #[test]
     fn merge_ranges_handles_empty() {
-        assert!(merge_ranges(Vec::new()).is_empty());
+        let got = merge_ranges(Vec::new());
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -712,7 +715,8 @@ mod tests {
 
     #[test]
     fn uncovered_ranges_handles_empty() {
-        assert!(uncovered_ranges(&[]).is_empty());
+        let got = uncovered_ranges(&[]);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -735,8 +739,10 @@ mod tests {
 
     #[test]
     fn parse_segments_empty_or_null() {
-        assert!(parse_segments(&serde_json::Value::Null).unwrap().is_empty());
-        assert!(parse_segments(&json!([])).unwrap().is_empty());
+        let got = parse_segments(&serde_json::Value::Null).unwrap();
+        assert!(got.is_empty(), "{got:?}");
+        let got = parse_segments(&json!([])).unwrap();
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]

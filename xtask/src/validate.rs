@@ -1,10 +1,12 @@
 use std::time::Instant;
 
 use crate::audit;
+use crate::canon;
 use crate::clippy_cmd;
 use crate::coverage;
 use crate::deny;
 use crate::dep_age;
+use crate::doc_cmd;
 use crate::dupes;
 use crate::fmt_cmd;
 use crate::frontend_check;
@@ -56,6 +58,13 @@ fn steps(check: bool) -> Vec<Step> {
             cmd: "fmt",
             run: boxed(move || run_fmt(check)),
         },
+        // Reads markdown only, so it needs no compilation and
+        // sits ahead of every gate that does.
+        Step {
+            name: "Canon",
+            cmd: "canon-check",
+            run: boxed(canon::canon_check_detail),
+        },
         Step {
             name: "Duplication",
             cmd: "dupes",
@@ -65,6 +74,13 @@ fn steps(check: bool) -> Vec<Step> {
             name: "Clippy",
             cmd: "clippy",
             run: boxed(run_clippy),
+        },
+        // Reuses the metadata Clippy just produced, so both rustdoc
+        // passes cost about a second warm.
+        Step {
+            name: "Doc",
+            cmd: "doc",
+            run: boxed(run_doc),
         },
         // Offline supply-chain gate -- see Audit (network) at the
         // end. Placed among the static gates because it compiles
@@ -259,6 +275,12 @@ fn run_deny() -> Result<String, String> {
     Ok(String::new())
 }
 
+/// Doc step -- both rustdoc passes; see [`doc_cmd`].
+fn run_doc() -> Result<String, String> {
+    doc_cmd::doc()?;
+    Ok(String::new())
+}
+
 /// Dep-age step -- cooldown-checks only dependencies added or
 /// bumped in the working tree versus HEAD. A within-cooldown
 /// dependency fails the gate; a missing baseline or
@@ -365,6 +387,6 @@ mod tests {
     fn steps_list_is_non_empty() {
         // The `[N/total]` denominator derives from this length;
         // an empty list would silently disable the whole gate.
-        assert!(!steps(false).is_empty());
+        assert!(!steps(false).is_empty(), "validate has no steps");
     }
 }

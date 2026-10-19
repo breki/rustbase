@@ -1,6 +1,6 @@
 ---
 description: Capture an issue or idea into the TODO list (no implementation)
-allowed-tools: Bash(cargo xtask*), Read, Grep
+allowed-tools: Bash(cargo xtask*), Bash(cargo -q xtask*), Read, Grep
 ---
 
 Collect an issue or idea into `docs/todo.md`. This
@@ -35,7 +35,7 @@ the user's words into a slug and a summary.
 2. Add it mechanically:
 
    ```
-   cargo xtask todo add --slug <slug> \
+   cargo -q xtask todo add --slug <slug> \
      --summary "<one-line summary, <= 80 chars>"
    ```
 
@@ -53,7 +53,7 @@ the user's words into a slug and a summary.
 
 ## Listing pending items
 
-When called with no arguments, run `cargo xtask todo
+When called with no arguments, run `cargo -q xtask todo
 list` and show its output (each line is
 `<slug> -- <summary>`). Nothing else.
 

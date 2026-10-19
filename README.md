@@ -16,10 +16,16 @@ integration and quality gates.
     override recipe, and a version-source-of-truth
     convention
   - Stop hook running validation on modified Rust files
-  - `/commit` -- versioning, diary, CHANGELOG, parallel
-    Red Team + Artisan code reviews with **cross-
-    confirmed-finding** detection, and a post-commit
-    workflow retrospective
+  - `/commit` -- save-point commit: CHANGELOG entry and a
+    post-commit workflow retrospective (no version bump,
+    no review)
+  - `/review` -- three reviewers in sequence (Artisan,
+    Red Team, Fresh Reader), each in one lane, against an
+    immutable snapshot, with a stopping rule; commits
+    nothing
+  - `/issue` -- work a GitHub issue end to end (needs
+    `gh`); `/ask`, `/rundown` and `/short` reshape,
+    summarise and compress the session's output
   - `/retrospect` -- standalone workflow retrospective
     (Efficiency / Quality / Speed / Cleanup buckets,
     `[trivial]`/`[propose]` tags, auto-apply offer for
@@ -29,9 +35,10 @@ integration and quality gates.
     into `docs/todo.md` (capture only, never
     implements)
   - `/implement` -- plan + execute a captured item.
-    Phase 1 writes a planning doc at
+    Phase 1 writes a working planning doc at
     `docs/issues/<slug>.md`; Phase 2 codes with TDD;
-    Phase 3 validates and hands off to `/commit`
+    Phase 3 validates, retires the doc and hands off to
+    `/commit`
   - `/template-sync` -- pull improvements from the
     upstream rustbase template into a derived
     project; cross-references the project's open
@@ -75,9 +82,8 @@ integration and quality gates.
   - Conventional Commits with AI-Generated footer
   - Semantic Versioning
   - Keep a Changelog format
-  - Development diary for tracking changes
-  - Code review finding logs (Red Team + Artisan,
-    open + resolved pair)
+  - Deferred review-finding backlogs (Red Team,
+    Artisan, Fresh Reader)
   - LF line endings enforced
   - 80-char line width (code and markdown)
 

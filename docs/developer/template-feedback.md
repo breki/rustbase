@@ -73,6 +73,184 @@ individual projects.
 
 ## Resolved
 
+### tf-2026-10-19-changelog-add-glued-a-heading-to-a-bullet -- changelog add glued a heading to a bullet
+
+Surfaced from bombyx's template feedback (2026-10-19). `changelog add`
+inserted a new `### <kind>` heading with no blank line above it when
+the insertion point followed a bullet, gluing the heading to that
+bullet so it rendered as body text. The trigger is a section end with
+no blank line before it, e.g. `[Unreleased]` ending the file (bombyx's
+own test shape did not reproduce it here). `insert_new_block` now
+pushes a blank line first when the line above is not blank, with a
+regression test proven red first.
+
+### tf-2026-10-19-commit-found-the-latest-tag-alphabetically -- commit found the latest tag alphabetically
+
+Surfaced from bombyx's template feedback (2026-10-19). `/commit`'s
+"did this ship?" check said to run `git tag` and take the latest tag,
+but `git tag` sorts alphabetically, so `v0.9.0` read as newer than
+`v0.11.0` and `<latest-tag>..HEAD` could cover shipped changes. It now
+uses `git tag --list --sort=-v:refname` (first line is the latest) and
+grants that command in `allowed-tools`, which it previously lacked.
+
+### tf-2026-10-19-release-linted-the-host-target-on-linux -- release linted the host target on Linux
+
+Surfaced from bombyx's template feedback (2026-10-19). `/release`'s
+cross-platform clippy hardcoded `x86_64-unknown-linux-gnu`, which on a
+Linux host is the host itself, so it repeated `validate` and checked
+no other platform. It now lints every installed target other than the
+host (`rustc -vV` gives the host), says to add a target rather than
+skip, grants the two commands it needs, and the release summary names
+the targets that ran.
+
+### tf-2026-10-19-new-clippy-lint-broke-xtask-tests -- new clippy lint broke xtask tests
+
+Surfaced from bombyx's template feedback (2026-10-19). Rust 1.99's
+`assert_is_empty` lint rejected `assert!(x.is_empty())` and its
+negated form, which the template used 23 times, so the unpinned
+`stable` channel turned the Clippy gate red with no project change.
+Every site now names the value in the failure message (or binds a
+call result first) or uses `assert_ne!(.., "")`; verified with
+`cargo +1.99.0 clippy --workspace --all-targets -D warnings`.
+`CLAUDE.md` now says the channel is unpinned and what that costs.
+
+### tf-2026-10-19-todo-md-was-missing-from-never-sync -- todo.md was missing from never-sync
+
+Surfaced from bombyx's template feedback (2026-09-11). `docs/todo.md`
+is a per-project backlog written by `cargo xtask todo`, but was not in
+`sync-candidates`' `NEVER_SYNC`, so every sync would offer the
+template's own backlog to downstreams. Added it (and the new
+`fresh-reader-log.md`), asserted in `is_excluded_matches_exact_and_prefix`,
+and updated `/template-sync`'s description of the set.
+
+### tf-2026-10-19-template-shipped-no-doc-link-gate -- template shipped no doc-link gate
+
+Surfaced from bombyx's template feedback (2026-10-19). Nothing gated
+documentation: rustdoc reports a broken intra-doc link as a warning,
+so docs built clean and stopped navigating. Ported `cargo xtask doc`,
+which runs rustdoc with `-D warnings` twice (public, then
+`--document-private-items`, since each pass sees a class of broken
+link the other cannot), wired into `validate` after Clippy and into
+the Stop hook (measured 1.2 s warm). It immediately caught an
+ambiguous `[test]` link in `test_cmd.rs`. `CLAUDE.md` gained the rule
+to reference private items by backticked name.
+
+### tf-2026-10-19-xtask-invocations-in-command-files-were-not-quie -- xtask invocations in command files were not quiet
+
+Surfaced from bombyx's template feedback (2026-08-30). Command files
+wrote bare `cargo xtask ...`, so the first call after any xtask change
+put dozens of `Compiling` lines ahead of the result. Invocations the
+agent is told to run now use `cargo -q xtask` (prose that merely names
+a command is unchanged), and every `allowed-tools` pattern for
+`cargo xtask` gained a `cargo -q xtask` twin so the quiet spelling is
+still granted. `CLAUDE.md` Build Commands documents the convention.
+
+### tf-2026-10-19-ask-command-shipped -- ask command shipped
+
+Surfaced from bombyx's template feedback (2026-10-19). Ported `/ask`,
+which re-puts the last decision the assistant raised in prose as a
+structured `AskUserQuestion` (recommendation first, no new options or
+analysis), and listed it in the `CLAUDE.md` Skills table, `README.md`
+and `llms.txt`.
+
+### tf-2026-10-19-issue-rundown-and-short-commands-shipped -- issue, rundown and short commands shipped
+
+Surfaced from bombyx's template feedback (2026-09-11). Ported three
+general commands: `/issue` (work a GitHub issue end to end -- verify
+the body against the tree, settle the approach, TDD, `/review` on the
+pushed branch, a PR that says what was not verified; needs `gh`),
+`/rundown` (grouped one-line session rundown ending with what is open)
+and `/short` (restate in under 40 words). bombyx-specific steps (VM
+host, its CLAUDE.md sections) were generalised.
+
+### tf-2026-10-19-canon-prose-claims-had-no-gate -- canon prose claims had no gate
+
+Surfaced from bombyx's template feedback (2026-09-11). Canon prose
+made claims nothing checked. Ported `cargo xtask canon-check` as a
+markdown-only `validate` gate after Fmt: it fails on a backticked repo
+path that does not exist, a bold cross-reference introduced by "under"
+that names nothing, a `git` subcommand a command file runs without
+granting, prose past 80 columns, and a backlog ID cited in no backlog.
+Its first run found three real defects here (an ungranted `git remote`
+in `/template-backfeed`, a garbled `git -C` sentence, a dead example
+ID in `/commit`). Known limit: a citation that wraps so its bold run
+opens a line counts as its own target.
+
+### tf-2026-10-19-reviewing-moved-out-of-commit-into-sequenced-rev -- reviewing moved out of commit into sequenced review
+
+Surfaced from bombyx's template feedback (2026-09-11, four entries:
+reviewing does not belong inside commit, three reviewers in sequence,
+review rounds have no stopping rule, reviewers need an immutable
+snapshot). `/commit` no longer reviews; the new `/review` runs
+`artisan`, `red-team` and a new `fresh-reader` agent one at a time,
+one lane each, against a `target/` snapshot taken with named
+`git add -N` paths, with a behaviour-defect stopping rule and a
+three-round cap. `code-reviewers.md`, both existing agents (snapshot
+input, `AQ-`/`RT-` IDs, a Consequence field), `/implement` and
+`/retrospect` were updated, and `CLAUDE.md` gained "Reviewing is its
+own process". A `fresh-reader-log.md` backlog was added.
+
+### tf-2026-10-19-auto-generated-development-diary-dropped -- auto-generated development diary dropped
+
+Surfaced from bombyx's template feedback (2026-09-17). `/commit`
+appended a narrated entry to `docs/developer/DIARY.md` on every
+significant commit, producing a large write-only log that duplicated
+commit bodies and `CHANGELOG.md` and mixed stale facts with current
+ones. Removed the step and the file, and struck the diary from
+`CLAUDE.md`, `README.md`, `llms.txt`, the architect skill and the
+command files; the path stays in `NEVER_SYNC` so a sync cannot
+resurrect it.
+
+### tf-2026-10-19-issue-planning-docs-were-permanent -- issue planning docs were permanent
+
+Surfaced from bombyx's template feedback (2026-09-17).
+`docs/issues/<slug>.md` accumulated as permanent write-once records
+whose reversed intermediate designs read as current. `/implement`
+Phase 3 (and `/issue`) now promote durable decisions to a reference
+doc or code comment and the verification note to the commit body,
+then `git rm` the doc; `git rm` is granted. Existing completed issue
+docs were left in place.
+
+### tf-2026-10-19-todo-done-wrote-dangling-issue-links -- todo done wrote dangling issue links
+
+Surfaced from bombyx's template feedback (2026-09-04). `todo done`
+always linked `issues/<slug>.md`, which dangles for an item with no
+doc (and now for every item, since issue docs are removed). It now
+writes no link unless `--doc <path>` (relative to `docs/`) names an
+existing file, guarded against blank, rooted (matched by shape, not
+`Path::is_absolute`), unrenderable (allowed-set) and
+repository-escaping targets; an unlinked Done entry keeps the
+`- **slug** -- summary` shape the parser needs. `--slug` and `--date`
+are shape-checked too (a newline could fabricate an entry), and the
+caller-less `add --issue` was removed. `is_iso_date` moved to
+`helpers`.
+
+### tf-2026-10-19-code-comments-had-a-floor-but-no-rules -- code comments had a floor but no rules
+
+Surfaced from bombyx's template feedback (2026-09-11). The coding
+standards only required doc comments. `CLAUDE.md` now has a Code
+comments subsection: a two-to-three-line budget (a list or a located
+absence earns more) and five rules -- one reason not the chain, state
+the invariant not the disaster, never inventory callers, no
+hypotheticals, say what looks wrong and is not -- with reasoning
+belonging in `docs/`.
+
+### tf-2026-10-19-tagged-opening-summary-convention-added -- tagged opening summary convention added
+
+Surfaced from bombyx's template feedback (2026-10-19). Added an
+optional `CLAUDE.md` convention: open every reply with a summary under
+forty words in `[short]`/`[/short]` tags, a fixed place a hook or
+notifier can lift out, with no backticks or paths if it may be
+spoken. `/short` is its companion; the speech hook stays per-operator.
+
+### tf-2026-10-19-backfeed-diff-split-entries-on-indented-code-hea -- backfeed-diff split entries on indented code headers
+
+Found while running this backfeed against bombyx (2026-10-19).
+`backfeed-diff` treated an indented `### Fixed` inside an entry's code
+sample as a header, silently truncating that entry's body. `hash_level`
+now follows CommonMark: a header allows at most three leading spaces,
+so four spaces or a tab is an indented code line, not a boundary.
+
 ### tf-2026-08-18-template-improve-only-logged-what-it-was-told -- template-improve only logged what it was told
 
 Surfaced from bombyx's template feedback (2026-08-18).

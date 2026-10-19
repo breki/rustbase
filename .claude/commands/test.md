@@ -1,6 +1,6 @@
 ---
 description: Run tests with minimal agent-friendly output
-allowed-tools: Bash(cargo xtask:*)
+allowed-tools: Bash(cargo xtask:*), Bash(cargo -q xtask:*)
 ---
 
 Run tests with agent-friendly output.
@@ -19,5 +19,5 @@ details
 ## Implementation
 
 ```
-cargo xtask test $ARGUMENTS
+cargo -q xtask test $ARGUMENTS
 ```

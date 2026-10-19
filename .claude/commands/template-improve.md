@@ -1,6 +1,6 @@
 ---
 description: Log feedback for the rustbase template, or sweep commits for it
-allowed-tools: Read, Write, Grep, AskUserQuestion, Bash(cargo xtask feedback-add:*), Bash(git log:*), Bash(git status:*), Bash(git diff:*), Bash(git show:*)
+allowed-tools: Read, Write, Grep, AskUserQuestion, Bash(cargo xtask feedback-add:*), Bash(cargo -q xtask feedback-add:*), Bash(git log:*), Bash(git status:*), Bash(git diff:*), Bash(git show:*)
 ---
 
 Log observations about the rustbase template in
@@ -64,14 +64,11 @@ and not a change to this file.
 ### 2. Read more than the commit messages
 
 A commit subject rarely says "this was the template's
-fault". The content that does is in four places, and all
-four are in range:
+fault". The content that does is in three places, and all
+three are in range:
 
 - **Commit bodies.** This project writes why, not just
   what, so a body often names the surprise directly.
-- **`docs/developer/DIARY.md`.** The entries record what
-  cost an hour and why, which is exactly the asymmetry
-  template feedback wants.
 - **`docs/developer/redteam-log.md` and `artisan-log.md`.**
   A deferred finding against template-provided code *is*
   template feedback, and it is already written up.
@@ -172,7 +169,7 @@ Write the body to a temp file (use the scratchpad, not the
 repo), then:
 
 ```
-cargo xtask feedback-add --section <open|resolved|suggestion> \
+cargo -q xtask feedback-add --section <open|resolved|suggestion> \
   --title "<short title>" --body-file <tmp>
 ```
 

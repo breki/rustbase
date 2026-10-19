@@ -26,7 +26,9 @@ const NEVER_SYNC: &[&str] = &[
     "docs/developer/DIARY.md",
     "docs/developer/redteam-log.md",
     "docs/developer/artisan-log.md",
+    "docs/developer/fresh-reader-log.md",
     "docs/issues/",
+    "docs/todo.md",
 ];
 
 /// True when `path` is in the never-sync set (exact match, or
@@ -200,6 +202,8 @@ mod tests {
         assert!(is_excluded("docs/developer/template-feedback.md"));
         assert!(is_excluded("docs/developer/backfeed-ledger.toml"));
         assert!(is_excluded("docs/issues/some-issue.md")); // prefix
+        assert!(is_excluded("docs/todo.md")); // per-project backlog
+        assert!(is_excluded("docs/developer/fresh-reader-log.md"));
         // Not excluded: other docs, code.
         assert!(!is_excluded("docs/deployment.md"));
         assert!(!is_excluded("docs/developer/architecture.md"));

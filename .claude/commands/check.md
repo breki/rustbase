@@ -1,6 +1,6 @@
 ---
 description: Type-check all targets without running tests
-allowed-tools: Bash(cargo xtask:*)
+allowed-tools: Bash(cargo xtask:*), Bash(cargo -q xtask:*)
 ---
 
 Type-check the whole workspace, compiling every target
@@ -29,5 +29,5 @@ paying for the lint passes (`clippy`) or the test run
 ## Implementation
 
 ```
-cargo xtask check
+cargo -q xtask check
 ```
