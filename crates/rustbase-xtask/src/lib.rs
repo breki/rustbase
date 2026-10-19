@@ -18,8 +18,10 @@ pub mod dep_age;
 pub mod dupes;
 mod process;
 
-/// The build-tooling package, left out of the coverage and
-/// duplication measurements: it is not the project's product.
+/// The project's `xtask` package, left out of the coverage and
+/// duplication measurements: a binary of glue around this library.
+/// The name is fixed, not configurable. This library is tooling
+/// too, but it is measured: its logic is what the gates run.
 const TOOLING_CRATE: &str = "xtask";
 
 /// What a gate does when it cannot finish (a tool missing, the
@@ -82,7 +84,10 @@ pub struct Thresholds {
     /// Minimum line coverage of any one file, so a single
     /// uncovered file is not averaged away.
     pub coverage_file: f64,
-    /// Maximum exact duplication across all crates together.
+    /// Maximum exact duplication pooled across crates: duplicate
+    /// lines over total lines, each crate measured alone. A crate of
+    /// 1000 lines with 10 duplicated and one of 50 with 5 pool to
+    /// 15/1050 = 1.4%. Copies between crates are not measured.
     pub dupes_workspace: f64,
     /// Maximum exact duplication in any one crate. Wider than
     /// the workspace limit: one copied block is a large share of

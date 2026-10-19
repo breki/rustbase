@@ -54,7 +54,7 @@ Use the `[N/Total]` format with dot padding and timing:
 [2/5] Clippy........ OK (3.4s)
 [3/5] Test.......... OK (5.1s)
 [4/5] Coverage...... OK (95.5% >= 90%, 18.4s)
-[5/5] Duplication... OK (workspace 0.5% <= 6.0%, each crate <= 12.0%, 5.1s)
+[5/5] Duplication... OK (all crates 0.5% <= 6.0%, each crate <= 12.0%, 5.1s)
 Validate OK (32.2s)
 ```
 

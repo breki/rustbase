@@ -62,7 +62,7 @@ into `crates/rustbase-xtask` with the template's `xtask` calling it.
   `process.rs`. Each leaf is listed under
   `[workspace.metadata.coverage]` in the root `Cargo.toml`.
 - **The gate also applies per file.** Each file must reach 85% as
-  well as the crate reaching 90%. `crates/rustbase-xtask/src/deny.rs`
+  well as the workspace reaching 90%. `crates/rustbase-xtask/src/deny.rs`
   first measured 75% with the crate at 92%. Its entry point only
   hands the excluded spawn its arguments, so tests never call it,
   and each line of a multi-line argument list inside it counted as
@@ -98,7 +98,7 @@ ignores. Knobs the survey found real projects need:
 - project name (env-var prefix, user agent, temp-dir prefix);
 - primary crate manifest path (version source, deploy guard);
 - todo file location and format; feedback-file sections;
-- thresholds: coverage overall/module, duplication workspace/crate,
+- thresholds: coverage overall/file, duplication pooled/per crate,
   module size, the cooldown window;
 - strictness of the network gates (fail or warn when they cannot
   finish);
@@ -153,7 +153,7 @@ the library is a possible later step, not part of this plan.
 |-|-|
 | `dep_age` (+ gate, preflight) | extracted (prototype) |
 | `audit`, `deny` | extracted; `audit` takes a `Strictness` (fail or warn when it cannot finish), `deny` none: a missing tool always fails |
-| `coverage`, `dupes` | extracted; limits are `Config::thresholds`; kozmotic's coverage hardening (unreadable manifest, vacuous run) and jutro's workspace-plus-per-crate duplication limit taken |
+| `coverage`, `dupes` | extracted; limits are `Config::thresholds`; kozmotic's coverage hardening (unreadable manifest, vacuous run) and jutro's pooled-plus-per-crate duplication limit taken (copies between crates unmeasured: #15) |
 | `doc_cmd`, `canon` | library-ready; canon exemptions knob |
 | `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | library-ready (output parsing); take bombyx's and hoard's fixes |
 | `changelog`, `todo` | library-ready behind config; todo format pluggable (bombyx) |

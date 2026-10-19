@@ -27,7 +27,7 @@ module_name_repetitions = "allow"
 # backslashes reach the regex verbatim.
 [workspace.metadata.coverage]
 # The shared library's process leaves: the cooldown gate's
-# (curl, git, cargo) and the audit and licence gates' (cargo, npm).
+# (curl, git, cargo) and the other gates' (cargo, npm, code-dupes).
 ignore = [
     'rustbase-xtask[/\\]src[/\\]dep_age[/\\]io\.rs',
     'rustbase-xtask[/\\]src[/\\]process\.rs',

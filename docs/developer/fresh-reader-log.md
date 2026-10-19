@@ -18,6 +18,29 @@ work.
 
 ---
 
+### fr-2026-10-19-dupes-pooled-label-and-field-name
+
+**Category:** naming (output and API)
+
+The duplication gate's pooled figure is printed as `all crates 0.4%`,
+which reads as if every crate sits at 0.4%, and its limit is the
+field `Thresholds::dupes_workspace`, which suggests a whole-workspace
+scan that would catch copies between crates (#15). Label the output
+`pooled` and rename the field (e.g. `dupes_pooled`). Deferred because
+stage 3 changes neither output nor code.
+
+### fr-2026-10-19-coverage-module-means-file
+
+**Category:** naming (output and code)
+
+In `crates/rustbase-xtask/src/coverage.rs` the per-file floor goes by
+"module": `FailingModule`, `scan_modules`, `write_modules` and the
+message `modules below coverage threshold:`, while
+`Thresholds::coverage_file`, `CLAUDE.md` and `README.md` say "file".
+A reader cannot tell a Rust module from a file. Use "file" in the
+type names and the message. Deferred because stage 3 changes neither
+output nor code.
+
 ### fr-2026-10-19-audit-result-warnings-name
 
 **Category:** naming
