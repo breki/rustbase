@@ -178,6 +178,19 @@ caller's cwd and can re-anchor / re-create the junction.
 
 ### E2E Testing
 
+First time on a machine, install the harness from the repo
+root's lockfile (exact, cooldown-checked versions) and its
+browser:
+
+```bash
+npm ci                           # root package-lock.json (Playwright)
+npx playwright install chromium  # the only browser the config uses
+```
+
+The root lockfile is covered by the cooldown gate
+(`dep-age-check`) but not by `cargo xtask audit`, which audits
+`frontend/` only.
+
 ```bash
 scripts/e2e.sh                   # free e2e ports + run tests
 npx playwright test              # run all E2E tests
@@ -1007,7 +1020,9 @@ Five `cargo xtask` commands guard the dependency tree:
   cooldown fails the gate before the compile steps (Clippy,
   Test, Coverage) build and run its build script. It checks
   **only the dependencies added or version-bumped in the working
-  tree versus `HEAD`** (both lockfiles), so it fires exactly when
+  tree versus `HEAD`** (`Cargo.lock`, `frontend/package-lock.json`
+  and the root `package-lock.json` of the E2E harness; a lockfile
+  absent at the base counts as wholly new), so it fires exactly when
   a dependency is adopted and costs nothing -- no network -- on a
   commit that leaves the lockfiles untouched. A *whole-tree* gate is
   deliberately avoided: it would flag every already-locked

@@ -48,6 +48,10 @@ and this project adheres to
   `Config` (`Config::for_project` derives the `<NAME>_DEP_AGE_ALLOW` variable
   and registry user agent). `docs/xtask-library.md` records the investigation
   and recommendation (#2).
+- The repo-root `package-lock.json` of the Playwright E2E harness is now
+  committed (it was git-ignored) and checked by the dependency-cooldown gate;
+  `CLAUDE.md` documents the one-time `npm ci` + `npx playwright install
+  chromium` setup.
 
 ### Changed
 
@@ -104,6 +108,13 @@ and this project adheres to
   `postcss-selector-parser`, `source-map-js` and `undici` moved to patched
   versions past the 14-day cooldown (`postcss` and `undici` held by `overrides`
   until their newest releases age).
+- Committed shell and PowerShell scripts with a shebang (`scripts/e2e.sh`,
+  `scripts/kill-servers.sh`, `build.ps1`, the Stop hook) are now executable;
+  `scripts/e2e.sh` previously failed with "permission denied" when run directly,
+  as `/commit` does.
+- `cargo xtask dep-age-check` treats a lockfile absent at the base commit as
+  wholly new and checks every entry, instead of reporting "no baseline" (which
+  failed the standalone command and CI when a lockfile was first added).
 
 ### Removed
 

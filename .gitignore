@@ -45,9 +45,9 @@ coverage.json
 # E2E test data (copied from fixtures at runtime)
 /test-data/
 
-# Node (root-level, for Playwright)
+# Node (root-level, for Playwright). The root package-lock.json
+# is committed so the cooldown gate can check the E2E harness.
 /node_modules/
-/package-lock.json
 
 # mise local overrides
 .mise.local.toml

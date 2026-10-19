@@ -24,7 +24,7 @@ use std::fs;
 
 use serde_json::Value;
 
-use super::io::git_show;
+use super::io::{git_commit_exists, git_show};
 use super::{
     COOLDOWN_DAYS, Ecosystem, age_in_days, cargo_version_date, fetch_registry,
     npm_version_date, parse_iso_date, today_days,
@@ -276,6 +276,14 @@ const CARGO_LOCK: Lockfile = Lockfile {
     parser: parse_cargo_lock,
 };
 
+/// The repo-root npm tree (the template's Playwright E2E harness).
+const ROOT_NPM_LOCK: Lockfile = Lockfile {
+    eco: Ecosystem::Npm,
+    rel: "package-lock.json",
+    required: false,
+    parser: parse_npm_lock,
+};
+
 const NPM_LOCK: Lockfile = Lockfile {
     eco: Ecosystem::Npm,
     rel: "frontend/package-lock.json",
@@ -316,12 +324,18 @@ fn collect_changes(
             return;
         }
     };
-    let Some(baseline_text) = git_show(&cfg.root, base, rel) else {
-        warnings.push(format!(
-            "{rel}: no {base} baseline to diff against -- skipping \
-             cooldown check for this lockfile"
-        ));
-        return;
+    // A lockfile absent at an existing base commit is new: every
+    // entry in it is newly adopted, so diff against nothing.
+    let baseline_text = match git_show(&cfg.root, base, rel) {
+        Some(text) => text,
+        None if git_commit_exists(&cfg.root, base) => String::new(),
+        None => {
+            warnings.push(format!(
+                "{rel}: no {base} baseline to diff against -- skipping \
+                 cooldown check for this lockfile"
+            ));
+            return;
+        }
     };
     let mut changed =
         new_locked_versions(&parser(&baseline_text), &parser(&current_text));
@@ -356,6 +370,14 @@ pub fn check_changed_deps(cfg: &Config, base: &str) -> DepAgeResult {
         &mut warnings,
     );
     collect_changes(cfg, base, &NPM_LOCK, &allow, &mut outcomes, &mut warnings);
+    collect_changes(
+        cfg,
+        base,
+        &ROOT_NPM_LOCK,
+        &allow,
+        &mut outcomes,
+        &mut warnings,
+    );
 
     let mut result = classify_dep_age(&outcomes, &cfg.dep_age_allow_env);
     // Baseline/parse warnings precede the per-dep warnings the
@@ -477,6 +499,36 @@ mod tests {
         let err = dep_age_check(&cfg, "HEAD").unwrap_err();
         assert!(err.contains("could not complete"), "{err}");
         assert!(dep_age_check(&cfg, "-p").is_err());
+    }
+
+    #[test]
+    fn a_lockfile_new_since_the_base_checks_every_entry() {
+        // The base commit exists but had no such lockfile, so
+        // everything in it is newly adopted -- not "no baseline".
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        std::fs::write(
+            repo.0.join("package-lock.json"),
+            r#"{"packages": {"": {}, "node_modules/left-pad":
+               {"version": "1.3.0", "resolved":
+               "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz"}}}"#,
+        )
+        .unwrap();
+        let cfg = Config::for_project("t", repo.0.clone());
+        let allow: HashSet<String> = ["left-pad@1.3.0".to_string()].into();
+        let (mut outcomes, mut warnings) = (Vec::new(), Vec::new());
+        collect_changes(
+            &cfg,
+            "HEAD",
+            &ROOT_NPM_LOCK,
+            &allow,
+            &mut outcomes,
+            &mut warnings,
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(
+            outcomes,
+            vec![("left-pad@1.3.0".into(), DepOutcome::Allowed)]
+        );
     }
 
     #[test]

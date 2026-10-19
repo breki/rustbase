@@ -72,6 +72,21 @@ pub(super) fn git_show(root: &Path, base: &str, rel: &str) -> Option<String> {
     }
 }
 
+/// True when `base` names a commit in `root`'s repository, so a
+/// failed `git show` there means the file did not exist yet.
+pub(super) fn git_commit_exists(root: &Path, base: &str) -> bool {
+    Command::new("git")
+        .current_dir(root)
+        .args([
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{base}^{{commit}}"),
+        ])
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
 /// Pin `name@current` to `target` via `cargo update --precise`
 /// (index-only; no fetch of tarballs, no compile).
 pub(super) fn cargo_update_precise(

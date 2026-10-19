@@ -62,6 +62,15 @@ planning doc is removed.
   Failing that, soften the rule in `.claude/commands/todo.md` to name the edit
   the tooling cannot make. Sourced from bombyx template feedback (2026-08-30).
 
+- **drop-npm-cooldown-pins** -- Remove the npm cooldown pins after 2026-11-01
+  frontend/package.json pins vitest exactly at 4.1.11 and overrides postcss
+  (8.5.29) and undici (7.30.0), because the newer releases were inside the
+  14-day cooldown on 2026-10-19 (vitest 4.1.12 and undici 7.30.1 clear on
+  2026-10-29, postcss 8.5.31 on 2026-11-01). Left in place they freeze those
+  packages. After 2026-11-01: restore the vitest caret range, delete the
+  overrides block, run /update-deps for the frontend, and confirm npm audit and
+  dep-age-check stay clean.
+
 ## Done
 
 - [**template-tooling-cli-redesign**](issues/template-tooling-cli-redesign.md)
