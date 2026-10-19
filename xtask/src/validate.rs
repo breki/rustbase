@@ -5,7 +5,6 @@ use crate::canon;
 use crate::clippy_cmd;
 use crate::coverage;
 use crate::deny;
-use crate::dep_age;
 use crate::doc_cmd;
 use crate::dupes;
 use crate::fmt_cmd;
@@ -15,6 +14,7 @@ use crate::frontend_fmt;
 use crate::frontend_test;
 use crate::helpers::{elapsed_str, step_output};
 use crate::test_cmd;
+use rustbase_xtask::dep_age;
 
 /// A single validation step: a display name, the standalone
 /// xtask subcommand that runs it alone (the `iterate with`
@@ -299,7 +299,8 @@ fn run_doc() -> Result<String, String> {
 /// unless [`dep_age_strict`] says to fail.
 fn run_dep_age() -> Result<String, String> {
     let strict = dep_age_strict(|k| std::env::var(k).ok());
-    dep_age_verdict(dep_age::check_changed_deps("HEAD"), strict)
+    let cfg = crate::helpers::tasks_config();
+    dep_age_verdict(dep_age::check_changed_deps(&cfg, "HEAD"), strict)
 }
 
 /// The step's result: a fresh dependency always fails; a check

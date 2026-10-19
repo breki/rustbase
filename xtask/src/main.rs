@@ -7,7 +7,6 @@ mod clean_cache;
 mod clippy_cmd;
 mod coverage;
 mod deny;
-mod dep_age;
 mod deploy;
 mod deploy_config;
 mod deploy_guard;
@@ -29,6 +28,9 @@ mod todo;
 mod validate;
 
 use clap::{Parser, Subcommand};
+use rustbase_xtask::dep_age;
+
+use helpers::tasks_config;
 
 #[derive(Parser)]
 #[command(name = "xtask")]
@@ -86,7 +88,7 @@ enum XCommand {
     DepAge {
         /// Registry to query
         #[arg(value_enum)]
-        ecosystem: dep_age::Ecosystem,
+        ecosystem: rustbase_xtask::dep_age::Ecosystem,
         /// Package name
         package: String,
         /// Version to check (default: latest)
@@ -233,14 +235,22 @@ fn main() {
             latest_aged,
             within,
         } => {
+            let cfg = tasks_config();
             if latest_aged {
-                dep_age::dep_age_latest(ecosystem, &package, within.as_deref())
+                dep_age::dep_age_latest(
+                    &cfg,
+                    ecosystem,
+                    &package,
+                    within.as_deref(),
+                )
             } else {
-                dep_age::dep_age(ecosystem, &package, version.as_deref())
+                dep_age::dep_age(&cfg, ecosystem, &package, version.as_deref())
             }
         }
-        XCommand::DepAgeCheck { base } => dep_age::dep_age_check(&base),
-        XCommand::DepPreflight => dep_age::dep_preflight(),
+        XCommand::DepAgeCheck { base } => {
+            dep_age::dep_age_check(&tasks_config(), &base)
+        }
+        XCommand::DepPreflight => dep_age::dep_preflight(&tasks_config()),
         XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
         XCommand::FrontendFmt { check } => {
             frontend_fmt::frontend_fmt_cmd(check)

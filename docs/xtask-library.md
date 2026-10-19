@@ -1,0 +1,176 @@
+# Shared xtask library: recommendation
+
+Investigation for breki/rustbase#2. Question: can the template's
+`xtask` tooling become a library that rustbase-derived projects
+depend on, so a fix ships once as a version bump instead of being
+merged by hand into every project's copy?
+
+**Recommendation: yes, proceed.** Extract the gates and doc tooling
+into a crates.io library behind each project's thin `xtask`, one
+module at a time, starting from the dependency-cooldown prototype on
+branch `feat/xtask-lib-dep-age`. Make feature selection work without
+code edits before extracting the coupled modules. Leave deploy
+project-owned until last.
+
+## Evidence
+
+### What downstream drift actually is
+
+Each downstream's `xtask/src` was diffed file by file against the
+template (and against the template at its recorded sync point, to
+separate "behind" from "changed locally"), and every difference was
+classified. Measured 2026-10-19.
+
+| Downstream | Absorbed by a configurable library | Drift is mostly | What remains |
+|-|-|-|-|
+| clockdump | ~100% | stale; deploy/frontend removed | nothing |
+| kozmotic | ~95% | stale; features removed | two coverage fixes to upstream |
+| hoard | ~80% | stale (selective sync) | its deploy pipeline |
+| bombyx | ~75% | removals, cosmetic, stale | its records-format `todo` |
+| jutro | ~65%, plus improvements | stale since May; new local work | deploy pipeline, a project lint |
+
+Three conclusions follow:
+
+- **Renaming is not the problem.** Rename/config hunks are 0.5-5% of
+  each project's drift. The bulk is staleness and removed features,
+  which a versioned dependency and feature selection remove.
+- **The current model loses improvements.** About 40 downstream fixes
+  and a dozen generic downstream-only modules never reached the
+  template (examples in the issue #2 step-1 comment). In a library
+  they would be written once.
+- **Project-specific code is concentrated** in deploy (hoard, jutro),
+  bombyx's records-based `todo`, and jutro's architecture lint.
+
+### What the prototype showed
+
+The cooldown gate (`dep-age`, `dep-age-check`, `dep-preflight`) moved
+into `crates/rustbase-xtask` with the template's `xtask` calling it.
+
+- **Configuration is small.** Three values: the workspace root, the
+  allow-list env-var name and the registry user agent.
+  `Config::for_project("hoard", root)` derives `HOARD_DEP_AGE_ALLOW`
+  and `hoard-xtask-dep-age`, the renames downstreams made by hand.
+- **The coverage gate starts to apply.** `xtask` is exempt from the
+  90% gate; a library crate is not. The moved code first measured
+  79.8%. Splitting the network and process calls (curl, `git show`,
+  `cargo update`, the clock) into an excluded `io.rs`, per the
+  "Coverage exceptions for hardware-bound code" recipe in
+  `CLAUDE.md`, and testing the entry points against a throwaway git
+  repository raised it to 91.4%. Every extracted module will need
+  this split.
+- **The doc gate applies to the public API.** A module doc that
+  linked a private submodule was fine in a binary and fails in a
+  library.
+- **Adoption is cheap.** In a copy of clockdump, replacing its
+  cooldown module with the library removed 1,773 lines and added 26;
+  its commands and tests pass, and it gained the three months of
+  cooldown fixes it had missed.
+
+## Design
+
+### Shape
+
+A library crate, called by each project's own `xtask` binary. The
+project keeps `cargo xtask ...`, its CLI, and any project-specific
+subcommand or gate; the library owns the gates. `clap` support is an
+optional feature (`features = ["clap"]`) so the library does not
+force a CLI framework.
+
+### Configuration
+
+One `Config` value, built by the project's `xtask`, extended per
+module. Defaults derive from the project name; anything a project
+sets in data rather than code goes in `[workspace.metadata.<lib>]`
+in the root `Cargo.toml`, which `coverage` already reads for its
+ignores. Knobs the survey found real projects need:
+
+- project name (env-var prefix, user agent, temp-dir prefix);
+- primary crate manifest path (version source, deploy guard);
+- todo file location and format; feedback-file sections;
+- thresholds: coverage overall/module, duplication workspace/crate,
+  module size, the cooldown window;
+- strictness of the network gates (fail or warn when they cannot
+  finish);
+- canon-check exemptions;
+- which gates `validate` runs, and in what order.
+
+### Feature selection without code edits
+
+The template's `main.rs`, `validate.rs` and `helpers.rs` reference
+every module directly, so dropping a feature means editing shared
+files; kozmotic carries ten `#[allow(dead_code)]` helpers just to
+compile. Before extracting the coupled modules, gates must be
+registered rather than hard-wired, and helpers must live with the
+gate that uses them. The library then exposes each gate as a step a
+project's `validate` includes or omits.
+
+### Extension points
+
+Projects need to add, not only configure: extra subcommands (jutro's
+`worktree`, hoard's `cross`), extra `validate` steps (bombyx's
+records check, jutro's lint), and for deploy, extra config keys and
+hooks before install, before start and during setup. The library
+provides the step and subcommand types; projects implement them.
+
+### Distribution and versioning
+
+Published on crates.io, so the licence/sources gate (`deny.toml`
+rejects git sources) and the cooldown and audit tooling apply to it
+like any other dependency. It follows SemVer, released by its own
+`/release`. Upgrading it waits out the 14-day cooldown like any
+dependency; a project that wants a fix sooner allow-lists that one
+version with a stated reason.
+
+### What still needs agent-driven sync
+
+`CLAUDE.md`, `.claude/commands/`, `.claude/agents/`, CI workflows and
+config files are prose and data, not Rust. The library removes the
+largest and most error-prone part of `/template-sync` (merging
+diverged code) but not the sync itself. Shipping command files with
+the library is a possible later step, not part of this plan.
+
+## Module classification
+
+| Module | Verdict |
+|-|-|
+| `dep_age` (+ gate, preflight) | extracted (prototype) |
+| `audit`, `deny` | library-ready; strictness knob |
+| `coverage`, `dupes` | library-ready; thresholds knob; take kozmotic's and jutro's hardening |
+| `doc_cmd`, `canon` | library-ready; canon exemptions knob |
+| `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | library-ready (output parsing); take bombyx's and hoard's fixes |
+| `changelog`, `todo` | library-ready behind config; todo format pluggable (bombyx) |
+| `clean_cache`, `helpers` | split by user; Windows-only code stays behind `cfg` |
+| `validate` | becomes the step runner with registered gates |
+| `frontend*` | library-ready, optional feature |
+| `deploy*` | last; generic pieces (remote run, tag guard, staging, crash check) only, with hooks |
+| `backfeed`, `feedback`, `sync` | template-maintenance tools; stay in the template |
+
+Downstream-only modules worth adding to the library: bombyx's
+third-party licence generator and version-sentinel sync, hoard's
+systemd unit parser and script-executable check, and jutro's tag
+signature check, `.ports` reader, worktree setup and log tee.
+
+## Migration plan (one downstream: clockdump)
+
+1. Publish the library with the cooldown module.
+2. In clockdump: add the dependency, delete `xtask/src/dep_age*`,
+   and call the library from `main.rs` and `validate.rs` with
+   `Config::for_project("clockdump", workspace_root())` (the
+   prototype run: -1,773 / +26 lines).
+3. Run `cargo xtask validate` and its CI; record the result.
+4. Repeat per module as each is extracted; the other downstreams
+   follow once their copies are synced to a template version that
+   matches the library's.
+
+## Proposed follow-up issues
+
+1. Settle the crate name and publish `0.1` with the cooldown module.
+2. Decouple feature selection: registered `validate` steps, helpers
+   grouped by user.
+3. Extract `audit`, `deny`, `coverage`, `dupes`, `doc_cmd`, `canon`,
+   taking the downstream fixes listed above.
+4. Extract the output parsers (`check`, `clippy_cmd`, `test_cmd`,
+   `fmt_cmd`) and `changelog`/`todo` with a pluggable todo format.
+5. Extension points for project subcommands and steps.
+6. Migrate clockdump, then the other downstreams.
+7. Deploy: decide what, if anything, is shared.

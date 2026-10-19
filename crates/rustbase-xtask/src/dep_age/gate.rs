@@ -21,26 +21,18 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::process::Command;
 
 use serde_json::Value;
 
+use super::io::git_show;
 use super::{
     COOLDOWN_DAYS, Ecosystem, age_in_days, cargo_version_date, fetch_registry,
     npm_version_date, parse_iso_date, today_days,
 };
-use crate::helpers::workspace_root;
+use crate::Config;
 
-/// Env var listing `name@version` entries exempt from the
-/// changed-deps gate (comma-separated). This is the "stated
-/// justification" escape hatch: a deliberately-adopted fresh
-/// version, or a security fix, is named here so the gate
-/// passes while leaving an auditable record of what was waved
-/// through.
-const ALLOW_ENV: &str = "RUSTBASE_DEP_AGE_ALLOW";
-
-/// Combined outcome of the changed-deps gate, shaped like
-/// [`crate::audit::AuditResult`] so `validate` treats the two
+/// Combined outcome of the changed-deps gate, shaped like the
+/// template's `AuditResult` so `validate` treats the two
 /// network gates the same way (fatal error vs non-fatal
 /// warnings that degrade an offline run rather than block it).
 pub struct DepAgeResult {
@@ -70,7 +62,10 @@ enum DepOutcome {
 
 /// Fold per-dependency outcomes into the combined result.
 /// Pure, so the fatal-vs-warning boundary is unit-tested.
-fn classify_dep_age(outcomes: &[(String, DepOutcome)]) -> DepAgeResult {
+fn classify_dep_age(
+    outcomes: &[(String, DepOutcome)],
+    allow_env: &str,
+) -> DepAgeResult {
     if outcomes.is_empty() {
         return DepAgeResult {
             detail: "no dependency changes".into(),
@@ -108,7 +103,7 @@ fn classify_dep_age(outcomes: &[(String, DepOutcome)]) -> DepAgeResult {
         Some(format!(
             "dependencies within the {COOLDOWN_DAYS}-day cooldown: {}\n  \
              adopt only with a stated justification (security fixes \
-             exempt); allow via {ALLOW_ENV}=name@version[,...]",
+             exempt); allow via {allow_env}=name@version[,...]",
             fresh.join("; ")
         ))
     };
@@ -229,31 +224,17 @@ pub(super) fn new_locked_versions(
         .collect()
 }
 
-/// `git show <base>:<rel>` from the workspace root. `None` when
-/// the path is absent at `base` or git can't run (no commit
-/// yet, not a repo) -- the caller degrades that to a warning,
-/// never a hard failure. Run via the process working directory
-/// (`current_dir`), not the `git -C` flag, to keep the command
-/// coverable by a blanket permission rule.
-pub(super) fn git_show(base: &str, rel: &str) -> Option<String> {
-    let output = Command::new("git")
-        .current_dir(workspace_root())
-        .args(["show", &format!("{base}:{rel}")])
-        .output()
-        .ok()?;
-    if output.status.success() {
-        String::from_utf8(output.stdout).ok()
-    } else {
-        None
-    }
-}
-
 /// Network check of one dependency version against the
 /// cooldown. Thin wrapper over the shared fetch + date +
 /// verdict helpers; the branchy logic lives in those
 /// (already unit-tested) pieces.
-fn check_one(eco: Ecosystem, name: &str, version: &str) -> DepOutcome {
-    let json = match fetch_registry(eco, name) {
+fn check_one(
+    cfg: &Config,
+    eco: Ecosystem,
+    name: &str,
+    version: &str,
+) -> DepOutcome {
+    let json = match fetch_registry(cfg, eco, name) {
         Ok(j) => j,
         Err(e) => return DepOutcome::Unavailable(e),
     };
@@ -308,6 +289,7 @@ const NPM_LOCK: Lockfile = Lockfile {
 /// required one is a warning; a missing `base` baseline with
 /// the file present is surfaced as a warning (can't diff).
 fn collect_changes(
+    cfg: &Config,
     base: &str,
     lock: &Lockfile,
     allow: &HashSet<String>,
@@ -320,7 +302,7 @@ fn collect_changes(
         required,
         parser,
     } = *lock;
-    let current_text = match fs::read_to_string(workspace_root().join(rel)) {
+    let current_text = match fs::read_to_string(cfg.root.join(rel)) {
         Ok(text) => text,
         // An optional lockfile that does not exist means the
         // ecosystem is absent; anything else must not pass silently.
@@ -334,7 +316,7 @@ fn collect_changes(
             return;
         }
     };
-    let Some(baseline_text) = git_show(base, rel) else {
+    let Some(baseline_text) = git_show(&cfg.root, base, rel) else {
         warnings.push(format!(
             "{rel}: no {base} baseline to diff against -- skipping \
              cooldown check for this lockfile"
@@ -349,7 +331,7 @@ fn collect_changes(
         let outcome = if allow.contains(&label) {
             DepOutcome::Allowed
         } else {
-            check_one(eco, &name, &version)
+            check_one(cfg, eco, &name, &version)
         };
         outcomes.push((label, outcome));
     }
@@ -359,15 +341,23 @@ fn collect_changes(
 /// `(name, version)` pairs newly present in the working-tree
 /// lockfiles versus `base` (`validate` passes `HEAD`). Free (no
 /// network) when the lockfiles are unchanged.
-pub fn check_changed_deps(base: &str) -> DepAgeResult {
-    let allow = parse_allow(std::env::var(ALLOW_ENV).ok().as_deref());
+pub fn check_changed_deps(cfg: &Config, base: &str) -> DepAgeResult {
+    let allow =
+        parse_allow(std::env::var(&cfg.dep_age_allow_env).ok().as_deref());
     let mut outcomes: Vec<(String, DepOutcome)> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    collect_changes(base, &CARGO_LOCK, &allow, &mut outcomes, &mut warnings);
-    collect_changes(base, &NPM_LOCK, &allow, &mut outcomes, &mut warnings);
+    collect_changes(
+        cfg,
+        base,
+        &CARGO_LOCK,
+        &allow,
+        &mut outcomes,
+        &mut warnings,
+    );
+    collect_changes(cfg, base, &NPM_LOCK, &allow, &mut outcomes, &mut warnings);
 
-    let mut result = classify_dep_age(&outcomes);
+    let mut result = classify_dep_age(&outcomes, &cfg.dep_age_allow_env);
     // Baseline/parse warnings precede the per-dep warnings the
     // classifier collected.
     warnings.extend(result.warnings);
@@ -381,9 +371,9 @@ pub fn check_changed_deps(base: &str) -> DepAgeResult {
 /// `validate` step degrades that to a warning. `base` is the
 /// commit to diff against: `HEAD` locally; in CI, the commit the
 /// push or pull request started from.
-pub fn dep_age_check(base: &str) -> Result<(), String> {
+pub fn dep_age_check(cfg: &Config, base: &str) -> Result<(), String> {
     check_base_ref(base)?;
-    let r = check_changed_deps(base);
+    let r = check_changed_deps(cfg, base);
     if let Some(err) = r.error {
         eprintln!("  {}", r.detail);
         return Err(err);
@@ -413,12 +403,17 @@ fn check_base_ref(base: &str) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    fn test_cfg() -> Config {
+        Config::for_project("t", std::env::temp_dir())
+    }
+
     #[test]
     fn a_missing_required_lockfile_is_a_warning_not_a_pass() {
         // An empty outcome list reads as "no dependency changes",
         // so only the warning keeps "could not check" from passing.
         let (mut outcomes, mut warnings) = (Vec::new(), Vec::new());
         collect_changes(
+            &test_cfg(),
             "HEAD",
             &Lockfile {
                 rel: "no-such-file.lock",
@@ -437,6 +432,7 @@ mod tests {
     fn a_missing_optional_lockfile_means_no_such_ecosystem() {
         let (mut outcomes, mut warnings) = (Vec::new(), Vec::new());
         collect_changes(
+            &test_cfg(),
             "HEAD",
             &Lockfile {
                 rel: "no-such-frontend/package-lock.json",
@@ -447,6 +443,40 @@ mod tests {
             &mut warnings,
         );
         assert!(outcomes.is_empty() && warnings.is_empty(), "{warnings:?}");
+    }
+
+    const LOCK: &str = "version = 4\n\n[[package]]\nname = \"serde\"\n\
+        version = \"1.0.0\"\nsource = \"registry+https://github.com/\
+        rust-lang/crates.io-index\"\n";
+
+    #[test]
+    fn an_unchanged_lockfile_passes_without_the_network() {
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        let cfg = Config::for_project("t", repo.0.clone());
+        let r = check_changed_deps(&cfg, "HEAD");
+        assert!(
+            r.error.is_none() && r.warnings.is_empty(),
+            "{:?}",
+            r.warnings
+        );
+        assert_eq!(r.detail, "no dependency changes");
+        assert!(dep_age_check(&cfg, "HEAD").is_ok());
+    }
+
+    #[test]
+    fn a_lockfile_with_no_baseline_cannot_pass_the_standalone_check() {
+        let repo = crate::test_repo::with_lock(LOCK, false);
+        let cfg = Config::for_project("t", repo.0.clone());
+        let r = check_changed_deps(&cfg, "HEAD");
+        assert_eq!(r.warnings.len(), 1, "{:?}", r.warnings);
+        assert!(
+            r.warnings[0].contains("no HEAD baseline"),
+            "{:?}",
+            r.warnings
+        );
+        let err = dep_age_check(&cfg, "HEAD").unwrap_err();
+        assert!(err.contains("could not complete"), "{err}");
+        assert!(dep_age_check(&cfg, "-p").is_err());
     }
 
     #[test]
@@ -560,7 +590,7 @@ dependencies = [
 
     #[test]
     fn classify_dep_age_empty_is_clean() {
-        let r = classify_dep_age(&[]);
+        let r = classify_dep_age(&[], "ALLOW");
         assert!(r.error.is_none());
         assert!(r.warnings.is_empty(), "{:?}", r.warnings);
         assert_eq!(r.detail, "no dependency changes");
@@ -568,15 +598,19 @@ dependencies = [
 
     #[test]
     fn classify_dep_age_fresh_is_fatal() {
-        let r = classify_dep_age(&[
-            ("a@1.0.0".into(), DepOutcome::Aged),
-            (
-                "b@2.0.0".into(),
-                DepOutcome::Fresh("published 2d ago".into()),
-            ),
-        ]);
+        let r = classify_dep_age(
+            &[
+                ("a@1.0.0".into(), DepOutcome::Aged),
+                (
+                    "b@2.0.0".into(),
+                    DepOutcome::Fresh("published 2d ago".into()),
+                ),
+            ],
+            "MY_ALLOW",
+        );
         let err = r.error.unwrap();
         assert!(err.contains("b@2.0.0"));
+        assert!(err.contains("MY_ALLOW=name@version"), "{err}");
         assert!(err.contains("published 2d ago"));
         assert!(r.detail.contains("1 fresh"));
         assert!(r.detail.contains("1 aged"));
@@ -584,10 +618,13 @@ dependencies = [
 
     #[test]
     fn classify_dep_age_unavailable_is_warning_not_fatal() {
-        let r = classify_dep_age(&[(
-            "a@1.0.0".into(),
-            DepOutcome::Unavailable("network down".into()),
-        )]);
+        let r = classify_dep_age(
+            &[(
+                "a@1.0.0".into(),
+                DepOutcome::Unavailable("network down".into()),
+            )],
+            "ALLOW",
+        );
         assert!(r.error.is_none());
         assert_eq!(r.warnings, vec!["a@1.0.0: network down".to_string()]);
         // The detail sub-counts reconcile with "1 changed".
@@ -597,13 +634,16 @@ dependencies = [
 
     #[test]
     fn classify_dep_age_allowed_counts_but_fresh_still_fatal() {
-        let r = classify_dep_age(&[
-            ("a@1.0.0".into(), DepOutcome::Allowed),
-            (
-                "b@2.0.0".into(),
-                DepOutcome::Fresh("published 1d ago".into()),
-            ),
-        ]);
+        let r = classify_dep_age(
+            &[
+                ("a@1.0.0".into(), DepOutcome::Allowed),
+                (
+                    "b@2.0.0".into(),
+                    DepOutcome::Fresh("published 1d ago".into()),
+                ),
+            ],
+            "ALLOW",
+        );
         // The allow-listed one is not fatal; the fresh one is.
         assert!(r.error.is_some());
         assert!(r.detail.contains("1 allow-listed"));

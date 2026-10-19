@@ -22,7 +22,8 @@ they require manual approval every time.**
 |-------|---------|
 | `crates/rustbase` | Core library and CLI binary |
 | `crates/rustbase-web` | Axum web server (optional) |
-| `xtask` | Build automation |
+| `crates/rustbase-xtask` | Shared xtask gates, as a library (prototype; `docs/xtask-library.md`) |
+| `xtask` | Build automation (calls `rustbase-xtask`) |
 
 The web crate is optional. For a CLI-only project,
 follow these steps in order -- the ordering matters

@@ -51,6 +51,11 @@ rustbase/
         main.rs         # server entry point
         api/
           mod.rs        # router + API handlers
+    rustbase-xtask/     # shared xtask gates as a library
+      src/
+        lib.rs          # Config (per-project settings)
+        dep_age.rs      # dependency cooldown (+ gate,
+                        # preflight, io submodules)
   frontend/             # Svelte 5 + Vite (optional)
     src/
       App.svelte        # root component

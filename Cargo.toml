@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/rustbase", "crates/rustbase-web", "xtask"]
+members = ["crates/rustbase", "crates/rustbase-web", "crates/rustbase-xtask", "xtask"]
 resolver = "2"
 
 [workspace.lints.rust]
@@ -23,10 +23,11 @@ module_name_repetitions = "allow"
 # passed to `cargo llvm-cov --ignore-filename-regex`. Use this
 # for hardware-bound leaf modules that can't run under llvm-cov
 # in CI (see CLAUDE.md "Coverage exceptions for hardware-bound
-# code"); the template itself needs none. Use single-quoted
-# TOML literal strings so backslashes reach the regex verbatim.
-# [workspace.metadata.coverage]
-# ignore = ['src[/\\]audio[/\\]playback\.rs']
+# code"). Use single-quoted TOML literal strings so
+# backslashes reach the regex verbatim.
+[workspace.metadata.coverage]
+# The cooldown gate's network/process leaf (curl, git, cargo).
+ignore = ['rustbase-xtask[/\\]src[/\\]dep_age[/\\]io\.rs']
 
 [profile.test]
 opt-level = 1

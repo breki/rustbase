@@ -147,7 +147,7 @@ structural spread, not copy-paste; unifying it touches
 **Category:** Type Safety
 
 `Report.pinned` and `Report.dead_ends` in
-`xtask/src/dep_age/preflight.rs` store pre-formatted display
+`crates/rustbase-xtask/src/dep_age/preflight.rs` store pre-formatted display
 strings (`"{name}: {ver} -> {target}"`, `"{name}@{ver}"`)
 assembled inside the pure-ish `run` loop. This couples the
 loop's unit tests to message wording (they assert on
@@ -166,7 +166,7 @@ incorrect, only less flexible.
 The changed-deps cooldown gate threads `(name, version)` as a
 bare `(String, String)` tuple through `parse_cargo_lock`,
 `parse_npm_lock`, `new_locked_versions`, and `collect_changes`
-in `xtask/src/dep_age.rs`. The two fields are the same type and
+in `crates/rustbase-xtask/src/dep_age.rs`. The two fields are the same type and
 positionally interchangeable, so nothing at the type level
 prevents a name/version transposition in a future edit. A named
 `struct LockedDep { name, version }` would harden the

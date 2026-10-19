@@ -20,20 +20,21 @@
 //!   deliberately avoided -- it would flag every already-locked
 //!   version on every routine update; the changed-deps scope
 //!   is what makes an automatic gate tolerable. Its
-//!   implementation lives in the [`gate`] submodule.
+//!   implementation lives in the `gate` submodule.
 //!
 //! Registry queries shell out to `curl` (avoids adding an
 //! HTTP stack to xtask); the date math is dependency-free so
 //! the parsing/aging logic stays unit-tested.
 
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use clap::ValueEnum;
 use serde_json::Value;
 
+use crate::Config;
+
 mod gate;
+mod io;
 mod preflight;
+
+use io::{fetch_registry, today_days};
 
 pub use gate::{DepAgeResult, check_changed_deps, dep_age_check};
 pub use preflight::dep_preflight;
@@ -42,22 +43,26 @@ pub use preflight::dep_preflight;
 /// days ago without a stated justification.
 const COOLDOWN_DAYS: i64 = 14;
 
-/// Package registry to query. clap renders the variants as
-/// `npm` / `cargo` and rejects anything else at the CLI
-/// boundary, so there is no runtime string validation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+/// Package registry to query. With the `clap` feature, clap
+/// renders the variants as `npm` / `cargo` and rejects anything
+/// else at the CLI boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum Ecosystem {
+    /// The npm registry.
     Npm,
+    /// crates.io.
     Cargo,
 }
 
 /// Run the `dep-age` command.
 pub fn dep_age(
+    cfg: &Config,
     ecosystem: Ecosystem,
     package: &str,
     version: Option<&str>,
 ) -> Result<(), String> {
-    let json = fetch_registry(ecosystem, package)?;
+    let json = fetch_registry(cfg, ecosystem, package)?;
     let (resolved, published) = match ecosystem {
         Ecosystem::Npm => npm_version_date(&json, version)?,
         Ecosystem::Cargo => cargo_version_date(&json, version)?,
@@ -123,44 +128,6 @@ fn percent_encode_segment(s: &str) -> String {
         }
     }
     out
-}
-
-/// Fetch the registry metadata JSON for a package via curl.
-fn fetch_registry(
-    ecosystem: Ecosystem,
-    package: &str,
-) -> Result<Value, String> {
-    let package = percent_encode_segment(package);
-    let url = match ecosystem {
-        Ecosystem::Npm => format!("https://registry.npmjs.org/{package}"),
-        Ecosystem::Cargo => {
-            format!("https://crates.io/api/v1/crates/{package}")
-        }
-    };
-    let output = Command::new("curl")
-        // crates.io rejects requests without a User-Agent.
-        // Bounded timeouts so a reachable-but-hanging registry
-        // cannot stall the `validate` gate indefinitely: a
-        // timeout is a non-zero exit -> Unavailable -> a
-        // non-fatal warning, the intended offline degrade.
-        .args([
-            "-sSfL",
-            "--connect-timeout",
-            "10",
-            "--max-time",
-            "20",
-            "-A",
-            "rustbase-xtask-dep-age",
-            &url,
-        ])
-        .output()
-        .map_err(|e| format!("failed to run curl (is it installed?): {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("registry request failed:\n{stderr}"));
-    }
-    serde_json::from_slice(&output.stdout)
-        .map_err(|e| format!("failed to parse registry JSON: {e}"))
 }
 
 /// Resolve (version, publish-date) from an npm registry
@@ -238,15 +205,6 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// Today as days since the Unix epoch (UTC).
-fn today_days() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|d| i64::try_from(d.as_secs() / 86_400).ok())
-        .unwrap_or(0)
-}
-
 /// Age in days of a publish-day relative to today (clamped
 /// at 0 so a clock skew / future timestamp is not negative).
 fn age_in_days(published_days: i64, today: i64) -> i64 {
@@ -260,12 +218,13 @@ fn age_in_days(published_days: i64, today: i64) -> i64 {
 /// pin target for the `/update-deps` workflow: "the latest
 /// version outside the cooldown".
 pub fn dep_age_latest(
+    cfg: &Config,
     ecosystem: Ecosystem,
     package: &str,
     within: Option<&str>,
 ) -> Result<(), String> {
     let line = within.map(parse_within).transpose()?;
-    let json = fetch_registry(ecosystem, package)?;
+    let json = fetch_registry(cfg, ecosystem, package)?;
     let versions = match ecosystem {
         Ecosystem::Npm => npm_versions(&json),
         Ecosystem::Cargo => cargo_versions(&json),
