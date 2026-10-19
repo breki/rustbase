@@ -217,8 +217,9 @@ pub fn today_iso() -> String {
 
 /// Convert a count of days since the Unix epoch back into a
 /// civil `(year, month, day)`. Howard Hinnant's `civil_from_days`
-/// (the inverse of the `days_from_civil` used elsewhere), valid
-/// for the whole proleptic Gregorian range. Pure, so it is
+/// (the inverse of the private `days_from_civil` in
+/// `rustbase_xtask::dep_age`), valid for the whole proleptic
+/// Gregorian range. Pure, so it is
 /// unit-tested against known dates.
 fn civil_from_days(z: i64) -> (i64, i64, i64) {
     let z = z + 719_468;

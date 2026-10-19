@@ -35,11 +35,12 @@ broken if reversed:
    members list. Do this *first* so the next
    `cargo` invocation doesn't see a dangling member.
 2. **Edit `xtask/Cargo.toml`** -- remove
-   `"frontend"` and `"deploy"` (which ships
-   `rustbase-web`) from the `default` features.
+   `"frontend"` from the `default` features.
    The four frontend gates leave `xtask validate`
    and its `[N/M]` count follows; no Rust edit is
    needed (see **Optional xtask features**).
+   `validate` refuses to run until step 5 deletes
+   `frontend/`.
 3. **Edit `build.ps1`** -- prune the `frontend`
    and `e2e` subcommands plus any helpers they
    call.
@@ -86,7 +87,7 @@ cargo xtask check             # type-check all targets (compiles tests, runs non
 cargo xtask validate          # fmt + clippy + tests + coverage
 cargo xtask test [filter]     # tests only
 cargo xtask test --ignored    # run #[ignore]-tagged tests
-cargo xtask clippy            # lint (+ each xtask feature set)
+cargo xtask clippy            # lint (+ xtask: all features off, each alone)
 cargo xtask doc               # rustdoc twice (public + private), links must resolve
 cargo xtask canon-check       # claims canon prose makes: paths, xrefs, grants, width
 cargo xtask coverage          # coverage only (>=90%)
@@ -625,7 +626,9 @@ just when the code compiles:
     class of broken link the other cannot
 
 The frontend gates skip only when there is no frontend at
-all. The dependency-cooldown gate runs **first** (it is a
+all. Without xtask's `frontend` feature they are not compiled
+in, and `validate` refuses to run while `frontend/` exists.
+The dependency-cooldown gate runs **first** (it is a
 no-op on unchanged lockfiles, and fails fast on a within
 -cooldown dependency before anything compiles it); after it
 the gates run cheapest-first (Fmt, Canon, Duplication,
@@ -775,24 +778,32 @@ all on by default:
 |-|-|
 | `frontend` | the four `frontend-*` gates and commands |
 | `deploy` | `deploy`, `deploy-setup` |
-| `template-tools` | `sync-candidates`, `feedback-add`, `backfeed-*` |
+| `template-tools` | `sync-candidates`, `feedback-add`, `backfeed-*` (`/template-sync`, `/template-improve`, `/template-backfeed`) |
 | `clean-cache` | `clean-cache` |
 
 A project drops a group by removing it from `default` in
 `xtask/Cargo.toml`. The group's modules, subcommands and
 `validate` steps compile out together, and `[N/M]` counts
 only the steps left. Each group's helpers live in its own
-modules, so nothing is left behind as dead code.
+modules, so nothing is left behind as dead code. A derived
+project keeps `template-tools`: `/template-sync` and
+`/template-improve` run its commands.
 
-`cargo xtask clippy` checks that last claim: after the
-workspace pass it lints `xtask` with every feature off and
-with each feature alone. A helper that only one group uses
-but that sits outside it fails the all-off pass. A group
-that needs another fails when it runs alone.
+`cargo xtask clippy` checks that no group leaves dead code
+behind: after the workspace pass it lints `xtask` with every
+feature off and with each feature alone. A helper that only
+one group uses but that sits outside it fails the all-off
+pass. A group that needs another fails when it runs alone.
 
 A new `validate` gate is a `step()` function in its own
 module, added to the list in `xtask/src/validate.rs`. An
-optional gate goes under a feature.
+optional gate also takes `#[cfg(feature = "<name>")]` in each
+place that names it:
+
+- the feature in `[features]` of `xtask/Cargo.toml`;
+- its `mod` line in `xtask/src/main.rs`;
+- its `XCommand` variant and `match` arm there;
+- its entry, and its `use`, in `xtask/src/validate.rs`.
 
 ## Workspace lints and xtask overrides
 

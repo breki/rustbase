@@ -221,7 +221,7 @@ fn is_reparse_or_symlink_path(
 /// Format a byte count as a human-readable string with
 /// a binary unit suffix (`B`, `KiB`, `MiB`, `GiB`,
 /// `TiB`). One decimal place above `B`.
-pub fn fmt_bytes(bytes: u64) -> String {
+fn fmt_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KiB", "MiB", "GiB", "TiB"];
     // Cache sizes routinely sum into the tens-of-GB
     // range, well under f64's 2^52 mantissa headroom,
@@ -247,9 +247,9 @@ pub fn fmt_bytes(bytes: u64) -> String {
 /// strings. `Display` produces `<path>: <message>`
 /// which is the form users see in tool output.
 #[derive(Debug, Clone)]
-pub struct DirSizeWarning {
-    pub path: PathBuf,
-    pub message: String,
+struct DirSizeWarning {
+    path: PathBuf,
+    message: String,
 }
 
 impl fmt::Display for DirSizeWarning {
@@ -279,7 +279,7 @@ impl DirSizeWarning {
 /// bit checked explicitly. Without this guard a
 /// junction below `target/` could redirect a tree
 /// walk or `remove_dir_all` outside the workspace.
-pub fn is_reparse_or_symlink_meta(meta: &fs::Metadata) -> bool {
+fn is_reparse_or_symlink_meta(meta: &fs::Metadata) -> bool {
     if meta.file_type().is_symlink() {
         return true;
     }
@@ -311,7 +311,7 @@ pub fn is_reparse_or_symlink_meta(meta: &fs::Metadata) -> bool {
 /// callers handle warnings uniformly regardless of
 /// recursion depth. Bytes from successfully walked
 /// entries are still summed.
-pub fn dir_size(path: &Path) -> (u64, Vec<DirSizeWarning>) {
+fn dir_size(path: &Path) -> (u64, Vec<DirSizeWarning>) {
     let mut warnings: Vec<DirSizeWarning> = Vec::new();
 
     let meta = match fs::symlink_metadata(path) {
@@ -359,33 +359,32 @@ pub fn dir_size(path: &Path) -> (u64, Vec<DirSizeWarning>) {
     (total, warnings)
 }
 
-/// Per-test scratch directory under the system temp.
-/// PID + a process-wide atomic counter keep parallel
-/// test runs from colliding without adding a
-/// `tempfile` dependency. The counter is shared across
-/// threads, so no per-thread id is needed. Cleanup is
-/// the caller's responsibility (best-effort
-/// `remove_dir_all` at end of test).
-#[cfg(test)]
-fn temp_scratch(label: &str) -> PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static SEQ: AtomicU64 = AtomicU64::new(0);
-    let seq = SEQ.fetch_add(1, Ordering::SeqCst);
-    let pid = std::process::id();
-    let dir = std::env::temp_dir()
-        .join(format!("rustbase-xtask-{label}-{pid}-{seq}"));
-    fs::create_dir_all(&dir).unwrap_or_else(|e| {
-        panic!("failed to create scratch dir {}: {e}", dir.display())
-    });
-    dir
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs::{self, File};
     use std::io::Write;
 
     use super::*;
+
+    /// Per-test scratch directory under the system temp.
+    /// PID + a process-wide atomic counter keep parallel
+    /// test runs from colliding without adding a
+    /// `tempfile` dependency. The counter is shared across
+    /// threads, so no per-thread id is needed. Cleanup is
+    /// the caller's responsibility (best-effort
+    /// `remove_dir_all` at end of test).
+    fn temp_scratch(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let seq = SEQ.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        let dir = std::env::temp_dir()
+            .join(format!("rustbase-xtask-{label}-{pid}-{seq}"));
+        fs::create_dir_all(&dir).unwrap_or_else(|e| {
+            panic!("failed to create scratch dir {}: {e}", dir.display())
+        });
+        dir
+    }
 
     #[test]
     fn clear_dir_contents_removes_files_and_subdirs_but_keeps_root() {
@@ -520,7 +519,7 @@ mod tests {
     /// junction (`mklink /J`) is a reparse point but
     /// not a true symlink, so `FileType::is_symlink()`
     /// returns `false` for it. Without the
-    /// `is_reparse_or_symlink` guard the cleaner would
+    /// `is_reparse_or_symlink_path` guard the cleaner would
     /// fall into the `is_dir()` branch and
     /// `remove_dir_all` would traverse the junction
     /// and delete the target tree.

@@ -4,7 +4,7 @@ use std::fs;
 use serde::Deserialize;
 
 use crate::helpers::{run_cargo_capture, workspace_root};
-use crate::validate::Step;
+use crate::step::Step;
 
 /// Minimum line coverage percentage for the workspace
 /// as a whole. The validate pipeline fails when the
@@ -204,7 +204,7 @@ fn scan_quoted(region: &str) -> Vec<String> {
     out
 }
 
-/// Coverage check result for use by validate.
+/// Coverage check result, for this module's `step()`.
 pub struct CoverageResult {
     /// Overall line coverage percentage.
     pub line_pct: f64,

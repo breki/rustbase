@@ -57,6 +57,8 @@ and this project adheres to
   `default` in `xtask/Cargo.toml` with no code edits, and its `validate` steps
   and `[N/M]` count follow. `cargo xtask clippy` also lints `xtask` with every
   feature off and each one alone, so a dropped group leaves no dead code.
+  `validate` refuses to run while `frontend/` exists with the `frontend`
+  feature off, since none of its gates would run.
 
 ### Changed
 

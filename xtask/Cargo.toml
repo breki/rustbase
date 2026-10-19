@@ -18,14 +18,15 @@ workspace = true
 # no dead code behind. See "Optional xtask features" in CLAUDE.md.
 [features]
 default = ["frontend", "deploy", "template-tools", "clean-cache"]
-# The four `frontend-*` gates and subcommands (npm, svelte-check,
+# The four `frontend-*` gates and subcommands (Prettier, svelte-check,
 # jscpd, vitest).
 frontend = []
 # `deploy` and `deploy-setup`.
 deploy = []
-# `/template-sync` and `/template-backfeed` support:
-# `sync-candidates`, `feedback-add`, `backfeed-diff`,
-# `backfeed-record`.
+# The commands behind `/template-sync`, `/template-improve` and
+# `/template-backfeed`: `sync-candidates`, `feedback-add`,
+# `backfeed-diff`, `backfeed-record`. A derived project keeps it
+# to go on syncing and logging feedback.
 template-tools = []
 # `clean-cache`.
 clean-cache = ["dep:windows-sys"]
@@ -38,7 +39,7 @@ rustbase-xtask = { path = "../crates/rustbase-xtask", features = ["clap"] }
 
 # Used only for the canonical
 # `FILE_ATTRIBUTE_REPARSE_POINT` constant in
-# `clean_cache::is_reparse_or_symlink` -- pulling the
+# `clean_cache::is_reparse_or_symlink_meta` -- pulling the
 # value from windows-sys avoids a hand-typed Win32
 # magic number diverging from the OS header.
 [target.'cfg(windows)'.dependencies]

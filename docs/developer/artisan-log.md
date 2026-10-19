@@ -66,19 +66,22 @@ during the ledgerstone-backfeed `/commit`.
 
 **Category:** Duplication (module cohesion)
 
-Date math is split across two modules with duplicated
-primitives. `dep_age.rs` privately owns `days_from_civil`,
-`parse_iso_date`, `age_in_days`, and `today_days`; `helpers.rs`
-now adds `civil_from_days` (the inverse of `days_from_civil`),
-`is_iso_date`, `extract_iso_date`, and `today_iso`. The
-epoch-days snippet in `today_iso` duplicates `today_days`, and
-the two civil-date converters are inverses living in different
-files. Consider consolidating all civil-date / ISO helpers
-into one home (a `xtask/src/dates.rs`, or `helpers.rs`) and
-having `dep_age.rs` call the shared versions. Deferred:
-unifying touches `dep_age.rs` and its private tests, both
-outside the current diff, and the duplication gate is at 0%
-today so there is no forcing pressure. Same
+Date math is split across three places with duplicated
+primitives. The `dep_age` module in `crates/rustbase-xtask`
+privately owns `days_from_civil`, `parse_iso_date`,
+`age_in_days`, and `today_days`; `xtask/src/feedback.rs` has
+`civil_from_days` (the inverse of `days_from_civil`) and
+`today_iso`; `xtask/src/helpers.rs` has `is_iso_date` and
+`extract_iso_date`. The epoch-days snippet in `today_iso`
+duplicates `today_days`, and the two civil-date converters are
+inverses living in different crates. Consider one home for the
+civil-date / ISO helpers that the others call. It cannot be a
+feature-gated module: `feedback.rs` compiles only with
+`template-tools`, while `canon` and `todo` need `is_iso_date`
+always (see "Optional xtask features" in `CLAUDE.md`).
+Deferred: unifying touches the library crate and its private
+tests, and the duplication gate is at 0% today so there is no
+forcing pressure. Same
 "consolidate the hand-scan primitives" theme as
 `aq-2026-07-16-shared-toml-scan-helper`.
 

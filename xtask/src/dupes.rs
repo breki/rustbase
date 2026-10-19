@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::helpers::cargo_bin;
-use crate::validate::Step;
+use crate::step::Step;
 
 /// Maximum allowed exact duplication percentage
 /// (production code only, tests excluded).

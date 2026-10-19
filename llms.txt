@@ -19,7 +19,7 @@ Frontend: Svelte 5 + Vite in `frontend/` (optional).
 cargo xtask validate          # fmt + clippy + tests + coverage + dupes + frontend
 cargo xtask check             # type-check all targets (compiles tests, runs none)
 cargo xtask test [filter]     # tests only
-cargo xtask clippy            # lint (+ each xtask feature set)
+cargo xtask clippy            # lint (+ xtask: all features off, each alone)
 cargo xtask fmt               # format code
 cargo xtask coverage          # coverage check (>=90% workspace, >=85% per module)
 cargo xtask dupes             # code duplication check (<=6%)

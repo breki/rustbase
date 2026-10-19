@@ -1,5 +1,5 @@
 use crate::helpers::{run_cargo_capture, run_cargo_stream};
-use crate::validate::Step;
+use crate::step::Step;
 
 /// The `validate` step. Auto-fixes unless `check` selects the
 /// read-only path; empty detail on success.

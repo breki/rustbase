@@ -38,6 +38,7 @@ mod frontend_fmt;
 #[cfg(feature = "frontend")]
 mod frontend_test;
 mod helpers;
+mod step;
 #[cfg(feature = "template-tools")]
 mod sync;
 mod test_cmd;
