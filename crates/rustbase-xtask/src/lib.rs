@@ -11,7 +11,29 @@
 
 use std::path::PathBuf;
 
+pub mod audit;
+pub mod deny;
 pub mod dep_age;
+mod process;
+
+/// What a gate does when it cannot finish (a tool missing, the
+/// network down), as opposed to finishing and finding a problem,
+/// which always fails.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Strictness {
+    /// Fail: the caller wants to know the check never ran.
+    Fail,
+    /// Warn and pass, so an offline run is not blocked.
+    Warn,
+}
+
+/// Whether `stderr` is cargo reporting an absent subcommand, i.e.
+/// the backing tool is not installed. Only cargo's two actual
+/// spellings: a looser phrase like "not installed" would match a
+/// real gate failure that happens to say it.
+fn is_missing_subcommand(stderr: &str) -> bool {
+    stderr.contains("no such command") || stderr.contains("no such subcommand")
+}
 
 /// What differs between projects using this library.
 #[derive(Clone, Debug)]
@@ -51,6 +73,18 @@ pub(crate) mod test_repo {
     /// A temp directory removed when dropped.
     pub(crate) struct TempRepo(pub PathBuf);
 
+    /// An empty temp directory, not a repository.
+    pub(crate) fn empty_dir() -> TempRepo {
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "rustbase-xtask-test-{}-{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::SeqCst)
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        TempRepo(dir)
+    }
+
     impl Drop for TempRepo {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
@@ -70,14 +104,7 @@ pub(crate) mod test_repo {
     /// A repository whose first commit holds `Cargo.lock` with
     /// `lock` as its text; `commit = false` leaves it untracked.
     pub(crate) fn with_lock(lock: &str, commit: bool) -> TempRepo {
-        static SEQ: AtomicU64 = AtomicU64::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "rustbase-xtask-test-{}-{}",
-            std::process::id(),
-            SEQ.fetch_add(1, Ordering::SeqCst)
-        ));
-        std::fs::create_dir_all(&dir).expect("create temp repo");
-        let repo = TempRepo(dir);
+        let repo = empty_dir();
         git(&repo.0, &["init", "-q"]);
         std::fs::write(repo.0.join("Cargo.lock"), lock).expect("write lock");
         if commit {
@@ -98,5 +125,17 @@ mod tests {
         assert_eq!(cfg.dep_age_allow_env, "MY_APP_DEP_AGE_ALLOW");
         assert_eq!(cfg.user_agent, "my-app-xtask-dep-age");
         assert_eq!(cfg.root, PathBuf::from("/w"));
+    }
+
+    #[test]
+    fn is_missing_subcommand_matches_cargo_wordings() {
+        assert!(is_missing_subcommand("error: no such command: `deny`"));
+        assert!(is_missing_subcommand("error: no such subcommand: `deny`"));
+        // A real gate failure must not read as a missing tool, even
+        // when it says "not installed".
+        assert!(!is_missing_subcommand(
+            "error[L001]: failed to satisfy license; some dep is not installed"
+        ));
+        assert!(!is_missing_subcommand(""));
     }
 }

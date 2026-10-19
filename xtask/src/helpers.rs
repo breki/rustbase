@@ -48,25 +48,6 @@ pub fn run_cargo_capture_env(
         .map_err(|e| format!("failed to run {bin}: {e}"))
 }
 
-/// Whether `stderr` is cargo reporting an absent subcommand
-/// (i.e. the backing tool is not installed).
-///
-/// cargo's own wording names the subcommand and nothing else,
-/// so a caller that needs to distinguish "tool missing" from
-/// "tool ran and failed" -- as the `deny` gate does, since a
-/// missing offline tool must never be waved through as a pass --
-/// checks for these forms rather than the exit status alone.
-///
-/// Matches only cargo's two actual spellings. A looser phrase
-/// like "not installed" would add no real coverage (cargo never
-/// emits it for an absent subcommand) while matching unrelated
-/// text a genuine tool *failure* can print -- which would send
-/// the operator to reinstall a tool that is already there
-/// instead of showing them the real error.
-pub fn is_missing_subcommand(stderr: &str) -> bool {
-    stderr.contains("no such command") || stderr.contains("no such subcommand")
-}
-
 /// Run a cargo command, streaming output to the
 /// terminal. Used for `--verbose` mode and fmt.
 pub fn run_cargo_stream(args: &[&str]) -> Result<(), String> {
@@ -266,23 +247,6 @@ mod tests {
         assert!(!is_iso_date("2026/07/16")); // wrong separator
         assert!(!is_iso_date("not a date"));
         assert!(!is_iso_date("2026-07-16 "));
-    }
-
-    #[test]
-    fn is_missing_subcommand_matches_cargo_wordings() {
-        assert!(is_missing_subcommand("error: no such command: `deny`"));
-        assert!(is_missing_subcommand("error: no such subcommand: `deny`"));
-        // A genuine gate failure must NOT be read as a missing
-        // tool, even when its output mentions "not installed" --
-        // that would send the operator to reinstall a present
-        // tool instead of fixing the real problem.
-        assert!(!is_missing_subcommand(
-            "error[L001]: failed to satisfy license; some dep is not installed"
-        ));
-        assert!(!is_missing_subcommand(
-            "error[L001]: failed to satisfy license"
-        ));
-        assert!(!is_missing_subcommand(""));
     }
 
     #[test]

@@ -26,8 +26,12 @@ module_name_repetitions = "allow"
 # code"). Use single-quoted TOML literal strings so
 # backslashes reach the regex verbatim.
 [workspace.metadata.coverage]
-# The cooldown gate's network/process leaf (curl, git, cargo).
-ignore = ['rustbase-xtask[/\\]src[/\\]dep_age[/\\]io\.rs']
+# The shared library's process leaves: the cooldown gate's
+# (curl, git, cargo) and the audit and licence gates' (cargo, npm).
+ignore = [
+    'rustbase-xtask[/\\]src[/\\]dep_age[/\\]io\.rs',
+    'rustbase-xtask[/\\]src[/\\]process\.rs',
+]
 
 [profile.test]
 opt-level = 1

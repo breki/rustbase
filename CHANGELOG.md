@@ -59,6 +59,9 @@ and this project adheres to
   feature off and each one alone, so a dropped group leaves no dead code.
   `validate` refuses to run while `frontend/` exists with the `frontend`
   feature off, since none of its gates would run.
+- The `rustbase-xtask` library now holds the `audit` and `deny` gates too.
+  `audit` takes a `Strictness` (fail or warn when the check cannot finish);
+  `deny` takes none, since a missing cargo-deny always fails (part of #6).
 
 ### Changed
 
@@ -126,6 +129,10 @@ and this project adheres to
 - `cargo xtask dep-age-check` treats a lockfile absent at the base commit as
   wholly new and checks every entry, instead of reporting "no baseline" (which
   failed the standalone command and CI when a lockfile was first added).
+- `cargo xtask audit` found the frontend relative to the shell's working
+  directory, so run from inside `frontend/` it skipped `npm audit` and still
+  reported OK. It now finds `frontend/` from the workspace root and runs npm
+  inside it.
 
 ### Removed
 

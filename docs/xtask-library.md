@@ -141,7 +141,7 @@ the library is a possible later step, not part of this plan.
 | Module | Verdict |
 |-|-|
 | `dep_age` (+ gate, preflight) | extracted (prototype) |
-| `audit`, `deny` | library-ready; strictness knob |
+| `audit`, `deny` | extracted; `audit` takes a `Strictness` (fail or warn when it cannot finish), `deny` none: a missing tool always fails |
 | `coverage`, `dupes` | library-ready; thresholds knob; take kozmotic's and jutro's hardening |
 | `doc_cmd`, `canon` | library-ready; canon exemptions knob |
 | `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | library-ready (output parsing); take bombyx's and hoard's fixes |
