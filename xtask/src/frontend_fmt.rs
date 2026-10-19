@@ -3,7 +3,17 @@
 //! place by default; read-only under `--check` (for CI or
 //! before partial staging), mirroring the Rust `fmt` gate.
 
-use crate::frontend::{FrontendResult, report_cmd, run_npm_script};
+use crate::frontend::{
+    FrontendResult, report_cmd, run_npm_script, step_result,
+};
+use crate::validate::Step;
+
+/// The `validate` step.
+pub fn step(check: bool) -> Step {
+    Step::new("Frontend fmt", "frontend-fmt", move || {
+        step_result(frontend_fmt(check)?)
+    })
+}
 
 /// Run Prettier. `check` selects the read-only
 /// `format:check`; otherwise `format` auto-fixes in place.

@@ -3,6 +3,7 @@
 //! clean. `validate` runs it as its Doc step.
 
 use crate::helpers::{pair_with_locations, run_cargo_capture_env};
+use crate::validate::Step;
 
 /// Maximum number of diagnostic lines to display.
 const MAX_DIAGNOSTIC_LINES: usize = 10;
@@ -77,6 +78,21 @@ pub fn doc() -> Result<(), String> {
             Err(failure.summary)
         }
     }
+}
+
+/// The `validate` step; empty detail on success.
+pub fn step() -> Step {
+    Step::new("Doc", "doc", || match doc_check()? {
+        None => Ok(String::new()),
+        Some(failure) => {
+            // Keep this at least STDERR_TAIL_LINES, or the
+            // fallback's last line -- the cause -- is cut off.
+            for line in failure.items.iter().take(5) {
+                eprintln!("  {line}");
+            }
+            Err(failure.summary)
+        }
+    })
 }
 
 /// A failing rustdoc pass.

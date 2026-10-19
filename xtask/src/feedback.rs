@@ -14,10 +14,16 @@
 use std::fs;
 use std::io::Read as _;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::ValueEnum;
 
-use crate::helpers::{FEEDBACK_REL, is_fence, today_iso, workspace_root};
+use crate::helpers::workspace_root;
+
+/// Repo-relative path of the template-feedback file. Single
+/// source of truth shared by the backfeed, feedback, and sync
+/// commands (the last via its never-sync set).
+pub const FEEDBACK_REL: &str = "docs/developer/template-feedback.md";
 
 /// Which lifecycle section of the feedback file an entry
 /// belongs in. clap renders these as `open` / `resolved` /
@@ -194,6 +200,48 @@ pub fn feedback_add(
     Ok(())
 }
 
+/// Today's date as an ISO `YYYY-MM-DD` string (UTC).
+///
+/// Used to stamp `last-run` in the backfeed ledger and to
+/// mint `tf-<date>-<slug>` feedback IDs. A clock read before
+/// the Unix epoch (should never happen) degrades to day zero.
+pub fn today_iso() -> String {
+    let days = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|d| i64::try_from(d.as_secs() / 86_400).ok())
+        .unwrap_or(0);
+    let (y, m, d) = civil_from_days(days);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// Convert a count of days since the Unix epoch back into a
+/// civil `(year, month, day)`. Howard Hinnant's `civil_from_days`
+/// (the inverse of the `days_from_civil` used elsewhere), valid
+/// for the whole proleptic Gregorian range. Pure, so it is
+/// unit-tested against known dates.
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    (y + i64::from(m <= 2), m, d)
+}
+
+/// True when `line` opens or closes a fenced code block (its
+/// first non-whitespace run is ```` ``` ```` or `~~~`). Callers
+/// toggle fence state on each such line so markdown headers
+/// *inside* a code fence are not mistaken for structure.
+pub fn is_fence(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with("```") || t.starts_with("~~~")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,5 +378,38 @@ Nothing yet.
         // Entry-level headers are not section headers.
         assert!(!is_target_section("### tf-x -- resolved thing", "resolved"));
         assert!(!is_target_section("plain text", "resolved"));
+    }
+
+    #[test]
+    fn civil_from_days_epoch_and_known_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(31), (1970, 2, 1));
+        // 2026-07-16 is 20650 days after the epoch.
+        assert_eq!(civil_from_days(20650), (2026, 7, 16));
+    }
+
+    #[test]
+    fn today_iso_is_well_formed() {
+        // `dddd-dd-dd` shape, without depending on the
+        // ISO-date validator (which lives in `helpers`).
+        let s = today_iso();
+        let b = s.as_bytes();
+        assert_eq!(b.len(), 10);
+        assert_eq!(b[4], b'-');
+        assert_eq!(b[7], b'-');
+        assert!(
+            b.iter()
+                .enumerate()
+                .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+        );
+    }
+
+    #[test]
+    fn is_fence_detects_both_markers() {
+        assert!(is_fence("```"));
+        assert!(is_fence("```rust"));
+        assert!(is_fence("  ~~~"));
+        assert!(!is_fence("### heading"));
+        assert!(!is_fence("plain"));
     }
 }

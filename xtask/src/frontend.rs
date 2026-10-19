@@ -118,6 +118,17 @@ pub fn report_cmd(r: FrontendResult, label: &str) -> Result<(), String> {
     }
 }
 
+/// Map a result to a `validate` step's detail or error. Shared
+/// by every `frontend-*` step, as [`report_cmd`] is by the
+/// commands.
+pub fn step_result(r: FrontendResult) -> Result<String, String> {
+    match r.error {
+        None if r.skipped => Ok(format!("skipped: {}", r.detail)),
+        None => Ok(r.detail),
+        Some(err) => Err(err),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

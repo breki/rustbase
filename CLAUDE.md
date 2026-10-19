@@ -34,13 +34,12 @@ broken if reversed:
    `"crates/rustbase-web"` from the workspace
    members list. Do this *first* so the next
    `cargo` invocation doesn't see a dangling member.
-2. **Edit `xtask/src/validate.rs`** (and any wiring
-   in `xtask/src/main.rs`) -- drop the
-   `svelte-check` step and any other
-   frontend/E2E-specific steps from `xtask
-   validate`. Adjust the step counter
-   (`[N/M] ...`) so the progress output stays
-   accurate.
+2. **Edit `xtask/Cargo.toml`** -- remove
+   `"frontend"` and `"deploy"` (which ships
+   `rustbase-web`) from the `default` features.
+   The four frontend gates leave `xtask validate`
+   and its `[N/M]` count follows; no Rust edit is
+   needed (see **Optional xtask features**).
 3. **Edit `build.ps1`** -- prune the `frontend`
    and `e2e` subcommands plus any helpers they
    call.
@@ -87,7 +86,7 @@ cargo xtask check             # type-check all targets (compiles tests, runs non
 cargo xtask validate          # fmt + clippy + tests + coverage
 cargo xtask test [filter]     # tests only
 cargo xtask test --ignored    # run #[ignore]-tagged tests
-cargo xtask clippy            # lint only
+cargo xtask clippy            # lint (+ each xtask feature set)
 cargo xtask doc               # rustdoc twice (public + private), links must resolve
 cargo xtask canon-check       # claims canon prose makes: paths, xrefs, grants, width
 cargo xtask coverage          # coverage only (>=90%)
@@ -569,7 +568,9 @@ just when the code compiles:
    partial staging, so an in-place rewrite does not sweep
    unrelated drift into the working tree)
 2. **No warnings**:
-   `cargo clippy --all-targets -- -D warnings`
+   `cargo clippy --all-targets -- -D warnings`, then
+   `xtask` again with every optional feature off and
+   with each one alone
 3. **All tests pass**: `cargo test`
 4. **Coverage >= 90%**
 5. **Code duplication <= 6%** (production code, tests
@@ -764,6 +765,34 @@ downstream, machine-owned by `cargo xtask backfeed-record`)
 so each run evaluates only feedback newer than the last, via
 `cargo xtask backfeed-diff` -- it never re-scans the whole
 downstream file.
+
+## Optional xtask features
+
+`xtask` groups its optional commands into Cargo features,
+all on by default:
+
+| Feature | Commands |
+|-|-|
+| `frontend` | the four `frontend-*` gates and commands |
+| `deploy` | `deploy`, `deploy-setup` |
+| `template-tools` | `sync-candidates`, `feedback-add`, `backfeed-*` |
+| `clean-cache` | `clean-cache` |
+
+A project drops a group by removing it from `default` in
+`xtask/Cargo.toml`. The group's modules, subcommands and
+`validate` steps compile out together, and `[N/M]` counts
+only the steps left. Each group's helpers live in its own
+modules, so nothing is left behind as dead code.
+
+`cargo xtask clippy` checks that last claim: after the
+workspace pass it lints `xtask` with every feature off and
+with each feature alone. A helper that only one group uses
+but that sits outside it fails the all-off pass. A group
+that needs another fails when it runs alone.
+
+A new `validate` gate is a `step()` function in its own
+module, added to the list in `xtask/src/validate.rs`. An
+optional gate goes under a feature.
 
 ## Workspace lints and xtask overrides
 

@@ -52,6 +52,11 @@ and this project adheres to
   committed (it was git-ignored) and checked by the dependency-cooldown gate;
   `CLAUDE.md` documents the one-time `npm ci` + `npx playwright install
   chromium` setup.
+- Optional `xtask` command groups as Cargo features (`frontend`, `deploy`,
+  `template-tools`, `clean-cache`, all on by default): a project drops one from
+  `default` in `xtask/Cargo.toml` with no code edits, and its `validate` steps
+  and `[N/M]` count follow. `cargo xtask clippy` also lints `xtask` with every
+  feature off and each one alone, so a dropped group leaves no dead code.
 
 ### Changed
 
