@@ -32,9 +32,8 @@ where
 
 /// True when `s` is a well-formed ISO `YYYY-MM-DD` date:
 /// exactly ten chars, `dddd-dd-dd`, with month `01..=12` and
-/// day `01..=31`. A shallow calendar check -- it does not
-/// reject Feb 30 -- which is enough for lexical watermark
-/// comparison (ISO dates sort lexically iff well-formed).
+/// day `01..=31`. A shape check, not a calendar: it accepts
+/// Feb 30. Well-formed ISO dates sort correctly as plain text.
 pub fn is_iso_date(s: &str) -> bool {
     let b = s.as_bytes();
     if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {

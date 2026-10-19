@@ -618,11 +618,14 @@ just when the code compiles:
       exempts that subcommand file-wide;
     - prose past 80 columns;
     - a backlog ID (`rt-`/`aq-`/`fr-`) cited in no backlog
-      (this check also reads `docs/`).
+      (this check also reads `docs/`, except the reviewer
+      logs, `template-feedback.md` and `docs/issues/`).
 
     Not seen: root files; path globs, `<placeholder>` paths
     and paths ending in `/`; paths a project exempts in
-    `tasks_config()` (each with a reason); `git` in fenced
+    `tasks_config()` (`xtask/src/helpers.rs`, each with a
+    reason); backlog IDs in the `docs/` files excepted
+    above; `git` in fenced
     blocks, in spans that wrap across lines, or after `$(`
     or a `VAR=` prefix (rt-2026-10-19-canon-git-check-gaps);
     width in tables, fences, frontmatter and 4-space-indented

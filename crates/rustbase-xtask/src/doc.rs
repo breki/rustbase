@@ -6,9 +6,10 @@ use crate::Config;
 use crate::process::{self, Captured};
 use crate::text::pair_with_locations;
 
-/// Lines of stderr kept when a pass fails with no located
-/// diagnostic: enough that the cause, the last line, is never cut
-/// off by a caller showing this many.
+/// How many lines of a failure a short report shows (the `validate`
+/// step prints this many). When no diagnostic is located, the stderr
+/// fallback keeps no more than this, so its last line, the cause, is
+/// always among those shown.
 pub const STDERR_TAIL_LINES: usize = 5;
 
 /// Cargo's progress verbs, which say nothing about a failure.
@@ -99,8 +100,9 @@ fn run_passes(
 
 /// The lines worth showing for a failed pass: the diagnostics,
 /// or, when none carries a `-->` location (a bad manifest, a
-/// rustdoc crash), the last lines of stderr with cargo's progress
-/// lines dropped, so a plain tail of stderr would not do.
+/// rustdoc crash), the last lines of stderr. Cargo's progress lines
+/// are dropped first: on a cold build they would fill the tail and
+/// push the cause out.
 fn failure_items(stderr: &str) -> Vec<String> {
     let items = pair_with_locations(stderr, is_diagnostic_line);
     if !items.iter().any(|l| l.trim_start().starts_with("-->")) {

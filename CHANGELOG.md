@@ -69,10 +69,14 @@ and this project adheres to
 - The `rustbase-xtask` library now holds the `doc` and `canon` gates, completing
   the gate extraction (#6). Canon-check's exemptions are configuration:
   `Config::canon` carries the paths that are absent on purpose (each with a
-  reason; a blank reason fails the gate), the files whose backlog-ID citations
-  are not checked, the repo path prefixes and the column limit, set in
-  `tasks_config()`. The library also exports its cargo-output and ISO-date
-  helpers as `rustbase_xtask::text`.
+  reason), the files whose backlog-ID citations are not checked, the repo path
+  prefixes and the column limit, set in `tasks_config()`. An exemption covers
+  its exact path, or a folder when it ends in `/` (`crates/a` does not cover
+  `crates/a-web/...`). An entry that is blank, has no reason, names a
+  checked folder itself, or lies outside every checked folder fails the gate,
+  as does a repo prefix that does not end in `/`.
+  The library also exports its cargo-output and ISO-date helpers as
+  `rustbase_xtask::text`.
 
 ### Changed
 

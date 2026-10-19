@@ -26,7 +26,9 @@ pub fn workspace_root() -> PathBuf {
 /// overrides a limit on the returned value, e.g.
 /// `cfg.thresholds.coverage_file = 80.0;`. The canon check's
 /// exemptions are here too: paths canon names that are correct to
-/// be absent, each with its reason.
+/// be absent, each with its reason. All three exist in the
+/// template; they are absent in some derived projects, which is
+/// what the exemption is for.
 pub fn tasks_config() -> rustbase_xtask::Config {
     let mut cfg =
         rustbase_xtask::Config::for_project("rustbase", workspace_root());
@@ -54,23 +56,11 @@ pub fn tasks_config() -> rustbase_xtask::Config {
 ///
 /// Strips ANSI codes via `CARGO_TERM_COLOR=never`.
 pub fn run_cargo_capture(args: &[&str]) -> Result<Output, String> {
-    run_cargo_capture_env(args, &[])
-}
-
-/// [`run_cargo_capture`] with extra environment variables, for
-/// settings cargo takes only from the environment (such as
-/// `RUSTDOCFLAGS`).
-pub fn run_cargo_capture_env(
-    args: &[&str],
-    env: &[(&str, &str)],
-) -> Result<Output, String> {
     let bin = cargo_bin();
-    let mut cmd = Command::new(&bin);
-    cmd.args(args).env("CARGO_TERM_COLOR", "never");
-    for (key, value) in env {
-        cmd.env(key, value);
-    }
-    cmd.output()
+    Command::new(&bin)
+        .args(args)
+        .env("CARGO_TERM_COLOR", "never")
+        .output()
         .map_err(|e| format!("failed to run {bin}: {e}"))
 }
 
@@ -199,6 +189,24 @@ pub fn wrap_markdown(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_canon_exemptions_are_valid_and_cover_the_template_only_paths() {
+        let rules = tasks_config().canon;
+        assert_eq!(rules.validate(), Ok(()));
+        let paths: Vec<&str> = rules
+            .absent_on_purpose
+            .iter()
+            .map(|e| e.path.as_str())
+            .collect();
+        for p in [
+            "scripts/e2e.sh",
+            "crates/rustbase/Cargo.toml",
+            "docs/developer/backfeed-ledger.toml",
+        ] {
+            assert!(paths.contains(&p), "{p} not exempt: {paths:?}");
+        }
+    }
 
     #[test]
     fn stderr_tail_returns_last_n_non_empty() {

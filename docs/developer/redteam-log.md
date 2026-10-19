@@ -15,6 +15,18 @@ red team review is warranted before continuing feature work.
 
 ---
 
+### rt-2026-10-19-canon-rules-can-switch-checks-off
+
+**Category:** correctness (configuration)
+
+`canon::Rules::validate` in `crates/rustbase-xtask/src/canon.rs`
+refuses exemptions that would empty a check, but not
+`repo_prefixes: vec![]` (or prefixes no canon path uses), which
+silences the path check, nor an absurd `max_cols`, which silences the
+width check; the Canon step stays green. Refuse an empty prefix list
+and bound `max_cols` (e.g. 1..=200). Deferred: found in the last
+allowed red-team round of the doc/canon extraction (#6).
+
 ### rt-2026-10-19-coverage-failure-paths-ambiguous
 
 **Category:** output (failure message)
@@ -40,8 +52,8 @@ possible bug by fresh-reader during /review; not verified.
 
 **Category:** Correctness (lenient gate)
 
-`over_wide` in `xtask/src/canon.rs` exempts every line that
-starts with four spaces, meant for indented code. Indented
+`over_wide` in `crates/rustbase-xtask/src/canon.rs` exempts every
+line that starts with four spaces, meant for indented code. Indented
 list-continuation prose (most numbered steps in
 `.claude/commands/`) starts the same way, so its width is never
 checked. Distinguish a code block (blank line before, not inside
@@ -51,8 +63,8 @@ a list item) from a continuation, or check indented lines too.
 
 **Category:** Correctness (lenient gate)
 
-`ungranted_git` in `xtask/src/canon.rs` reports nothing (a false
-green) for: a `git` line inside a fenced code block; an inline
+`ungranted_git` in `crates/rustbase-xtask/src/canon.rs` reports
+nothing (a false green) for: a `git` line inside a fenced code block; an inline
 span that wraps across lines (and a wrapped closing backtick
 flips the pairing for the rest of its line); `git` that is not
 the first word of a segment (`$(git ...)`, `GIT_EDITOR=true
