@@ -96,11 +96,20 @@ enum XCommand {
         /// pin target for `/update-deps`). Ignores `version`.
         #[arg(long)]
         latest_aged: bool,
+        /// With `--latest-aged`, stay on one release line: `3`,
+        /// `3.x` or `0.4` (whole version components).
+        #[arg(long, requires = "latest_aged")]
+        within: Option<String>,
     },
     /// Cooldown-check only the dependencies added or bumped in
     /// the working tree versus HEAD (the changed-deps gate that
     /// `validate` runs; requires curl + git)
-    DepAgeCheck,
+    DepAgeCheck {
+        /// Commit to diff the lockfiles against. CI passes the
+        /// commit the push or pull request started from.
+        #[arg(long, default_value = "HEAD")]
+        base: String,
+    },
     /// Pin any changed Rust dependency still within the cooldown
     /// down to its newest aged version, before compiling
     /// (front-door remediation; requires curl + git + cargo)
@@ -222,14 +231,15 @@ fn main() {
             package,
             version,
             latest_aged,
+            within,
         } => {
             if latest_aged {
-                dep_age::dep_age_latest(ecosystem, &package)
+                dep_age::dep_age_latest(ecosystem, &package, within.as_deref())
             } else {
                 dep_age::dep_age(ecosystem, &package, version.as_deref())
             }
         }
-        XCommand::DepAgeCheck => dep_age::dep_age_check(),
+        XCommand::DepAgeCheck { base } => dep_age::dep_age_check(&base),
         XCommand::DepPreflight => dep_age::dep_preflight(),
         XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
         XCommand::FrontendFmt { check } => {

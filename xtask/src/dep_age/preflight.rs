@@ -309,7 +309,7 @@ fn real_pin(name: &str, current: &str, target: &str) -> Result<(), String> {
 /// The `HEAD:Cargo.lock` baseline, or `None` when it is absent
 /// (no commit yet, path not tracked, git unavailable).
 fn real_baseline_lock() -> Option<String> {
-    git_show("Cargo.lock")
+    git_show("HEAD", "Cargo.lock")
 }
 
 /// Wire the real shell-out I/O.

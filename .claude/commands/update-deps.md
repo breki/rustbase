@@ -60,7 +60,8 @@ Do not proceed until the scope is chosen.
    (within the cooldown), do not adopt them as-is.
 3. For each fresh crate, find its pin target and apply it:
    ```
-   V=$(cargo -q xtask dep-age cargo <crate> --latest-aged)
+   V=$(cargo -q xtask dep-age cargo <crate> --latest-aged \
+       --within <its current major>)
    cargo update -p <crate> --precise "$V"
    ```
    `--latest-aged` prints the **highest** version that has
@@ -88,29 +89,55 @@ For each frontend package in scope:
 
 1. Resolve the pin target:
    `cargo -q xtask dep-age npm <pkg> --latest-aged`. For a
-   **major** bump this may return a lower major than the
-   absolute latest (the latest is often too fresh) -- adopt
-   the newest aged one and note what was held back.
-2. Install it, **from inside `frontend/`** (not
-   `npm --prefix` -- see the `file:`-dependency trap in
-   `CLAUDE.md`):
+   **same-major** pass add `--within <major>` (e.g.
+   `--within 3`, or `--within 0.4` below 1.0); without it the
+   command returns the newest aged version on *any* line,
+   which can be a major the tree cannot use. For a **major**
+   bump the result may be a lower major than the absolute
+   latest (the latest is often too fresh) -- adopt the newest
+   aged one and note what was held back.
+2. Install it, **one package per invocation, from inside
+   `frontend/`** (not `npm --prefix` -- see the
+   `file:`-dependency trap in `CLAUDE.md`):
    ```
-   cd frontend && npm install <pkg>@<ver> [<pkg2>@<ver2> ...]
+   cd frontend && npm install <pkg>@<ver>
    ```
-   A targeted install writes a caret range to
-   `package.json` and the exact version to the lockfile,
-   with minimal lockfile churn.
-3. **Only if `npm install` reports `ERESOLVE`** on a major
-   bump: delete `frontend/node_modules` +
-   `frontend/package-lock.json`, then re-run
-   `npm install` from inside `frontend/` (the documented
-   major-bump reset).
+   Multi-package installs are what tend to trip npm's
+   resolver. A targeted install writes a caret range to
+   `package.json`; when the cooldown holds a package
+   **below** the newest version, change that range to the
+   **exact** version (`npm install --save-exact`), or the
+   next `npm install` silently floats it back up.
+3. **If `npm install` reports `ERESOLVE`, climb this ladder
+   and stop at the first rung that works:**
+   1. Retry as scoped single-package installs (step 2).
+   2. Edit the range in `package.json` by hand, then a plain
+      `npm install` (a different resolver path).
+   3. `npm install --legacy-peer-deps` for a peer-graph
+      crash (e.g. arborist's `Cannot read properties of null
+      (reading 'edgesOut')`); the resulting tree usually
+      reinstalls cleanly without the flag afterwards.
+   4. **Last resort:** delete `frontend/node_modules` +
+      `frontend/package-lock.json` and reinstall. This
+      re-resolves the *whole* tree to newest, so every
+      transitive floats into the cooldown (one downstream
+      pass pulled in 21 fresh ones). Budget for re-pinning
+      all of them in step 5.
 4. **Restore the working directory to the repo root**
    before any `cargo xtask` call -- xtask's frontend
    detection is cwd-relative and a lingering `cd frontend`
    makes every frontend gate falsely report "no frontend".
-5. `cargo -q xtask dep-age-check` again; re-pin any fresh
-   transitive additions as in step 4.3.
+5. `cargo -q xtask dep-age-check` again. There is no npm
+   preflight, so pin each fresh **transitive** package by
+   hand with an `overrides` entry in
+   `frontend/package.json`, targeting the version
+   `--latest-aged --within <its line>` prints. When two
+   lines of one package coexist and only one consumer needs
+   the pin, scope the override to that consumer:
+   ```json
+   "overrides": { "eslint": { "brace-expansion": "1.1.18" } }
+   ```
+   A flat override would force both lines onto one version.
 
 ### 6. Held-back (too-fresh) versions
 
@@ -124,6 +151,13 @@ brand-new major), **do not** silently drop it:
   user approves, record it in the commit and pass it through
   the gate via `RUSTBASE_DEP_AGE_ALLOW=pkg@ver[,...]`. Never
   add an allow entry without that stated reason.
+- **Audit vs cooldown.** `npm audit fix` and a fresh RUSTSEC
+  fix both want the *newest* version, which is usually still
+  in the cooldown. Pin each vulnerable package to the
+  **oldest version that is both patched and aged**; use the
+  allow-list only when the advisory's sole fix is younger
+  than 14 days. `npm audit fix` can itself crash with the
+  `edgesOut` error above, so do not rely on it.
 
 ### 7. Verify
 

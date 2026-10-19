@@ -1,7 +1,8 @@
 //! Changed-dependency cooldown gate -- the `validate` step.
 //!
 //! Checks only the `(name, version)` pairs newly present in
-//! the working-tree lockfiles versus `HEAD`, so it costs
+//! the working-tree lockfiles versus a base commit (`HEAD`
+//! unless `--base` names another, as CI does), so it costs
 //! nothing (no network) on the common commit that leaves the
 //! lockfiles untouched, and fires exactly at the moment a
 //! dependency is adopted. A *whole-tree* continuous gate is
@@ -228,16 +229,16 @@ pub(super) fn new_locked_versions(
         .collect()
 }
 
-/// `git show HEAD:<rel>` from the workspace root. `None` when
-/// the path is absent at `HEAD` or git can't run (no commit
+/// `git show <base>:<rel>` from the workspace root. `None` when
+/// the path is absent at `base` or git can't run (no commit
 /// yet, not a repo) -- the caller degrades that to a warning,
 /// never a hard failure. Run via the process working directory
 /// (`current_dir`), not the `git -C` flag, to keep the command
 /// coverable by a blanket permission rule.
-pub(super) fn git_show(rel: &str) -> Option<String> {
+pub(super) fn git_show(base: &str, rel: &str) -> Option<String> {
     let output = Command::new("git")
         .current_dir(workspace_root())
-        .args(["show", &format!("HEAD:{rel}")])
+        .args(["show", &format!("{base}:{rel}")])
         .output()
         .ok()?;
     if output.status.success() {
@@ -277,26 +278,66 @@ fn check_one(eco: Ecosystem, name: &str, version: &str) -> DepOutcome {
     }
 }
 
-/// Diff one lockfile against `HEAD` and append an outcome per
-/// newly-adopted dependency. A missing current file means the
-/// ecosystem is absent (skip); a missing `HEAD` baseline with
+/// One lockfile the gate diffs, and how to read it.
+struct Lockfile {
+    eco: Ecosystem,
+    /// Path from the workspace root.
+    rel: &'static str,
+    /// Missing means "no such ecosystem" unless required.
+    required: bool,
+    parser: fn(&str) -> Vec<(String, String)>,
+}
+
+const CARGO_LOCK: Lockfile = Lockfile {
+    eco: Ecosystem::Cargo,
+    rel: "Cargo.lock",
+    required: true,
+    parser: parse_cargo_lock,
+};
+
+const NPM_LOCK: Lockfile = Lockfile {
+    eco: Ecosystem::Npm,
+    rel: "frontend/package-lock.json",
+    required: false,
+    parser: parse_npm_lock,
+};
+
+/// Diff one lockfile against `base` and append an outcome per
+/// newly-adopted dependency. A missing optional lockfile means
+/// the ecosystem is absent (skip); an unreadable or missing
+/// required one is a warning; a missing `base` baseline with
 /// the file present is surfaced as a warning (can't diff).
 fn collect_changes(
-    eco: Ecosystem,
-    rel: &str,
-    parser: fn(&str) -> Vec<(String, String)>,
+    base: &str,
+    lock: &Lockfile,
     allow: &HashSet<String>,
     outcomes: &mut Vec<(String, DepOutcome)>,
     warnings: &mut Vec<String>,
 ) {
-    let Ok(current_text) = fs::read_to_string(workspace_root().join(rel))
-    else {
-        return; // no such lockfile -> ecosystem absent
+    let Lockfile {
+        eco,
+        rel,
+        required,
+        parser,
+    } = *lock;
+    let current_text = match fs::read_to_string(workspace_root().join(rel)) {
+        Ok(text) => text,
+        // An optional lockfile that does not exist means the
+        // ecosystem is absent; anything else must not pass silently.
+        Err(e) if !required && e.kind() == std::io::ErrorKind::NotFound => {
+            return;
+        }
+        Err(e) => {
+            warnings.push(format!(
+                "{rel}: cannot read ({e}) -- skipping the cooldown check"
+            ));
+            return;
+        }
     };
-    let Some(baseline_text) = git_show(rel) else {
+    let Some(baseline_text) = git_show(base, rel) else {
         warnings.push(format!(
-            "{rel}: no HEAD baseline to diff against -- skipping cooldown \
-             check for this lockfile"
+            "{rel}: no {base} baseline to diff against -- skipping \
+             cooldown check for this lockfile"
         ));
         return;
     };
@@ -316,29 +357,15 @@ fn collect_changes(
 
 /// Run the changed-dependency cooldown gate: check only the
 /// `(name, version)` pairs newly present in the working-tree
-/// lockfiles versus `HEAD`. Free (no network) when the
-/// lockfiles are unchanged.
-pub fn check_changed_deps() -> DepAgeResult {
+/// lockfiles versus `base` (`validate` passes `HEAD`). Free (no
+/// network) when the lockfiles are unchanged.
+pub fn check_changed_deps(base: &str) -> DepAgeResult {
     let allow = parse_allow(std::env::var(ALLOW_ENV).ok().as_deref());
     let mut outcomes: Vec<(String, DepOutcome)> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    collect_changes(
-        Ecosystem::Cargo,
-        "Cargo.lock",
-        parse_cargo_lock,
-        &allow,
-        &mut outcomes,
-        &mut warnings,
-    );
-    collect_changes(
-        Ecosystem::Npm,
-        "frontend/package-lock.json",
-        parse_npm_lock,
-        &allow,
-        &mut outcomes,
-        &mut warnings,
-    );
+    collect_changes(base, &CARGO_LOCK, &allow, &mut outcomes, &mut warnings);
+    collect_changes(base, &NPM_LOCK, &allow, &mut outcomes, &mut warnings);
 
     let mut result = classify_dep_age(&outcomes);
     // Baseline/parse warnings precede the per-dep warnings the
@@ -351,9 +378,12 @@ pub fn check_changed_deps() -> DepAgeResult {
 /// Standalone `cargo xtask dep-age-check`. Like the audit
 /// command, this errors when the check could not complete
 /// (a human who ran it explicitly wants to know), whereas the
-/// `validate` step degrades that to a warning.
-pub fn dep_age_check() -> Result<(), String> {
-    let r = check_changed_deps();
+/// `validate` step degrades that to a warning. `base` is the
+/// commit to diff against: `HEAD` locally; in CI, the commit the
+/// push or pull request started from.
+pub fn dep_age_check(base: &str) -> Result<(), String> {
+    check_base_ref(base)?;
+    let r = check_changed_deps(base);
     if let Some(err) = r.error {
         eprintln!("  {}", r.detail);
         return Err(err);
@@ -369,9 +399,67 @@ pub fn dep_age_check() -> Result<(), String> {
     }
 }
 
+/// A base ref is handed to `git show`, so one starting with `-`
+/// would be read as an option; a blank one names nothing.
+fn check_base_ref(base: &str) -> Result<(), String> {
+    if base.trim().is_empty() || base.starts_with('-') {
+        Err(format!("dep-age-check --base: '{base}' is not a git ref"))
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_required_lockfile_is_a_warning_not_a_pass() {
+        // An empty outcome list reads as "no dependency changes",
+        // so only the warning keeps "could not check" from passing.
+        let (mut outcomes, mut warnings) = (Vec::new(), Vec::new());
+        collect_changes(
+            "HEAD",
+            &Lockfile {
+                rel: "no-such-file.lock",
+                ..CARGO_LOCK
+            },
+            &HashSet::new(),
+            &mut outcomes,
+            &mut warnings,
+        );
+        assert!(outcomes.is_empty(), "{outcomes:?}");
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("cannot read"), "{warnings:?}");
+    }
+
+    #[test]
+    fn a_missing_optional_lockfile_means_no_such_ecosystem() {
+        let (mut outcomes, mut warnings) = (Vec::new(), Vec::new());
+        collect_changes(
+            "HEAD",
+            &Lockfile {
+                rel: "no-such-frontend/package-lock.json",
+                ..NPM_LOCK
+            },
+            &HashSet::new(),
+            &mut outcomes,
+            &mut warnings,
+        );
+        assert!(outcomes.is_empty() && warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn base_ref_must_not_read_as_an_option() {
+        // The ref goes to `git show <ref>:<path>`; a leading `-`
+        // would be parsed as an option, and blank names nothing.
+        for ok in ["HEAD", "origin/main", "6528907", "HEAD~1"] {
+            assert!(check_base_ref(ok).is_ok(), "{ok}");
+        }
+        for bad in ["", " ", "--output=/tmp/x", "-p"] {
+            assert!(check_base_ref(bad).is_err(), "{bad:?}");
+        }
+    }
 
     #[test]
     fn parse_cargo_lock_registry_only_ignoring_locals_and_deps() {

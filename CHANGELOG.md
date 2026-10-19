@@ -34,6 +34,15 @@ and this project adheres to
   prose naming a missing path, an unresolved cross-reference, an ungranted `git`
   subcommand, an over-wide line, or a backlog ID cited in no backlog.
 - `/issue`, `/ask`, `/rundown` and `/short` commands.
+- CI runs the 14-day dependency cooldown: a `dep-age` job in `ci.yml` runs
+  `cargo xtask dep-age-check --base <ref>` against the commit the push or pull
+  request started from, failing on a fresh dependency, an unreachable registry
+  or a missing base; its allow-list comes from the maintainer-set
+  `RUSTBASE_DEP_AGE_ALLOW` repository variable. `dep-age-check` gained `--base`
+  (default `HEAD`).
+- `cargo xtask dep-age <eco> <pkg> --latest-aged --within <line>` keeps the pin
+  target on one release line (`3`, `3.x`, `0.4`), so it can no longer suggest a
+  major the tree cannot use (#1).
 
 ### Changed
 
@@ -56,6 +65,13 @@ and this project adheres to
   document named with `--doc`.
 - Command files invoke `cargo -q xtask ...`, so cargo compile progress no longer
   precedes a command's output; their `allowed-tools` grant both spellings.
+- `validate`'s dependency-cooldown step fails, instead of warning, when the
+  check cannot finish and `RUSTBASE_DEP_AGE_STRICT=1` or `CI=true` is set (#1).
+- `/update-deps` resolves npm `ERESOLVE` with an escalation ladder (scoped
+  installs, a hand-edited range, `--legacy-peer-deps`, then a full reset)
+  instead of resetting the lockfile first, which re-floated every transitive
+  into the cooldown; it also documents exact pins, scoped `overrides` and an
+  audit-vs-cooldown recipe (#1).
 
 ### Fixed
 
@@ -74,6 +90,8 @@ and this project adheres to
   (or the new `fresh-reader-log.md`) as a sync candidate.
 - xtask tests pass Rust 1.99 Clippy's `assert_is_empty` lint, which turned the
   gate red on the unpinned `stable` channel.
+- `cargo xtask dep-age-check` reports an unreadable `Cargo.lock` as a warning
+  instead of passing with "no dependency changes" (#1).
 
 ### Removed
 

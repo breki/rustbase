@@ -96,7 +96,7 @@ cargo xtask audit             # security-advisory audit (RUSTSEC + npm)
 cargo xtask deny              # offline licence/bans/sources gate (cargo-deny)
 cargo xtask dep-age <eco> <pkg> [ver]  # one package's publish age
 cargo xtask dep-age <eco> <pkg> --latest-aged  # newest ver past cooldown
-cargo xtask dep-age-check     # cooldown-gate changed deps (vs HEAD)
+cargo xtask dep-age-check [--base <ref>]  # cooldown-gate changed deps (vs HEAD or --base)
 cargo xtask dep-preflight     # pin changed deps past cooldown pre-build
 cargo xtask deploy            # deploy to remote (see docs/deployment.md)
 cargo xtask deploy-setup      # one-time remote provisioning
@@ -148,15 +148,16 @@ and silently reports "no frontend" (a false skip that reads
 as a pass). The shell cwd persists across commands, so a
 lingering `cd frontend` will mask every later frontend gate.
 
-**Before bumping a major version of a JS dep, delete
-`frontend/node_modules` + `frontend/package-lock.json`
-first**, then `npm --prefix frontend install`. npm compares
-the new manifest against the existing tree and frequently
-emits a spurious `ERESOLVE` on an otherwise-clean upgrade
-(typically an inspector/sub-plugin the old major depended
-on gets orphaned and its stale peer wins the resolve). A
-from-scratch resolve avoids it. Cheap to do unconditionally
-for a major bump; expensive to diagnose after the fact.
+**A major JS bump that hits `ERESOLVE`: climb the ladder in
+`/update-deps`, do not reset first.** npm compares the new
+manifest against the existing tree and often emits a spurious
+`ERESOLVE` (an inspector/sub-plugin the old major depended on
+gets orphaned and its stale peer wins the resolve). Deleting
+`frontend/node_modules` + `frontend/package-lock.json` fixes
+that, but it also re-resolves every transitive to newest,
+pulling many into the 14-day cooldown -- so it is the last
+rung, after scoped single-package installs, a hand-edited
+range and `--legacy-peer-deps`.
 
 **Never add a `file:` npm dependency that resolves to the
 repo root.** npm materializes it as a directory *junction*
@@ -1004,9 +1005,15 @@ Five `cargo xtask` commands guard the dependency tree:
   a dependency is adopted and costs nothing -- no network -- on a
   commit that leaves the lockfiles untouched. A *whole-tree* gate is
   deliberately avoided: it would flag every already-locked
-  version on every routine update. Like `audit`, an
-  unreachable registry / missing `HEAD` baseline degrades to a
-  warning, not a hard failure.
+  version on every routine update. Inside `validate`, like
+  `audit`, a check that cannot finish (unreachable registry,
+  missing `HEAD` baseline, unreadable `Cargo.lock`) degrades to
+  a warning -- unless `RUSTBASE_DEP_AGE_STRICT=1` or `CI=true`
+  makes it fail; the standalone command always fails on it.
+  **CI runs the standalone command** (the `dep-age` job in
+  `.github/workflows/ci.yml`) with `--base` set to the commit the
+  pull request or push started from -- in CI the checkout *is*
+  `HEAD`, so diffing against `HEAD` would always pass.
 - **`cargo xtask dep-preflight`** is the *pre-compile* twin of
   `dep-age-check`. Where the gate reports a cooldown breach
   *after* the fact, preflight *remediates* it *before* you
@@ -1038,7 +1045,11 @@ client side is nightly-only as of now; once it stabilizes on
 stable, layer it in front of (or in place of) these xtask
 commands. Until then, `dep-age-check` is the CI-enforced gate
 (runs on stable) and `dep-preflight` is the opt-in host-side
-hardening.
+hardening. A downstream project points to the third-party
+`cargo-cooldown` as a stable-today, fetch-time stopgap; it is
+not evaluated here, and it is itself new code running on the
+build host, so put it through the same review and cooldown as
+any other tool before adopting it.
 
 **Dependency-version cooldown.** Do not adopt a dependency
 version published fewer than 14 days ago without a stated
@@ -1056,7 +1067,10 @@ in the **`RUSTBASE_DEP_AGE_ALLOW`** env var
 (`name@version`, comma-separated) so the gate passes while
 leaving an auditable record of what was waved through --
 e.g. `RUSTBASE_DEP_AGE_ALLOW=serde@1.0.999 cargo xtask
-validate`.
+validate`. In CI the same list comes from the repository
+variable `RUSTBASE_DEP_AGE_ALLOW` (Settings, then Variables),
+which only a maintainer can set, so a pull request cannot wave
+through its own fresh dependency.
 
 **`cargo update` interaction.** The gate checks *every*
 newly-locked registry dependency, **transitive ones included**

@@ -35,7 +35,7 @@ use serde_json::Value;
 mod gate;
 mod preflight;
 
-pub use gate::{check_changed_deps, dep_age_check};
+pub use gate::{DepAgeResult, check_changed_deps, dep_age_check};
 pub use preflight::dep_preflight;
 
 /// Do not adopt a version published fewer than this many
@@ -262,20 +262,23 @@ fn age_in_days(published_days: i64, today: i64) -> i64 {
 pub fn dep_age_latest(
     ecosystem: Ecosystem,
     package: &str,
+    within: Option<&str>,
 ) -> Result<(), String> {
+    let line = within.map(parse_within).transpose()?;
     let json = fetch_registry(ecosystem, package)?;
     let versions = match ecosystem {
         Ecosystem::Npm => npm_versions(&json),
         Ecosystem::Cargo => cargo_versions(&json),
     };
-    match latest_aged(&versions, today_days()) {
+    match latest_aged(&versions, today_days(), line.as_deref()) {
         Some(v) => {
             println!("{v}");
             Ok(())
         }
         None => Err(format!(
-            "{package}: no version published more than \
-             {COOLDOWN_DAYS} days ago"
+            "{package}: no version{} published more than \
+             {COOLDOWN_DAYS} days ago",
+            within.map(|w| format!(" on line {w}")).unwrap_or_default()
         )),
     }
 }
@@ -295,12 +298,41 @@ pub fn dep_age_latest(
 /// outrank it -- pinning to it would silently *downgrade* the
 /// dependency. Taking the max by parsed version segments
 /// avoids both.
-fn latest_aged(versions: &[(String, i64)], today: i64) -> Option<&str> {
+///
+/// `within` keeps only one release line: its numeric components
+/// must lead the version's (`[3]` keeps `3.*`, `[0, 4]` keeps
+/// `0.4.*`), so a pin never jumps to a major the tree cannot use.
+fn latest_aged<'a>(
+    versions: &'a [(String, i64)],
+    today: i64,
+    within: Option<&[u64]>,
+) -> Option<&'a str> {
     versions
         .iter()
         .filter(|(_, day)| age_in_days(*day, today) >= COOLDOWN_DAYS)
+        .filter(|(v, _)| within.is_none_or(|p| version_key(v).starts_with(p)))
         .max_by(|a, b| version_key(&a.0).cmp(&version_key(&b.0)))
         .map(|(v, _)| v.as_str())
+}
+
+/// Parse a `--within` line such as `3`, `3.x` or `0.4` into its
+/// leading numeric components. A trailing `.x` / `.*` is allowed;
+/// anything else non-numeric is refused rather than ignored.
+fn parse_within(spec: &str) -> Result<Vec<u64>, String> {
+    let trimmed = spec
+        .strip_suffix(".x")
+        .or_else(|| spec.strip_suffix(".*"))
+        .unwrap_or(spec);
+    trimmed
+        .split('.')
+        .map(|part| {
+            part.parse::<u64>().map_err(|_| {
+                format!(
+                    "--within '{spec}': expected a version line like 3 or 0.4"
+                )
+            })
+        })
+        .collect()
 }
 
 /// Parse a release version (`1.10.0`) into comparable numeric
@@ -501,7 +533,40 @@ mod tests {
             ("1.3.0".to_string(), days_from_civil(2026, 7, 14)), // fresh
         ];
         // 1.3.0 is within the cooldown; 1.2.0 is the newest aged.
-        assert_eq!(latest_aged(&versions, today), Some("1.2.0"));
+        assert_eq!(latest_aged(&versions, today, None), Some("1.2.0"));
+    }
+
+    #[test]
+    fn latest_aged_within_a_line_stays_on_it() {
+        let today = days_from_civil(2026, 7, 15);
+        let old = days_from_civil(2026, 1, 1);
+        let versions = vec![
+            ("3.3.8".to_string(), old),
+            ("3.3.11".to_string(), old),
+            ("5.1.6".to_string(), old),
+            ("0.4.2".to_string(), old),
+            ("0.5.0".to_string(), old),
+            ("1.9.4".to_string(), old),
+            ("1.10.0".to_string(), old),
+        ];
+        let within = |p: &str| {
+            let prefix = parse_within(p).unwrap();
+            latest_aged(&versions, today, Some(&prefix)).map(str::to_owned)
+        };
+        assert_eq!(within("3").as_deref(), Some("3.3.11"));
+        assert_eq!(within("3.x").as_deref(), Some("3.3.11"));
+        assert_eq!(within("0.4").as_deref(), Some("0.4.2"));
+        // Whole components: 1.9 does not match 1.10.0.
+        assert_eq!(within("1.9").as_deref(), Some("1.9.4"));
+        assert_eq!(within("7"), None);
+        assert_eq!(latest_aged(&versions, today, None), Some("5.1.6"));
+    }
+
+    #[test]
+    fn within_must_be_numeric_components() {
+        for bad in ["", "x", "^3", "3.a", "-1"] {
+            assert!(parse_within(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]
@@ -514,7 +579,7 @@ mod tests {
             ("2.4.0".to_string(), days_from_civil(2026, 5, 1)),
             ("1.9.7".to_string(), days_from_civil(2026, 6, 25)),
         ];
-        assert_eq!(latest_aged(&versions, today), Some("2.4.0"));
+        assert_eq!(latest_aged(&versions, today, None), Some("2.4.0"));
     }
 
     #[test]
@@ -525,7 +590,7 @@ mod tests {
         let day = days_from_civil(2026, 6, 20);
         let versions =
             vec![("1.9.0".to_string(), day), ("1.10.0".to_string(), day)];
-        assert_eq!(latest_aged(&versions, today), Some("1.10.0"));
+        assert_eq!(latest_aged(&versions, today, None), Some("1.10.0"));
     }
 
     #[test]
@@ -541,8 +606,8 @@ mod tests {
             ("2.0.0".to_string(), days_from_civil(2026, 7, 10)),
             ("2.0.1".to_string(), days_from_civil(2026, 7, 14)),
         ];
-        assert_eq!(latest_aged(&all_fresh, today), None);
-        assert_eq!(latest_aged(&[], today), None);
+        assert_eq!(latest_aged(&all_fresh, today, None), None);
+        assert_eq!(latest_aged(&[], today, None), None);
     }
 
     #[test]
