@@ -97,6 +97,12 @@ filter also matches others.
 value reaches -- not one argument. Name the primitive, then list
 every value that reaches it, and guard them all.
 
+**When a guard keeps leaking, fix what it guards.** If each new
+check closes one case and a review finds the next, the checks are
+compensating for the thing they protect. Change that instead:
+canon's exemption validation leaked three times under raw-prefix
+matching and held once matching took whole names.
+
 **Scope discipline.** Fix what the issue describes. Capture an
 adjacent problem with `/todo` rather than folding it in, unless
 leaving it would make your own change wrong.
