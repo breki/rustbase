@@ -4,24 +4,9 @@
 //! `.claude/` commands and agents -- plus, for the dangling-ID
 //! check alone, the reference docs under `docs/`.
 //!
-//! Some of what a canon review looks for is decidable by a
-//! command: does this cross-reference resolve, does this path
-//! exist, is this `git` subcommand in the skill's
-//! `allowed-tools`. A reader catches most instances of such a
-//! defect and never all of them, and the few classes involved
-//! keep producing new instances, so the same findings come back
-//! every review. A check that runs every time is not lossy that
-//! way, and those findings stop reaching a reviewer at all.
-//!
-//! Everything here reads files and compares strings. It decides
-//! nothing about phrasing, and it must stay that way: a check
-//! with no stable answer is one to delete rather than parse
-//! harder.
-//!
-//! It reads `CLAUDE.md`, `.claude/commands/` and `.claude/agents/`
-//! only (plus `docs/` for backlog IDs). `.claude/skills/` and the
-//! rest of `docs/` are unchecked, and a green run says nothing
-//! about them.
+//! Everything here reads files and compares strings; it decides
+//! nothing about phrasing. `.claude/skills/` is unchecked, and a
+//! green run says nothing about it.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -46,8 +31,8 @@ struct Finding {
 /// A path canon names that is correct to be absent, and why.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Exempt {
-    /// Matched as a prefix: a trailing `/` exempts a subtree, and
-    /// `scripts/e2e.sh` also covers `scripts/e2e.sh.bak`.
+    /// Covers exactly this path, or, ending in `/`, everything in
+    /// that folder; `crates/a` does not cover `crates/a-web/x.rs`.
     pub path: String,
     /// Required: an unexplained entry is indistinguishable from a
     /// defect somebody silenced, so a blank one fails the gate.
@@ -75,10 +60,74 @@ pub struct Rules {
     pub repo_prefixes: Vec<String>,
     /// Files and subtrees (a trailing `/`) under `docs/` whose
     /// backlog-ID citations are not checked: records that cite IDs
-    /// as data, not pointers meant to resolve.
+    /// as data, not pointers meant to resolve. The defaults are the
+    /// reviewer logs, the template-feedback file and the working
+    /// issue docs every rustbase-derived project keeps.
     pub citation_exempt: Vec<String>,
-    /// Maximum prose width, matching `rustfmt.toml`.
+    /// Maximum prose width. Defaults to 80, the width `rustfmt.toml`
+    /// sets; it is not read from that file.
     pub max_cols: usize,
+}
+
+impl Rules {
+    /// Refuse exemptions that would quietly weaken the check. The
+    /// checked folders are the `repo_prefixes` for an absent path and
+    /// `docs/` for a citation entry. An entry is refused when it is
+    /// blank, names a checked folder itself (exempting all of it), or
+    /// lies outside every checked folder (matching nothing).
+    ///
+    /// It does not refuse an empty `repo_prefixes` or a large
+    /// `max_cols`; either one switches a check off. Nor can it tell
+    /// that an entry inside a folder names a file canon never cites.
+    ///
+    /// # Errors
+    ///
+    /// The first entry that is blank, has no reason, does not name
+    /// something inside one of the checked folders, or a repo prefix
+    /// that does not end in `/`.
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(p) = self.repo_prefixes.iter().find(|p| !p.ends_with('/')) {
+            return Err(format!(
+                "canon repo prefix {p:?} must end in `/`, so it names a folder"
+            ));
+        }
+        let inside = |path: &str, folder: &str| {
+            path.starts_with(folder) && path.len() > folder.len()
+        };
+        for e in &self.absent_on_purpose {
+            if e.path.trim().is_empty() {
+                return Err(format!(
+                    "canon exemption with reason {:?} names no path",
+                    e.reason
+                ));
+            }
+            if e.reason.trim().is_empty() {
+                return Err(format!(
+                    "canon exemption `{}` gives no reason; say why it is \
+                     absent",
+                    e.path
+                ));
+            }
+            if !self.repo_prefixes.iter().any(|p| inside(&e.path, p)) {
+                return Err(format!(
+                    "canon exemption `{}` must name a path inside one of \
+                     {:?}: the folder itself would exempt all of it, and \
+                     anything outside would match nothing",
+                    e.path, self.repo_prefixes
+                ));
+            }
+        }
+        if let Some(c) =
+            self.citation_exempt.iter().find(|c| !inside(c, "docs/"))
+        {
+            return Err(format!(
+                "canon citation exemption {c:?} must name a file or folder \
+                 inside docs/: docs/ itself would exempt every doc, and \
+                 anything outside would match nothing"
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl Default for Rules {
@@ -338,11 +387,7 @@ fn missing_paths(
             if p.contains('*') || p.contains('<') || p.ends_with('/') {
                 continue;
             }
-            if rules
-                .absent_on_purpose
-                .iter()
-                .any(|a| p.starts_with(a.path.as_str()))
-            {
+            if rules.absent_on_purpose.iter().any(|a| covers(&a.path, p)) {
                 continue;
             }
             if !exists(p) {
@@ -579,15 +624,19 @@ fn ids_in_backlog(content: &str) -> BTreeSet<String> {
         .collect()
 }
 
+/// True when exemption `entry` covers `path`: the same path, or,
+/// for an entry ending in `/`, anything in that folder. Whole names
+/// only, so `crates/a` does not cover `crates/a-web/x.rs`.
+fn covers(entry: &str, path: &str) -> bool {
+    path == entry || (entry.ends_with('/') && path.starts_with(entry))
+}
+
 /// True for a repo-relative path the citation scan skips. The
 /// skipped files cite IDs as data and provenance (a finding about
 /// an ID that does not grep, a plan discussing one), so a citation
 /// there is not a live pointer.
 fn is_citation_exempt(rel: &str, rules: &Rules) -> bool {
-    rules
-        .citation_exempt
-        .iter()
-        .any(|e| rel.starts_with(e.as_str()))
+    rules.citation_exempt.iter().any(|e| covers(e, rel))
 }
 
 /// Markdown files under `docs/`, repo-relative and sorted, that the
@@ -650,22 +699,12 @@ fn canon_files(root: &Path) -> Vec<String> {
 /// line, so two runs over an unchanged tree print the same
 /// text.
 ///
-/// Returns the findings and the number of files read, so both
-/// callers can report the same counts.
+/// Returns the findings and the number of files read.
 fn collect(
     root: &Path,
     rules: &Rules,
 ) -> Result<(Vec<Finding>, usize), String> {
-    if let Some(e) = rules
-        .absent_on_purpose
-        .iter()
-        .find(|e| e.reason.trim().is_empty())
-    {
-        return Err(format!(
-            "canon exemption `{}` gives no reason; say why it is absent",
-            e.path
-        ));
-    }
+    rules.validate()?;
     let files = canon_files(root);
 
     // `reference_targets` and `unresolved_xrefs` both walk the
@@ -684,6 +723,8 @@ fn collect(
         targets.extend(reference_targets(file_blocks));
     }
 
+    // The reviewer logs every rustbase-derived project keeps; the
+    // location is fixed, not part of `Rules`.
     let mut known_ids = BTreeSet::new();
     if let Ok(entries) = std::fs::read_dir(root.join("docs/developer")) {
         for e in entries.filter_map(Result::ok) {
@@ -741,8 +782,8 @@ fn render(findings: &[Finding]) -> String {
 ///
 /// # Errors
 ///
-/// Every finding, one per line, or a canon file that cannot be
-/// read, or an exemption with no reason.
+/// Every finding, one per line; a canon file that cannot be read;
+/// or rules that [`Rules::validate`] refuses.
 pub fn check(cfg: &Config) -> Result<String, String> {
     let (findings, files) = collect(&cfg.root, &cfg.canon)?;
     if findings.is_empty() {
@@ -975,6 +1016,87 @@ mod tests {
         let e = collect(&dir.0, &blank).unwrap_err();
         assert!(e.contains("scripts/x.sh") && e.contains("no reason"), "{e}");
         assert!(collect(&dir.0, &rules()).is_ok());
+    }
+
+    #[test]
+    fn a_blank_entry_is_refused() {
+        // A blank entry is a configuration mistake, whatever it would
+        // match; it is refused rather than silently ignored.
+        let blank_path = Rules {
+            absent_on_purpose: vec![Exempt::new(" ", "a reason")],
+            ..Rules::default()
+        };
+        let e = blank_path.validate().unwrap_err();
+        assert!(e.contains("names no path"), "{e}");
+        let mut blank_citation = Rules::default();
+        blank_citation.citation_exempt.push(String::new());
+        assert!(blank_citation.validate().is_err());
+        let mut blank_prefix = Rules::default();
+        blank_prefix.repo_prefixes.push("  ".into());
+        assert!(blank_prefix.validate().is_err());
+        assert!(rules().validate().is_ok());
+    }
+
+    #[test]
+    fn an_entry_covers_its_exact_path_or_a_folder_ending_in_a_slash() {
+        let none = |_: &str| false;
+        let r = Rules {
+            absent_on_purpose: vec![
+                Exempt::new("crates/rustbase", "renamed downstream"),
+                Exempt::new("scripts/old/", "removed folder"),
+            ],
+            ..Rules::default()
+        };
+        let skipped =
+            |text: &str| missing_paths("a.md", text, &none, &r).is_empty();
+        assert!(skipped("`crates/rustbase`"));
+        assert!(skipped("`scripts/old/run.sh`"));
+        // A name that merely starts with the same letters is not
+        // covered.
+        assert!(!skipped("`crates/rustbase-web/src/lib.rs`"));
+        assert!(!skipped("`crates/rustbase/Cargo.toml`"));
+        assert!(!skipped("`scripts/older.sh`"));
+
+        let docs = Rules::default();
+        assert!(is_citation_exempt("docs/issues/plan.md", &docs));
+        assert!(!is_citation_exempt("docs/issues-old.md", &docs));
+        let short = Rules {
+            citation_exempt: vec!["docs/d".into()],
+            ..Rules::default()
+        };
+        assert!(!is_citation_exempt("docs/developer/a.md", &short));
+    }
+
+    #[test]
+    fn a_repo_prefix_must_end_in_a_slash() {
+        let mut r = Rules::default();
+        r.repo_prefixes.push("tools".into());
+        let e = r.validate().unwrap_err();
+        assert!(e.contains("tools") && e.contains("end in `/`"), "{e}");
+    }
+
+    #[test]
+    fn an_entry_covering_a_whole_class_of_paths_is_refused() {
+        // The folder itself (`crates/`, `docs/`) would exempt all of
+        // it; anything else not strictly inside one matches nothing.
+        for path in ["crates", "crates/", "c", ".claude"] {
+            let r = Rules {
+                absent_on_purpose: vec![Exempt::new(path, "a reason")],
+                ..Rules::default()
+            };
+            let e = r.validate().unwrap_err();
+            assert!(e.contains("inside one of"), "{path}: {e}");
+        }
+        let outside = Rules {
+            absent_on_purpose: vec![Exempt::new("README.md", "never matches")],
+            ..Rules::default()
+        };
+        assert!(outside.validate().is_err(), "an entry that cannot match");
+        for entry in ["docs/", "docs", "d"] {
+            let mut r = Rules::default();
+            r.citation_exempt.push(entry.into());
+            assert!(r.validate().is_err(), "{entry} exempts every doc");
+        }
     }
 
     #[test]

@@ -20,13 +20,15 @@ Artisan review is warranted before continuing feature work.
 
 **Category:** API Design (duplication)
 
-`is_diagnostic_line` in `xtask/src/doc_cmd.rs` is a near-copy of
-the one in `clippy_cmd.rs` (they differ only in `could not
-document` vs `could not compile`), and so is the "print the
+`is_diagnostic_line` in `crates/rustbase-xtask/src/doc.rs` is a
+near-copy of the one in `xtask/src/clippy_cmd.rs` (they differ only
+in `could not document` vs `could not compile`), and so is the "print the
 first N, then `... and K more`" loop. The copies already drifted
 once (the doc filter lacked `") generated "`, fixed in the same
-review). Extract one `helpers` filter taking the per-tool phrase,
-and one truncated-print helper.
+review). The two now sit in different crates: put one filter taking
+the per-tool phrase in `rustbase_xtask::text`, used by both, once
+clippy moves to the library (follow-up 4 in `docs/xtask-library.md`),
+and one truncated-print helper beside it.
 
 ### aq-2026-10-19-todo-done-unchecked-arguments
 
@@ -43,7 +45,7 @@ add `Slug` / `IsoDate` newtypes whose constructors are
 
 **Category:** Type Safety
 
-`Finding.kind` in `xtask/src/canon.rs` is a free-form
+`Finding.kind` in `crates/rustbase-xtask/src/canon.rs` is a free-form
 `&'static str` and `CHECK_COUNT = 5` is maintained by hand, so
 adding a sixth check leaves the summary saying "5 checks" and a
 tag typo compiles. Replace both with an `enum Check` carrying
