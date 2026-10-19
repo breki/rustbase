@@ -1,6 +1,6 @@
-//! The audit and licence gates' unmockable I/O: spawning `cargo`
-//! and `npm`. Kept to the spawn itself so the decisions around it
-//! stay testable; this file is excluded from the coverage gate.
+//! The gates' unmockable I/O: spawning `cargo`, `npm` and other
+//! tools. Kept to the spawn itself so the decisions around it stay
+//! testable; this file is excluded from the coverage gate.
 //!
 //! Every command runs via the process working directory
 //! (`current_dir`), not a `--prefix` or `-C` flag: npm resolves
@@ -34,6 +34,17 @@ pub(crate) fn cargo(root: &Path, args: &[&str]) -> Result<Captured, String> {
 /// Run `npm <args>` in `dir`.
 pub(crate) fn npm(dir: &Path, args: &[&str]) -> Result<Captured, String> {
     let bin = if cfg!(windows) { "npm.cmd" } else { "npm" };
+    let mut cmd = Command::new(bin);
+    cmd.current_dir(dir).args(args);
+    run(cmd, bin)
+}
+
+/// Run `bin <args>` in `dir`.
+pub(crate) fn tool(
+    dir: &Path,
+    bin: &str,
+    args: &[&str],
+) -> Result<Captured, String> {
     let mut cmd = Command::new(bin);
     cmd.current_dir(dir).args(args);
     run(cmd, bin)

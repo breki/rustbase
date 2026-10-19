@@ -12,9 +12,15 @@
 use std::path::PathBuf;
 
 pub mod audit;
+pub mod coverage;
 pub mod deny;
 pub mod dep_age;
+pub mod dupes;
 mod process;
+
+/// The build-tooling package, left out of the coverage and
+/// duplication measurements: it is not the project's product.
+const TOOLING_CRATE: &str = "xtask";
 
 /// What a gate does when it cannot finish (a tool missing, the
 /// network down), as opposed to finishing and finding a problem,
@@ -48,17 +54,49 @@ pub struct Config {
     /// User-Agent sent to package registries (crates.io refuses
     /// requests without one).
     pub user_agent: String,
+    /// The coverage and duplication limits.
+    pub thresholds: Thresholds,
 }
 
 impl Config {
     /// The defaults for a project called `project`:
-    /// `<PROJECT>_DEP_AGE_ALLOW` and `<project>-xtask-dep-age`.
+    /// `<PROJECT>_DEP_AGE_ALLOW`, `<project>-xtask-dep-age` and
+    /// the default [`Thresholds`].
     pub fn for_project(project: &str, root: PathBuf) -> Self {
         let prefix = project.to_ascii_uppercase().replace('-', "_");
         Self {
             root,
             dep_age_allow_env: format!("{prefix}_DEP_AGE_ALLOW"),
             user_agent: format!("{project}-xtask-dep-age"),
+            thresholds: Thresholds::default(),
+        }
+    }
+}
+
+/// Percentages the coverage and duplication gates hold the
+/// workspace to.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Thresholds {
+    /// Minimum line coverage of the workspace as a whole.
+    pub coverage_overall: f64,
+    /// Minimum line coverage of any one file, so a single
+    /// uncovered file is not averaged away.
+    pub coverage_file: f64,
+    /// Maximum exact duplication across all crates together.
+    pub dupes_workspace: f64,
+    /// Maximum exact duplication in any one crate. Wider than
+    /// the workspace limit: one copied block is a large share of
+    /// a small crate.
+    pub dupes_crate: f64,
+}
+
+impl Default for Thresholds {
+    fn default() -> Self {
+        Self {
+            coverage_overall: 90.0,
+            coverage_file: 85.0,
+            dupes_workspace: 6.0,
+            dupes_crate: 12.0,
         }
     }
 }
