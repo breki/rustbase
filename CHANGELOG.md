@@ -99,6 +99,11 @@ and this project adheres to
   gate red on the unpinned `stable` channel.
 - `cargo xtask dep-age-check` reports an unreadable `Cargo.lock` as a warning
   instead of passing with "no dependency changes" (#1).
+- Frontend tooling clears all 9 npm audit advisories (5 high): `vitest` pinned
+  to 4.1.11, transitive `brace-expansion`, `devalue`, `nanoid`, `postcss`,
+  `postcss-selector-parser`, `source-map-js` and `undici` moved to patched
+  versions past the 14-day cooldown (`postcss` and `undici` held by `overrides`
+  until their newest releases age).
 
 ### Removed
 

@@ -35,6 +35,10 @@
     "svelte-eslint-parser": "^1.6.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.0",
-    "vitest": "^4.1.7"
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "postcss": "8.5.29",
+    "undici": "7.30.0"
   }
 }
