@@ -122,9 +122,9 @@ the deploy task refuses to ship a `HEAD` that is not on a
      `rustup target add <target>` rather than skip it.
      It must be **clippy**, not `cargo check --target`:
      `check --target` compiles and runs no lints, so it
-     proves the build and says nothing about the lints
-     (exactly how a cross-target check that had just run can
-     still miss a lint failure). No linker for the other
+     proves the build and says nothing about the lints, so a
+     green cross-target check can still hide a lint failure.
+     No linker for the other
      platform is needed -- only the cfg analysis and lints
      run -- so this costs seconds on a warm target dir.
    - **Standalone `cargo -q xtask audit`.** `validate`'s audit

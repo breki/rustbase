@@ -200,8 +200,10 @@ field names. Leave what would merely read better.
 these: large rework (over five files, over a hundred lines, or
 churn outside the diff); two findings conflicting; a genuine
 design tradeoff; a public-surface or breaking change; a new
-dependency; a consolidation of three or more copies; out of
-scope for the work in hand. Present it in the fields its
+dependency; a consolidation of three or more copies; a fix
+that introduces a new parsing heuristic (it is a design choice,
+and its edge cases are the next round's findings); out of scope
+for the work in hand. Present it in the fields its
 reviewer emitted and ask via `AskUserQuestion`: fix it now,
 defer it, decline it, or leave it for the developer to decide
 before committing.

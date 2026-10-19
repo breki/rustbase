@@ -48,14 +48,11 @@ if [ -z "$changed_rs" ]; then
 fi
 
 # --- Run checks ------------------------------------------
-# Stages run sequentially. A `cmd1 && cmd2 && cmd3`
-# chain captured into a single `$output` would, on
-# multi-stage failures, only contain the first failing
-# stage's output AND drop the label of which stage
-# failed -- so when Claude fixed clippy the test
-# failure would resurface looking "new" on the next
-# hook run, defeating the `stop_hook_active` guard
-# above.
+# Stages run sequentially, each captured and labelled on
+# its own. One `cmd1 && cmd2 && cmd3` capture would hold
+# only the first failing stage's output and no label, so a
+# later stage's failure would surface as "new" on the next
+# hook run and defeat the `stop_hook_active` guard above.
 run_stage() {
   local label="$1"
   shift
