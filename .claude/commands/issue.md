@@ -1,7 +1,7 @@
 ---
 description: Work a GitHub issue end to end -- verify it is still real, settle the approach, implement with TDD, review, and open a PR that says what was not verified
 argument-hint: "<issue number>"
-allowed-tools: Bash(gh issue:*), Bash(gh pr:*), Bash(gh run:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git branch:*), Bash(git checkout:*), Bash(git fetch:*), Bash(git pull:*), Bash(git push:*), Bash(git rm:*), Bash(git merge-base:*), Bash(git add -N:*), Bash(git reset --:*), Bash(git ls-files:*), Bash(cargo xtask*), Bash(cargo -q xtask*), Bash(wc:*), Bash(grep:*), Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill(commit), Skill(review), Skill(todo)
+allowed-tools: Bash(gh issue:*), Bash(gh pr:*), Bash(gh run:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git branch:*), Bash(git checkout:*), Bash(git fetch:*), Bash(git pull:*), Bash(git push:*), Bash(git rm:*), Bash(git merge-base:*), Bash(git add -N:*), Bash(git reset --:*), Bash(git ls-files:*), Bash(cargo xtask*), Bash(cargo -q xtask*), Bash(rustup update:*), Bash(wc:*), Bash(grep:*), Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill(commit), Skill(review), Skill(todo)
 ---
 
 Work the GitHub issue given as the argument, from reading it to
@@ -11,8 +11,8 @@ reporting back on it.
 repository's remote. Without it, stop and say so.
 
 Committing happens through `/commit` and reviewing through
-`/review`, which every issue gets once the branch is pushed
-(step 10). This command reimplements neither.
+`/review`, which every issue gets before the branch is first
+pushed (step 9). This command reimplements neither.
 
 ## Steps
 
@@ -115,9 +115,13 @@ backlog entries record what was true then.
 
 ### 6. Verify, and know what you did not verify
 
-Run `cargo xtask validate`; `CLAUDE.md` under **Definition of
-Done** lists its gates. A UI change also needs the browser check
-`validate` cannot do.
+Run `rustup update` first. The toolchain is unpinned stable, so
+CI lints with the newest Clippy, and a lint added since your last
+update fails there and nowhere else.
+
+Then run `cargo xtask validate`; `CLAUDE.md` under **Definition
+of Done** lists its gates. A UI change also needs the browser
+check `validate` cannot do.
 
 Then write down what you could not exercise -- another platform,
 an external service, a config you did not break. An unverified
@@ -131,37 +135,17 @@ replaces this.
 ### 8. Commit
 
 Commit through `/commit`, which does not push. State in the
-commit body what was verified and what was not. Then push the
-branch: `git push -u origin <type>/<short-name>` the first time
-(step 3), plain `git push` after.
+commit body what was verified and what was not. Do not push yet:
+the branch goes up after the review (step 10).
 
-### 9. Open the PR at the first push
-
-Open the PR as soon as the first commit is pushed, with
-`gh pr create` and `Closes #<n>`, so CI starts on the first push
-and the work is visible while it moves. Write the PR body as one
-line per paragraph -- GitHub renders the markdown, so a hard
-wrap only makes it harder to edit.
-
-Watch that first run in the background, picking it by the pushed
-commit's hash rather than "latest" (a new run can take seconds to
-appear). Update the title and body whenever the scope changes.
-
-The body carries what a reviewer cannot get from the diff:
-
-- **Why this approach**, and what was rejected
-- **What changed**, as a table when the change is structural
-- **Deliberate regressions**, named
-- **Verification**: the commands run and their results
-- **Not done**: what is unexercised, unreviewed or deferred
-- **Review**: which round `/review` stopped after, and the
-  findings carried forward
-
-### 10. Review the pushed branch
+### 9. Review the branch before pushing
 
 Run `/review` here without asking, and report what it found even
 when it found nothing. `/review` owns the stages, the snapshots
-and the stopping rule.
+and the stopping rule. It runs before anything reaches GitHub
+because its fixes usually become extra commits: a PR opened
+first shows the unreviewed state, then collects those commits
+and CI reruns in public.
 
 **Hand it the branch point.** The work is committed by now, so a
 diff against `HEAD` holds nothing:
@@ -174,19 +158,52 @@ git merge-base origin/main HEAD   # pass the result to /review
 **Its fixes become their own commits.** `/review` edits the tree
 and commits nothing, so commit its changes through `/commit`
 separately from the implementation -- a bad fix then reverts
-without taking the work with it -- push, and update the PR body.
+without taking the work with it. `/review` runs under this
+file's grants, which is why `git add -N` and `git reset --` are
+listed: its snapshot marks untracked paths with `git add -N`.
+Before that commit, `git reset -- <path>` any of them the review
+concluded should not ship, and stage the rest by name.
 
-**The PR body lists the findings nobody fixed.** Deferred ones
-are logged under `docs/developer/`, which a reader of the branch
-will not think to open; declined ones are logged nowhere. Copy
-both into the PR body.
+### 10. Push, then open the PR
+
+Push the branch: `git push -u origin <type>/<short-name>` the
+first time (step 3), plain `git push` after. Then open the PR
+with `gh pr create` and `Closes #<n>`; CI runs on pull requests,
+so this starts it. Write the PR body as one line per paragraph
+-- GitHub renders the markdown, so a hard wrap only makes it
+harder to edit.
+
+The body carries what a reviewer cannot get from the diff:
+
+- **Why this approach**, and what was rejected
+- **What changed**, as a table when the change is structural
+- **Deliberate regressions**, named
+- **Verification**: the commands run and their results
+- **Not done**: what is unexercised, unreviewed or deferred
+- **Review**: what `/review` reported -- the stages that ran,
+  the stage-2 round count and why it stopped, and the findings
+  nobody fixed
+
+**List the findings nobody fixed.** Deferred ones are logged
+under `docs/developer/`, which a reader of the branch will not
+think to open; declined ones are logged nowhere. Copy both into
+the PR body. Update the title and body whenever the scope
+changes.
 
 ### 11. Watch CI, and separate new failures from old
 
-`gh run list --branch <branch>`, then `gh run watch <id>`. A red
-step is not automatically yours: compare against `main`, and when
-it already failed there, say so rather than fixing it silently
-or letting it read as a regression.
+Watch the run in the background, picking it by the pushed
+commit's hash rather than "latest" (a new run can take seconds to
+appear): take the hash from `git log -1 --format=%H`, find the
+run with `gh run list --commit <hash>`, then `gh run watch <id>`.
+A red step is not automatically yours: compare against `main`,
+and when it already failed there, say so rather than fixing it
+silently or letting it read as a regression.
+
+A failure this change caused gets a fix commit through
+`/commit`, pushed and watched like the first. Run `/review` on
+that fix before pushing when it changes behaviour; a fix to a
+test or to prose goes straight up.
 
 ### 12. Close out on the branch, then report back
 
@@ -203,7 +220,8 @@ commit**, so nothing is left to do on `main` after the merge:
    cargo -q xtask todo done <slug> --date <today's date>
    ```
 
-3. Commit through `/commit` and push.
+3. Commit through `/commit`, push, and watch its run as in
+   step 11.
 
 Then comment on the issue with the outcome: what was fixed, the
 commit, the verification, and what remains unverified.
@@ -219,7 +237,7 @@ one there and then.
 - Never work an issue on `main`.
 - No behaviour change without a failing test first, and a
   regression test nobody has seen fail does not count.
-- Always run `/review` on the pushed branch.
+- Always run `/review`, and run it before the first push.
 - Never report a gate as passing on the strength of a document.
   Run it.
 - Say what you did not verify.

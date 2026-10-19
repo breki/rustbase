@@ -90,6 +90,10 @@ and this project adheres to
   audit-vs-cooldown recipe (#1).
 - `cargo xtask coverage` names the least-covered files and their uncovered line
   ranges when the overall threshold fails, instead of printing only the total.
+- `/issue` runs `/review` before the first push: commit, review, commit the
+  fixes, then push and open the PR, so the PR never shows the unreviewed state.
+  It also runs `rustup update` before `cargo xtask validate`, so local Clippy
+  matches CI's, and says how to fix a CI failure the change caused.
 
 ### Fixed
 

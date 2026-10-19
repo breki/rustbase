@@ -20,7 +20,7 @@ The argument is the commit the working tree is compared
 against, and it defaults to `HEAD`. With the default the
 reviewers read what is not committed yet.
 
-Pass a base when the work is already committed -- for a pushed
+Pass a base when the work is already committed -- for a feature
 branch, `$(git merge-base origin/main HEAD)` after a `git fetch`
 (local `main` can lag, e.g. when another worktree holds it), so
 the diff holds every commit on the branch plus anything still
@@ -87,7 +87,7 @@ while they read it.
 ```bash
 mkdir -p target
 BASE=HEAD                            # uncommitted work
-# BASE=$(git merge-base origin/main HEAD)  # pushed branch; fetch first
+# BASE=$(git merge-base origin/main HEAD)  # feature branch; fetch first
 git ls-files --others --exclude-standard  # untracked: check first
 git add -N <the untracked paths of this work>
 EXCL=':(exclude)docs/developer/*-log.md'
@@ -206,7 +206,8 @@ and its edge cases are the next round's findings); out of scope
 for the work in hand. Present it in the fields its
 reviewer emitted and ask via `AskUserQuestion`: fix it now,
 defer it, decline it, or leave it for the developer to decide
-before committing.
+before committing the review's edits (the work under review may
+already be committed).
 
 **Read the artifact back before claiming a fix landed.** "The
 help now says Y" needs the grep that shows it.
