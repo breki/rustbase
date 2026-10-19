@@ -10,21 +10,15 @@
 //! Advisories stay with `cargo-audit`, which does need the RUSTSEC
 //! database.
 //!
-//! A missing `cargo-deny` is an **error**, and this gate takes no
-//! [`crate::Strictness`]. `audit`'s leniency buys an offline laptop
-//! the ability to finish `validate`, at the cost of the advisory DB
-//! going unconsulted. Here there is nothing to trade: the check needs
-//! no network, so a machine that cannot run it is simply missing a
-//! tool, and saying so is more use than passing quietly.
+//! A missing `cargo-deny` is an error, and there is no
+//! [`crate::Strictness`]: the check needs no network, so an offline
+//! machine can still run it.
 
 use crate::process::{self, Captured};
 use crate::{Config, is_missing_subcommand};
 
-/// What `cargo deny` reported.
-///
-/// Three named outcomes rather than a bool and a string, because a
-/// missing tool must never be spelled as a failure that happens to
-/// carry install text in its detail field.
+/// What `cargo deny` reported. `ToolMissing` is decided before the
+/// exit status is looked at, so a missing tool is never a pass.
 #[derive(Debug, PartialEq, Eq)]
 enum DenyResult {
     /// Every check passed.
@@ -55,32 +49,38 @@ const ARGS: &[&str] = &[
     "sources",
 ];
 
-/// Runs the gate in the workspace root.
+/// Runs the gate in the workspace root; on success, the checks it
+/// ran (`licenses, bans, sources`).
 ///
 /// # Errors
 ///
 /// The tool's output when a check fails, or how to install it when
 /// it is missing.
-pub fn check(cfg: &Config) -> Result<(), String> {
+pub fn check(cfg: &Config) -> Result<String, String> {
     outcome(&process::cargo(&cfg.root, ARGS)?)
 }
 
 /// Turn a finished run into the gate's result.
-fn outcome(out: &Captured) -> Result<(), String> {
+fn outcome(out: &Captured) -> Result<String, String> {
     // Both streams. cargo-deny puts its diagnostics on stderr, but a
     // malformed `deny.toml` or another version's wording can land on
     // stdout.
     let both = format!("{}\n{}", out.stderr.trim(), out.stdout.trim());
-    match failure(classify(out.ok, &both), &out.status) {
-        None => Ok(()),
-        Some(e) => Err(e),
-    }
+    failure(classify(out.ok, &both), &out.status)?;
+    Ok(checks_run())
+}
+
+/// The check names from `ARGS` (everything after `check`), so
+/// the success line cannot drift from what ran.
+fn checks_run() -> String {
+    let after = ARGS.iter().skip_while(|a| **a != "check").skip(1);
+    after.copied().collect::<Vec<_>>().join(", ")
 }
 
 /// Classifies a `cargo deny` run.
 fn classify(status_ok: bool, output: &str) -> DenyResult {
-    // Checked before `status_ok`, because a missing tool must never
-    // come back as a pass: there is no network to be down here.
+    // Before `status_ok`: the exit status alone does not prove the
+    // tool ran.
     if is_missing_subcommand(output) {
         return DenyResult::ToolMissing;
     }
@@ -91,17 +91,17 @@ fn classify(status_ok: bool, output: &str) -> DenyResult {
     }
 }
 
-/// Turns an outcome into the error the caller returns, or `None`
-/// when the gate passed. A failure that printed nothing still
-/// names the exit status, the one fact available.
-fn failure(result: DenyResult, status: &str) -> Option<String> {
+/// Turns an outcome into the error the caller returns. A failure
+/// that printed nothing still names the exit status, the one fact
+/// available.
+fn failure(result: DenyResult, status: &str) -> Result<(), String> {
     match result {
-        DenyResult::Passed => None,
+        DenyResult::Passed => Ok(()),
         DenyResult::Failed(detail) if detail.is_empty() => {
-            Some(format!("cargo deny failed ({status}) and printed nothing"))
+            Err(format!("cargo deny failed ({status}) and printed nothing"))
         }
-        DenyResult::Failed(detail) => Some(detail),
-        DenyResult::ToolMissing => Some(MISSING_TOOL.to_owned()),
+        DenyResult::Failed(detail) => Err(detail),
+        DenyResult::ToolMissing => Err(MISSING_TOOL.to_owned()),
     }
 }
 
@@ -109,7 +109,7 @@ fn failure(result: DenyResult, status: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn run(ok: bool, stdout: &str, stderr: &str) -> Result<(), String> {
+    fn run(ok: bool, stdout: &str, stderr: &str) -> Result<String, String> {
         outcome(&Captured {
             ok,
             status: "exit status: 2".into(),
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn a_passing_run_is_ok() {
         assert_eq!(classify(true, ""), DenyResult::Passed);
-        assert_eq!(run(true, "", "ok"), Ok(()));
+        assert_eq!(run(true, "", "ok").unwrap(), "licenses, bans, sources");
     }
 
     #[test]

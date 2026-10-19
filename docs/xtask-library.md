@@ -57,7 +57,18 @@ into `crates/rustbase-xtask` with the template's `xtask` calling it.
   "Coverage exceptions for hardware-bound code" recipe in
   `CLAUDE.md`, and testing the entry points against a throwaway git
   repository raised it to 91.4%. Every extracted module will need
-  this split.
+  this split. The leaf can belong to one module (`dep_age/io.rs`)
+  or be shared: `audit` and `deny`, extracted later (#6), share
+  `process.rs`. Each leaf is listed under
+  `[workspace.metadata.coverage]` in the root `Cargo.toml`.
+- **The gate also applies per file.** Each file must reach 85% as
+  well as the crate reaching 90%. `crates/rustbase-xtask/src/deny.rs`
+  first measured 75% with the crate at 92%. Its entry point only
+  hands the excluded spawn its arguments, so tests never call it,
+  and each line of a multi-line argument list inside it counted as
+  uncovered. A `const` item has no lines to count, so the list
+  moved into one. Coverage runs late in `validate`, so running
+  `cargo xtask coverage` alone first finds such a failure sooner.
 - **The doc gate applies to the public API.** A module doc that
   linked a private submodule was fine in a binary and fails in a
   library.
@@ -177,7 +188,8 @@ signature check, `.ports` reader, worktree setup and log tee.
 2. Decouple feature selection: registered `validate` steps, helpers
    grouped by user (done: #5).
 3. Extract `audit`, `deny`, `coverage`, `dupes`, `doc_cmd`, `canon`,
-   taking the downstream fixes listed above.
+   taking the downstream fixes listed above (#6; `audit` and `deny`
+   done).
 4. Extract the output parsers (`check`, `clippy_cmd`, `test_cmd`,
    `fmt_cmd`) and `changelog`/`todo` with a pluggable todo format.
 5. Extension points for project subcommands and steps.
