@@ -62,6 +62,10 @@ and this project adheres to
 - The `rustbase-xtask` library now holds the `audit` and `deny` gates too.
   `audit` takes a `Strictness` (fail or warn when the check cannot finish);
   `deny` takes none, since a missing cargo-deny always fails (part of #6).
+- The `rustbase-xtask` library now holds the `coverage` and `dupes` gates; their
+  limits are `Config::thresholds` (coverage 90% overall and 85% per file,
+  duplication 6% workspace-wide and 12% per crate), set in `tasks_config()`
+  (part of #6).
 
 ### Changed
 
@@ -101,6 +105,15 @@ and this project adheres to
   names its reason instead of "see warnings above", and a vulnerability report
   also names any source that did not finish (an unreachable npm registry used to
   go unmentioned).
+- `cargo xtask dupes` holds the workspace as a whole to 6% exact duplication and
+  any one crate to 12%, instead of each crate to 6%: one copied block in a small
+  crate no longer fails the gate. It reads `code-dupes` JSON instead of
+  streaming its report, and a failure prints the command that lists the
+  duplicates.
+- `cargo xtask coverage` fails when the root `Cargo.toml` cannot be read,
+  instead of falling back to the built-in ignore list (which reported the
+  excluded files as a coverage drop), and fails when a run measured no files at
+  all.
 
 ### Fixed
 

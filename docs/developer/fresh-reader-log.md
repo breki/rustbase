@@ -29,17 +29,6 @@ harmless advisory warnings. Same word, opposite weight. `verdict`
 already calls the first `unfinished`; rename the field to match.
 Deferred because stage 3 does not rename code.
 
-### fr-2026-10-19-coverage-per-file-floor-undocumented
-
-**Category:** missing explanation
-
-`CLAUDE.md` (Definition of Done item 4, "Coverage exceptions for
-hardware-bound code") states only the 90% crate-wide gate. The
-per-file floor (`MODULE_THRESHOLD = 85.0` in
-`xtask/src/coverage.rs`) is stated only in `docs/xtask-library.md`,
-so a file can fail while the documented figure passes. Say both in
-`CLAUDE.md`.
-
 ### fr-2026-10-19-validate-order-rationale-copies
 
 **Category:** Duplication (one rule, four homes)
@@ -69,20 +58,6 @@ AQ-2)", "(RT-3)") and `deny.rs` ("that shape let the distinction
 live in a string comparison"). Restate each as the present-tense
 reason and drop the round-local IDs. These predate issue #5,
 whose review found them.
-
-### fr-2026-10-19-gates-print-inside-validate
-
-**Category:** Output (behaviour; outside stage 3's lane)
-
-Two `validate` steps print their own output between the `[N/M]`
-lines: Deny's `step()` calls `deny()`, which prints `Deny OK
-(licenses, bans, sources)`, and Duplication streams
-`code-dupes`'s statistics. Every other step returns its detail
-silently. Both predate issue #5, whose review found the Deny case.
-Have Deny's step call a non-printing check, as the other gates
-do. `code-dupes` streams because it misdetects sources when its
-output is piped (see `dupes_check`), so that one needs its own
-decision.
 
 ### fr-2026-10-19-issue-grants-for-review
 

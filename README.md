@@ -59,7 +59,7 @@ integration and quality gates.
   - `cargo xtask coverage` (90% workspace floor, 85%
     per module; structured failure reporting via
     `CoverageFailure` enum)
-  - `cargo xtask dupes` (6% threshold)
+  - `cargo xtask dupes` (6% workspace-wide, 12% per crate)
   - `cargo xtask deploy` / `deploy-setup` -- one-shot
     deployment to a remote Linux + systemd host with
     sandboxed service unit, frontend bundling, and
@@ -72,7 +72,8 @@ integration and quality gates.
   - Clippy pedantic + perf
   - 90% line coverage minimum
   - Per-module 85% coverage floor
-  - Code duplication <= 6% (production code only)
+  - Code duplication <= 6% workspace-wide, <= 12% per crate
+    (production code only)
 - **Build profile defaults**:
   - `[profile.release]` tuned for iteration speed
     (`incremental = true`, `codegen-units = 256`).
