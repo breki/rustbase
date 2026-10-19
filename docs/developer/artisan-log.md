@@ -16,20 +16,6 @@ Artisan review is warranted before continuing feature work.
 
 ---
 
-### aq-2026-10-19-shared-cargo-diagnostic-filter
-
-**Category:** API Design (duplication)
-
-`is_diagnostic_line` in `crates/rustbase-xtask/src/doc.rs` is a
-near-copy of the one in `xtask/src/clippy_cmd.rs` (they differ only
-in `could not document` vs `could not compile`), and so is the "print the
-first N, then `... and K more`" loop. The copies already drifted
-once (the doc filter lacked `") generated "`, fixed in the same
-review). The two now sit in different crates: put one filter taking
-the per-tool phrase in `rustbase_xtask::text`, used by both, once
-clippy moves to the library (follow-up 4 in `docs/xtask-library.md`),
-and one truncated-print helper beside it.
-
 ### aq-2026-10-19-todo-done-unchecked-arguments
 
 **Category:** API Design / Type Safety
@@ -137,9 +123,9 @@ UTF-8-decode + status-check pattern that
 `dep_age::gate::git_show` already implements, and the
 "run via `current_dir`, not `git -C`, to stay coverable by a
 blanket permission rule" rationale is restated at each site.
-`helpers.rs` has cargo runners (`run_cargo_capture`) but no
-git equivalent. Consider a shared
-`helpers::git_capture(root, args) -> Result<Output, String>`
+The library's `process.rs` has cargo runners but no git
+equivalent. Consider a shared
+`process::git(root, args) -> Result<Captured, String>`
 carrying the rationale once, with `working_tree_clean`,
 `head_release_tag`, and `git_show` built on top. Deferred: the
 return shapes differ (`Option` vs `Result`,

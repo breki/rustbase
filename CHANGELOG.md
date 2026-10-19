@@ -77,6 +77,10 @@ and this project adheres to
   as does a repo prefix that does not end in `/`.
   The library also exports its cargo-output and ISO-date helpers as
   `rustbase_xtask::text`.
+- The `rustbase-xtask` library now holds the `check`, `clippy`, `test` and `fmt`
+  gates (part of #7), each returning a `rustbase_xtask::Failure` (a summary plus
+  diagnostic lines). One cargo-diagnostic filter,
+  `rustbase_xtask::text::is_cargo_diagnostic`, serves clippy and doc.
 
 ### Changed
 
@@ -126,6 +130,11 @@ and this project adheres to
   instead of falling back to the built-in ignore list (which reported the
   excluded files as a coverage drop), and fails when a run measured no files at
   all.
+- A failing `cargo xtask check`, `clippy`, `test`, `fmt` or `doc` prints its
+  report once, as the error itself, instead of a FAILED block followed by a
+  second `xtask error:` line; in `validate` the diagnostics now follow the step
+  line. `cargo xtask check` no longer counts cargo's per-target `could not
+  compile` lines, so one error reads as one error rather than one per target.
 
 ### Fixed
 

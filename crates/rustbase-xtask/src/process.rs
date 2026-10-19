@@ -43,6 +43,23 @@ pub(crate) fn cargo_env(
     run(cmd, &bin)
 }
 
+/// Run `cargo <args>` in `root` with its output going straight to
+/// the terminal, for a command whose output is the point (`fmt`, a
+/// verbose test run).
+pub(crate) fn cargo_stream(root: &Path, args: &[&str]) -> Result<(), String> {
+    let bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let status = Command::new(&bin)
+        .current_dir(root)
+        .args(args)
+        .status()
+        .map_err(|e| format!("failed to run {bin}: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("{bin} {} failed ({status})", args.join(" ")))
+    }
+}
+
 /// Run `npm <args>` in `dir`.
 pub(crate) fn npm(dir: &Path, args: &[&str]) -> Result<Captured, String> {
     let bin = if cfg!(windows) { "npm.cmd" } else { "npm" };

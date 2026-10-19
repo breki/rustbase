@@ -30,6 +30,38 @@ where
     out
 }
 
+/// The last `n` non-empty lines of `stderr`.
+pub fn stderr_tail(stderr: &str, n: usize) -> Vec<&str> {
+    let mut lines: Vec<&str> =
+        stderr.lines().filter(|l| !l.trim().is_empty()).collect();
+    let start = lines.len().saturating_sub(n);
+    lines.drain(..start);
+    lines
+}
+
+/// True for a real cargo/rustc diagnostic line (`warning:`,
+/// `error[`, `error:`), false for the summary lines that share
+/// those prefixes: `could not compile` / `could not document` (one
+/// per failing target), `aborting due to`, `build failed` and the
+/// `... generated N warnings` counts. A summary repeats what the
+/// diagnostics already say and pushes them out of a short report.
+pub fn is_cargo_diagnostic(line: &str) -> bool {
+    // `") generated "` is anchored to its grammar (`crate (target)
+    // generated N warnings`), so a lint message merely containing
+    // the word "generated" is kept.
+    let is_summary = line.contains("could not compile")
+        || line.contains("could not document")
+        || line.contains("aborting due to")
+        || line.contains("build failed")
+        || line.contains(") generated ")
+        || line.contains(" warning emitted")
+        || line.contains(" warnings emitted");
+    !is_summary
+        && (line.starts_with("warning:")
+            || line.starts_with("error[")
+            || line.starts_with("error:"))
+}
+
 /// True when `s` is a well-formed ISO `YYYY-MM-DD` date:
 /// exactly ten chars, `dddd-dd-dd`, with month `01..=12` and
 /// day `01..=31`. A shape check, not a calendar: it accepts
@@ -52,6 +84,38 @@ pub fn is_iso_date(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stderr_tail_returns_the_last_n_non_empty_lines() {
+        assert_eq!(
+            stderr_tail("one\n\ntwo\nthree\n\nfour\n", 2),
+            ["three", "four"]
+        );
+        assert_eq!(stderr_tail("only-one", 5), ["only-one"]);
+    }
+
+    #[test]
+    fn cargo_diagnostics_are_kept_and_their_summaries_dropped() {
+        for kept in [
+            "warning: unresolved link to `Foo`",
+            "error[E0433]: failed to resolve",
+            "error: this lint is denied",
+            "warning: a message that mentions generated code",
+        ] {
+            assert!(is_cargo_diagnostic(kept), "{kept}");
+        }
+        for dropped in [
+            "error: could not compile `rustbase` (lib test) due to 1 error",
+            "error: could not document `rustbase`",
+            "error: aborting due to 2 previous errors",
+            "warning: build failed, waiting for other jobs to finish...",
+            "warning: `xtask` (bin \"xtask\") generated 1 warning",
+            "warning: 1 warning emitted",
+            "   --> src/lib.rs:1:1",
+        ] {
+            assert!(!is_cargo_diagnostic(dropped), "{dropped}");
+        }
+    }
 
     #[test]
     fn is_iso_date_accepts_valid_and_rejects_junk() {

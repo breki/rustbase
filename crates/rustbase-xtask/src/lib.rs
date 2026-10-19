@@ -9,15 +9,20 @@
 //! Each gate takes a [`Config`] carrying what differs between
 //! projects.
 
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 pub mod audit;
 pub mod canon;
+pub mod cargo_test;
+pub mod check;
+pub mod clippy;
 pub mod coverage;
 pub mod deny;
 pub mod dep_age;
 pub mod doc;
 pub mod dupes;
+pub mod fmt;
 mod process;
 pub mod text;
 
@@ -26,6 +31,50 @@ pub mod text;
 /// The name is fixed, not configurable. This library is tooling
 /// too, but it is measured: its logic is what the gates run.
 const TOOLING_CRATE: &str = "xtask";
+
+/// Why a gate failed: a one-line summary and the diagnostic lines
+/// behind it (empty when there are none, as when a tool could not
+/// be run at all).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Failure {
+    /// One line naming what failed, e.g. `3 compilation error(s)`.
+    pub summary: String,
+    /// The diagnostics, each with its source location when known.
+    pub items: Vec<String>,
+}
+
+impl Failure {
+    /// A failure with diagnostics.
+    pub fn new(summary: impl Into<String>, items: Vec<String>) -> Self {
+        Self {
+            summary: summary.into(),
+            items,
+        }
+    }
+
+    /// The summary, then at most `max` items indented beneath it and
+    /// a count of the rest: the whole report in one string, so the
+    /// caller prints it once.
+    pub fn report(&self, max: usize) -> String {
+        let mut out = self.summary.clone();
+        for item in self.items.iter().take(max) {
+            out.push_str("\n  ");
+            out.push_str(item);
+        }
+        if self.items.len() > max {
+            let _ = write!(out, "\n  ... and {} more", self.items.len() - max);
+        }
+        out
+    }
+}
+
+impl From<String> for Failure {
+    /// A failure with no diagnostics, such as a tool that could not
+    /// run.
+    fn from(summary: String) -> Self {
+        Self::new(summary, Vec::new())
+    }
+}
 
 /// What a gate does when it cannot finish (a tool missing, the
 /// network down), as opposed to finishing and finding a problem,
@@ -175,6 +224,14 @@ mod tests {
         assert_eq!(cfg.dep_age_allow_env, "MY_APP_DEP_AGE_ALLOW");
         assert_eq!(cfg.user_agent, "my-app-xtask-dep-age");
         assert_eq!(cfg.root, PathBuf::from("/w"));
+    }
+
+    #[test]
+    fn a_failure_reports_its_summary_and_the_first_items_once() {
+        let f = Failure::new("2 error(s)", vec!["a".into(), "b".into()]);
+        assert_eq!(f.report(5), "2 error(s)\n  a\n  b");
+        assert_eq!(f.report(1), "2 error(s)\n  a\n  ... and 1 more");
+        assert_eq!(Failure::from("no cargo".to_string()).report(5), "no cargo");
     }
 
     #[test]

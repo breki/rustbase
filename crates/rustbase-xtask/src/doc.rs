@@ -2,9 +2,9 @@
 //! private pass, so a broken doc link fails instead of building
 //! clean.
 
-use crate::Config;
 use crate::process::{self, Captured};
-use crate::text::pair_with_locations;
+use crate::text::{is_cargo_diagnostic, pair_with_locations};
+use crate::{Config, Failure};
 
 /// How many lines of a failure a short report shows (the `validate`
 /// step prints this many). When no diagnostic is located, the stderr
@@ -52,26 +52,17 @@ const PASSES: &[Pass] = &[
     },
 ];
 
-/// A failing rustdoc pass.
-#[derive(Debug)]
-pub struct DocFailure {
-    /// One-line description naming which pass failed.
-    pub summary: String,
-    /// The diagnostic lines, with their source locations.
-    pub items: Vec<String>,
-}
-
-/// Runs both passes in the workspace root, returning the first
-/// failure.
+/// Runs both passes in the workspace root, stopping at the first
+/// that fails.
 ///
 /// `RUSTDOCFLAGS=-D warnings` is what makes this a gate: rustdoc
 /// reports a broken link as a warning, which builds clean.
 ///
 /// # Errors
 ///
-/// Only when rustdoc could not be run at all. A pass that ran and
-/// found problems is `Ok(Some(..))`.
-pub fn check(cfg: &Config) -> Result<Option<DocFailure>, String> {
+/// The failing pass, named, with its diagnostics; or why rustdoc
+/// could not run.
+pub fn check(cfg: &Config) -> Result<(), Failure> {
     run_passes(|args| {
         process::cargo_env(&cfg.root, args, &[("RUSTDOCFLAGS", "-D warnings")])
     })
@@ -80,22 +71,21 @@ pub fn check(cfg: &Config) -> Result<Option<DocFailure>, String> {
 /// [`check`] with the cargo spawn injected.
 fn run_passes(
     mut cargo: impl FnMut(&[&str]) -> Result<Captured, String>,
-) -> Result<Option<DocFailure>, String> {
+) -> Result<(), Failure> {
     for pass in PASSES {
         let mut args = vec!["doc", "--no-deps", "--workspace"];
         if pass.private {
             args.push("--document-private-items");
         }
         let out = cargo(&args)?;
-        if out.ok {
-            continue;
+        if !out.ok {
+            return Err(Failure::new(
+                format!("cargo doc failed ({})", pass.what),
+                failure_items(&out.stderr),
+            ));
         }
-        return Ok(Some(DocFailure {
-            summary: format!("cargo doc failed ({})", pass.what),
-            items: failure_items(&out.stderr),
-        }));
     }
-    Ok(None)
+    Ok(())
 }
 
 /// The lines worth showing for a failed pass: the diagnostics,
@@ -104,7 +94,7 @@ fn run_passes(
 /// are dropped first: on a cold build they would fill the tail and
 /// push the cause out.
 fn failure_items(stderr: &str) -> Vec<String> {
-    let items = pair_with_locations(stderr, is_diagnostic_line);
+    let items = pair_with_locations(stderr, is_cargo_diagnostic);
     if !items.iter().any(|l| l.trim_start().starts_with("-->")) {
         let lines: Vec<&str> = stderr
             .lines()
@@ -117,25 +107,6 @@ fn failure_items(stderr: &str) -> Vec<String> {
         return lines[from..].iter().map(|l| (*l).to_owned()).collect();
     }
     items.into_iter().map(String::from).collect()
-}
-
-/// True for a real rustdoc diagnostic, false for the cargo
-/// summary lines that share the same prefix.
-fn is_diagnostic_line(line: &str) -> bool {
-    // `could not document` is the consequence, once per crate,
-    // and would bury the cause.
-    let is_summary = line.contains("could not document")
-        || line.contains("aborting due to")
-        || line.contains("build failed")
-        || line.contains(") generated ")
-        || line.contains(" warning emitted")
-        || line.contains(" warnings emitted");
-    if is_summary {
-        return false;
-    }
-    line.starts_with("warning:")
-        || line.starts_with("error[")
-        || line.starts_with("error:")
 }
 
 #[cfg(test)]
@@ -158,7 +129,7 @@ error: public documentation for `config` links to private item
   --> crates/rustbase/src/config.rs:12:7
 error: could not document `rustbase`
 warning: build failed, waiting for other jobs to finish...";
-        let lines = pair_with_locations(stderr, is_diagnostic_line);
+        let lines = pair_with_locations(stderr, is_cargo_diagnostic);
         assert_eq!(lines.len(), 2, "{lines:?}");
         assert!(lines[0].contains("links to private item"));
         assert!(lines[1].contains("config.rs:12:7"));
@@ -166,12 +137,12 @@ warning: build failed, waiting for other jobs to finish...";
 
     #[test]
     fn drops_the_cargo_summary_but_keeps_a_real_warning() {
-        assert!(!is_diagnostic_line("error: could not document `rustbase`"));
-        assert!(!is_diagnostic_line(
+        assert!(!is_cargo_diagnostic("error: could not document `rustbase`"));
+        assert!(!is_cargo_diagnostic(
             "warning: build failed, waiting for other jobs"
         ));
-        assert!(is_diagnostic_line("warning: unresolved link to `Foo`"));
-        assert!(is_diagnostic_line("error[E0433]: failed to resolve"));
+        assert!(is_cargo_diagnostic("warning: unresolved link to `Foo`"));
+        assert!(is_cargo_diagnostic("error[E0433]: failed to resolve"));
     }
 
     #[test]
@@ -193,7 +164,7 @@ warning: build failed, waiting for other jobs to finish...";
 
     #[test]
     fn drops_the_rustdoc_generated_warnings_summary() {
-        assert!(!is_diagnostic_line(
+        assert!(!is_cargo_diagnostic(
             "warning: `xtask` (bin \"xtask\" doc) generated 1 warning"
         ));
     }
@@ -227,7 +198,7 @@ warning: build failed, waiting for other jobs to finish...";
             seen.push(args.join(" "));
             Ok(captured(true, ""))
         });
-        assert!(r.unwrap().is_none());
+        assert_eq!(r, Ok(()));
         assert_eq!(
             seen,
             [
@@ -247,8 +218,7 @@ warning: build failed, waiting for other jobs to finish...";
                 "error: unresolved link to `Foo`\n  --> src/lib.rs:3:5\n",
             ))
         })
-        .unwrap()
-        .expect("the private pass failed");
+        .unwrap_err();
         assert_eq!(f.summary, "cargo doc failed (internal cross-references)");
         assert_eq!(f.items.len(), 2, "{:?}", f.items);
     }
