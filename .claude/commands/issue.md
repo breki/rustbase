@@ -49,15 +49,15 @@ work the remainder.
 ### 2. Settle the approach before writing code
 
 If the issue names more than one viable route, or you can see one
-it does not name, use `AskUserQuestion`. `CLAUDE.md` under
-**Collaboration** asks for the concrete artifacts first and a
-recommendation among the options, not an even menu. Read enough
+it does not name, use `AskUserQuestion`. Show the concrete
+artifacts first (`CLAUDE.md` under **Collaboration**), and lead
+with your recommendation rather than an even menu. Read enough
 of the code to make the question concrete.
 
 Record the decision. A planning doc under `docs/issues/` holds it
-while the work is in flight, but that doc is removed when the
-item is done (step 12), so a decision meant to last goes in the
-PR body or a reference doc as well.
+while the work is in flight, but that doc is removed in the
+PR's last commit (step 12), so a decision meant to last goes in
+the PR body or a reference doc as well.
 
 ### 3. Branch
 
@@ -87,9 +87,10 @@ Read it rather than deciding from memory which half you are in.
 
 **A regression test must be proven to fail.** Write it, break
 the guard it covers and confirm `cargo xtask test` goes red, then
-restore and run it green with `--verbose`. A filter that matches
-no test still prints `Test OK`, so only the verbose list shows
-the test ran.
+restore and run it green with `--verbose`. A filter matching no
+test at all already fails; `--verbose` adds the list of tests
+that ran, which shows whether the new one is among them when the
+filter also matches others.
 
 **Writing a guard? List its siblings.** A guard protects a
 *primitive* -- the file a value is written into, the shell a
@@ -129,8 +130,10 @@ replaces this.
 
 ### 8. Commit
 
-Commit through `/commit`. State in the commit body what was
-verified and what was not.
+Commit through `/commit`, which does not push. State in the
+commit body what was verified and what was not. Then push the
+branch: `git push -u origin <type>/<short-name>` the first time
+(step 3), plain `git push` after.
 
 ### 9. Open the PR at the first push
 
@@ -164,7 +167,8 @@ and the stopping rule.
 diff against `HEAD` holds nothing:
 
 ```bash
-git merge-base main HEAD     # pass the result to /review
+git fetch
+git merge-base origin/main HEAD   # pass the result to /review
 ```
 
 **Its fixes become their own commits.** `/review` edits the tree
@@ -184,27 +188,30 @@ step is not automatically yours: compare against `main`, and when
 it already failed there, say so rather than fixing it silently
 or letting it read as a regression.
 
-### 12. Report back on the issue
+### 12. Close out on the branch, then report back
 
-Comment on the issue with the outcome: what was fixed, the
+The bookkeeping lands **on the branch, as the PR's last
+commit**, so nothing is left to do on `main` after the merge:
+
+1. If a planning doc exists, promote anything durable from it --
+   a design or security decision, a non-obvious constraint --
+   into a reference doc under `docs/`, a code comment or the PR
+   body, then remove it with `git rm docs/issues/<slug>.md`.
+2. Complete the item's `docs/todo.md` entry, if it has one:
+
+   ```
+   cargo -q xtask todo done <slug> --date <today's date>
+   ```
+
+3. Commit through `/commit` and push.
+
+Then comment on the issue with the outcome: what was fixed, the
 commit, the verification, and what remains unverified.
 
-**The operator merges the PR, so this command ends here.** Two
-things wait on that merge -- closing the issue and completing its
-`docs/todo.md` entry -- so say in your report that both are
-outstanding. The one exception is an issue step 1 established
-was already satisfied: close that one there and then.
-
-Completing the entry, after the merge:
-
-```
-cargo -q xtask todo done <slug> --date <today's date>
-```
-
-If a planning doc existed, promote anything durable from it
-first -- a design or security decision, a non-obvious constraint
--- into a reference doc under `docs/`, a code comment or the PR
-body, then remove it with `git rm docs/issues/<slug>.md`.
+**The operator merges the PR, so this command ends here.** The
+`Closes #<n>` line closes the issue on merge. The one exception
+is an issue step 1 established was already satisfied: close that
+one there and then.
 
 ## Rules
 

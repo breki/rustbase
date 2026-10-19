@@ -21,9 +21,11 @@ against, and it defaults to `HEAD`. With the default the
 reviewers read what is not committed yet.
 
 Pass a base when the work is already committed -- for a pushed
-branch, `$(git merge-base main HEAD)`, so the diff holds every
-commit on the branch plus anything still uncommitted, rather
-than the empty diff `HEAD` gives once the work is committed.
+branch, `$(git merge-base origin/main HEAD)` after a `git fetch`
+(local `main` can lag, e.g. when another worktree holds it), so
+the diff holds every commit on the branch plus anything still
+uncommitted, rather than the empty diff `HEAD` gives once the
+work is committed.
 
 Call the value `BASE` below.
 
@@ -85,19 +87,19 @@ while they read it.
 ```bash
 mkdir -p target
 BASE=HEAD                            # uncommitted work
-# BASE=$(git merge-base main HEAD)   # a branch already pushed
+# BASE=$(git merge-base origin/main HEAD)  # pushed branch; fetch first
 git ls-files --others --exclude-standard  # untracked: check first
 git add -N <the untracked paths of this work>
 EXCL=':(exclude)docs/developer/*-log.md'
-OUT=target/review-1
+OUT=target/review-1-1                 # review-<stage>-<round>
 git diff "$BASE" -- . "$EXCL" > "$OUT.diff"
 git diff --name-only --diff-filter=d "$BASE" -- . "$EXCL" \
   > "$OUT.files"
 ```
 
-That pair is stage 1's snapshot. Every later one is named
-`target/review-<stage>-<round>.diff` and `.files`, all with the
-same `BASE`.
+That pair is stage 1's snapshot. Every later one is the same
+block with `OUT` advanced to `target/review-<stage>-<round>`,
+all with the same `BASE`, so no snapshot overwrites another.
 
 - `git add -N` records a path in the index without its
   contents, which is what makes `git diff` report an untracked
@@ -152,7 +154,7 @@ hides exactly what the sequence exists to catch.
 
 ### Each stage writes its findings
 
-Write them to `target/review-<stage>-<n>.findings` before the
+Write them to `target/review-<stage>-<round>.findings` before the
 next spawn, one line per finding: its ID, the reviewer, the
 category, the `file:line`, one sentence of what it said, and its
 disposition. Record the finding, not just its label: the next
@@ -215,8 +217,9 @@ eventual commit message. Only a deferred one is logged, in
 `fresh-reader-log.md` by reviewer. All three are newest-first,
 new entries right after the `---`. The ID is
 `<rt|aq|fr>-<YYYY-MM-DD>-<kebab-slug>`, so there is no counter
-to keep and the ID greps. Each entry is that heading, a
-`**Category:**` line, and a short description.
+to keep and the ID greps. Each entry is a `### <id>` heading
+(the level `canon-check` reads), a `**Category:**` line, and a
+short description.
 
 **Closing one is the other half of the rule:**
 
@@ -316,8 +319,9 @@ makes the reader work backwards, a comment narrating history
 instead of giving the reason.
 
 **Its fixes touch prose that only a person reads**: code
-comments, doc comments, files under `docs/`, `README.md`.
-Three kinds of prose are outside that, because the program
+comments, doc comments, files under `docs/`, `README.md`, and
+the prose of `CLAUDE.md` and `.claude/**`. Three kinds of prose
+are outside that, because the program
 reads them too:
 
 - **clap `///` help** -- it is what `--help` prints.
@@ -329,6 +333,9 @@ reads them too:
 
 A finding against one of those is real and gets **logged, not
 fixed**, per **Log what you defer**.
+
+**Stage 3 runs once.** Its fixes are prose-only, so by the
+stage-2 rule they earn no further round.
 
 ## When it stops converging
 

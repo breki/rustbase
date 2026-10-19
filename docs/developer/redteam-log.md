@@ -7,13 +7,53 @@ their resolution lives in the commit that fixed them.
 Newest first; add new entries right after the `---`. Use a
 self-describing ID `rt-<YYYY-MM-DD>-<kebab-slug>` (no central
 counter); a later commit acting on an item cites the ID
-inline. Each entry: the ID heading, a `**Category:**` line,
+inline. Each entry: a `### <id>` heading, a `**Category:**` line,
 and a short description.
 
 **Threshold:** when 10+ items are open here, a full-codebase
 red team review is warranted before continuing feature work.
 
 ---
+
+### rt-2026-10-19-release-deploy-existing-tag
+
+**Category:** Correctness (procedure)
+
+`/release` says a no-change ship can run `cargo xtask deploy`
+"on the existing tag", but the deploy guard requires `HEAD` to
+be on the tag, and `HEAD` has normally moved past it. Say to
+check out the tag first, or drop the shortcut. Raised as a
+possible bug by fresh-reader during /review; not verified.
+
+### rt-2026-10-19-canon-width-skips-indented-prose
+
+**Category:** Correctness (lenient gate)
+
+`over_wide` in `xtask/src/canon.rs` exempts every line that
+starts with four spaces, meant for indented code. Indented
+list-continuation prose (most numbered steps in
+`.claude/commands/`) starts the same way, so its width is never
+checked. Distinguish a code block (blank line before, not inside
+a list item) from a continuation, or check indented lines too.
+
+### rt-2026-10-19-canon-git-check-gaps
+
+**Category:** Correctness (lenient gate)
+
+`ungranted_git` in `xtask/src/canon.rs` reports nothing (a false
+green) for: a `git` line inside a fenced code block; an inline
+span that wraps across lines (and a wrapped closing backtick
+flips the pairing for the rest of its line); `git` that is not
+the first word of a segment (`$(git ...)`, `GIT_EDITOR=true
+git ...`, after `env`/`xargs`); and a wildcard-less grant such as
+`Bash(git status)`, which the harness matches exactly but the
+check reads as a prefix. All latent -- none hides an ungranted
+command in today's canon. Found in /review round 3 (the ceiling)
+after two redesign rounds on this check, so not fixed in that
+run. Fix: scan fences as commands, pair backticks over
+whitespace-collapsed paragraph text mapped back via
+`Block::line_at`, split on `$(`/`(`/`)` and strip `NAME=value`
+words, and record whether a grant had a wildcard.
 
 ### rt-2026-07-16-deploy-guard-toctou
 

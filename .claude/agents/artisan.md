@@ -37,7 +37,8 @@ past the code it tests.
 
 **Canon and documentation** (`.md`, `CLAUDE.md`, `.claude/**`):
 this project keeps its rules in prose, so a defect there is real.
-`/review` asks for this category only when it says so. Look for
+`/review` never asks for it (its stages give documentation to
+red-team and fresh-reader); it is for a direct spawn. Look for
 a cross-reference or step number left stale by a move; one rule
 stated in prose in three or more places; a count that disagrees
 with the list it introduces; and a claim about the code that the

@@ -288,8 +288,7 @@ pub fn run_cargo_stream(args: &[&str]) -> Result<(), String> {
 
 /// Keep every line for which `keep` returns true, plus the
 /// `-->` source-location line that immediately follows a
-/// kept line. Shared by the clippy and test output
-/// extractors so a diagnostic is surfaced together with
+/// kept line, so a diagnostic is surfaced together with
 /// where it fired; without the paired location a failure
 /// names the lint/error but not the `file:line`, forcing a
 /// raw re-run. Only the location line *immediately* after a
@@ -313,6 +312,15 @@ where
         }
     }
     out
+}
+
+/// Return the last `n` non-empty lines of `stderr`.
+pub fn stderr_tail(stderr: &str, n: usize) -> Vec<&str> {
+    let mut lines: Vec<&str> =
+        stderr.lines().filter(|l| !l.trim().is_empty()).collect();
+    let start = lines.len().saturating_sub(n);
+    lines.drain(..start);
+    lines
 }
 
 /// True when `s` is a well-formed ISO `YYYY-MM-DD` date:
@@ -484,6 +492,20 @@ pub fn wrap_markdown(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stderr_tail_returns_last_n_non_empty() {
+        let stderr = "one\n\ntwo\nthree\n\nfour\n";
+        let tail = stderr_tail(stderr, 2);
+        assert_eq!(tail, vec!["three", "four"]);
+    }
+
+    #[test]
+    fn stderr_tail_handles_short_input() {
+        let stderr = "only-one";
+        let tail = stderr_tail(stderr, 5);
+        assert_eq!(tail, vec!["only-one"]);
+    }
 
     #[test]
     fn is_iso_date_accepts_valid_and_rejects_junk() {

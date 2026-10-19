@@ -11,7 +11,7 @@ critique the diff -- the retrospective critiques the
 *way* the diff was produced.
 
 Invoke this skill either:
-- **Automatically** at the end of `/commit` step 12
+- **Automatically** at the end of `/commit` step 8
   (which delegates to this skill).
 - **Manually** at any time -- mid-session, after a
   failed attempt, before a hand-off -- when you want
@@ -74,8 +74,8 @@ on.
      applying a template change).
    - Undocumented decision -- chose between two
      approaches without recording why.
-   - Did not capture a finding the reviewers raised
-     into the long-lived RT/AQ logs.
+   - Did not log a *deferred* reviewer finding into its
+     backlog (RT/AQ/FR); fixed findings get no entry.
 
 3. **Speed** -- wall-time delays caused by ordering.
    Examples:
@@ -171,9 +171,9 @@ Quality:
 Speed:
   2-serial-gates [propose]
     Short: fix iteration ran gates serially.
-    Long: the follow-up fixes ran
-      validate/fmt/validate one at a time (turns 8-11), roughly doubling the
-      wall time of that stretch.
+    Long: the follow-up fixes ran validate, fmt and
+      validate one at a time (turns 8-11), roughly
+      doubling the wall time of that stretch.
     Fix: add a clause to `CLAUDE.md ## Build Commands`
       to fold fmt into the validate wrapper.
 

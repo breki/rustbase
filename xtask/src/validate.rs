@@ -275,10 +275,20 @@ fn run_deny() -> Result<String, String> {
     Ok(String::new())
 }
 
-/// Doc step -- both rustdoc passes; see [`doc_cmd`].
+/// Doc step -- both rustdoc passes; see [`doc_cmd`]. Returns empty
+/// detail on success.
 fn run_doc() -> Result<String, String> {
-    doc_cmd::doc()?;
-    Ok(String::new())
+    match doc_cmd::doc_check()? {
+        None => Ok(String::new()),
+        Some(failure) => {
+            // Keep this at least `doc_cmd`'s STDERR_TAIL_LINES, or
+            // the fallback's last line -- the cause -- is cut off.
+            for line in failure.items.iter().take(5) {
+                eprintln!("  {line}");
+            }
+            Err(failure.summary)
+        }
+    }
 }
 
 /// Dep-age step -- cooldown-checks only dependencies added or

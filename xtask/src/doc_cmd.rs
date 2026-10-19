@@ -1,7 +1,29 @@
+//! `cargo xtask doc`: rustdoc with `-D warnings`, in a public and
+//! a private pass, so a broken doc link fails instead of building
+//! clean. `validate` runs it as its Doc step.
+
 use crate::helpers::{pair_with_locations, run_cargo_capture_env};
 
 /// Maximum number of diagnostic lines to display.
 const MAX_DIAGNOSTIC_LINES: usize = 10;
+
+/// Lines of stderr shown when a pass fails with no located
+/// diagnostic. No larger than what `validate` prints (5), so the
+/// cause -- the last line -- is never cut off.
+const STDERR_TAIL_LINES: usize = 5;
+
+/// Cargo's progress verbs, which say nothing about a failure.
+const PROGRESS: &[&str] = &[
+    "Blocking",
+    "Checking",
+    "Compiling",
+    "Documenting",
+    "Downloaded",
+    "Downloading",
+    "Finished",
+    "Locking",
+    "Updating",
+];
 
 /// One rustdoc pass, and what it is able to see.
 ///
@@ -58,6 +80,7 @@ pub fn doc() -> Result<(), String> {
 }
 
 /// A failing rustdoc pass.
+#[derive(Debug)]
 pub struct DocFailure {
     /// One-line description naming which pass failed.
     pub summary: String,
@@ -87,14 +110,32 @@ pub fn doc_check() -> Result<Option<DocFailure>, String> {
         }
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Ok(Some(DocFailure {
-            summary: format!("broken documentation in {}", pass.what),
-            items: pair_with_locations(&stderr, is_diagnostic_line)
-                .into_iter()
-                .map(String::from)
-                .collect(),
+            summary: format!("cargo doc failed ({})", pass.what),
+            items: failure_items(&stderr),
         }));
     }
     Ok(None)
+}
+
+/// The lines worth showing for a failed pass: the diagnostics,
+/// or, when none carries a `-->` location (a bad manifest, a
+/// rustdoc crash), the last lines of stderr with cargo's progress
+/// lines dropped -- which is why `helpers::stderr_tail` is not
+/// used here.
+fn failure_items(stderr: &str) -> Vec<String> {
+    let items = pair_with_locations(stderr, is_diagnostic_line);
+    if !items.iter().any(|l| l.trim_start().starts_with("-->")) {
+        let lines: Vec<&str> = stderr
+            .lines()
+            .filter(|l| {
+                let word = l.split_whitespace().next().unwrap_or_default();
+                !word.is_empty() && !PROGRESS.contains(&word)
+            })
+            .collect();
+        let from = lines.len().saturating_sub(STDERR_TAIL_LINES);
+        return lines[from..].iter().map(|l| (*l).to_owned()).collect();
+    }
+    items.into_iter().map(String::from).collect()
 }
 
 /// True for a real rustdoc diagnostic, false for the cargo
@@ -105,6 +146,7 @@ fn is_diagnostic_line(line: &str) -> bool {
     let is_summary = line.contains("could not document")
         || line.contains("aborting due to")
         || line.contains("build failed")
+        || line.contains(") generated ")
         || line.contains(" warning emitted")
         || line.contains(" warnings emitted");
     if is_summary {
@@ -118,6 +160,7 @@ fn is_diagnostic_line(line: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fmt::Write as _;
 
     #[test]
     fn both_passes_run_and_differ_only_in_privacy() {
@@ -148,5 +191,42 @@ warning: build failed, waiting for other jobs to finish...";
         ));
         assert!(is_diagnostic_line("warning: unresolved link to `Foo`"));
         assert!(is_diagnostic_line("error[E0433]: failed to resolve"));
+    }
+
+    #[test]
+    fn the_fallback_shows_the_cause_not_the_progress_lines() {
+        // Cold cache: progress lines first, the cause last. The
+        // printers show the head of the list (validate: 5 lines),
+        // so the cause must be inside it.
+        let mut stderr = String::new();
+        for i in 0..17 {
+            writeln!(stderr, "    Checking dep{i} v1.0.0").unwrap();
+        }
+        stderr.push_str(" Documenting xtask v0.1.0\n");
+        stderr.push_str("error: couldn't generate documentation: No space\n");
+        let items = failure_items(&stderr);
+        assert!(items.len() <= 5, "{items:?}");
+        assert!(items.iter().any(|l| l.contains("No space")), "{items:?}");
+        assert!(!items.iter().any(|l| l.contains("Checking")), "{items:?}");
+    }
+
+    #[test]
+    fn drops_the_rustdoc_generated_warnings_summary() {
+        assert!(!is_diagnostic_line(
+            "warning: `xtask` (bin \"xtask\" doc) generated 1 warning"
+        ));
+    }
+
+    #[test]
+    fn a_failure_with_no_diagnostic_falls_back_to_the_stderr_tail() {
+        // A bad manifest or a rustdoc crash prints no diagnostic
+        // line; the operator still needs to see why it failed.
+        let stderr = "error: failed to parse manifest at `Cargo.toml`\n\
+                      Caused by:\n  invalid table header\n";
+        let items = failure_items(stderr);
+        assert!(
+            items.iter().any(|l| l.contains("invalid table header")),
+            "{items:?}"
+        );
     }
 }

@@ -27,7 +27,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::helpers::workspace_root;
+use crate::helpers::{is_iso_date, workspace_root};
 
 /// One thing canon claims that the tree does not support.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -52,16 +52,21 @@ struct Finding {
 /// Each entry needs a reason, because an unexplained entry is
 /// indistinguishable from a defect somebody silenced.
 const ABSENT_ON_PURPOSE: &[(&str, &str)] = &[
-    // CLAUDE.md's CLI-only prune steps name it for deletion, and
-    // those steps stay in CLAUDE.md after the prune.
-    ("scripts/e2e.sh", "deleted by the CLI-only prune"),
-    // Upstream template paths, quoted for
-    // `git show template/main:<path>` in /template-sync; a
-    // derived project renames its crate.
-    ("crates/rustbase/", "path in the upstream template"),
-    // /template-backfeed runs in the template repo only, and
-    // the ledger lives there with it.
-    ("docs/developer/backfeed-ledger.toml", "template repo only"),
+    (
+        "scripts/e2e.sh",
+        "the CLI-only prune deletes it, and CLAUDE.md's prune \
+         instructions still name it as the file to delete",
+    ),
+    (
+        "crates/rustbase/Cargo.toml",
+        "the version file, quoted throughout canon; a derived project \
+         renames its crate",
+    ),
+    (
+        "docs/developer/backfeed-ledger.toml",
+        "/template-backfeed and its ledger live in the template \
+         repo only",
+    ),
 ];
 
 /// Directory prefixes that make a backticked string a claim
@@ -326,11 +331,14 @@ fn missing_paths(
 /// `git` subcommands a command file tells the agent to run that
 /// its own `allowed-tools` does not grant.
 ///
-/// Two things are skipped, because neither is a command the
-/// skill runs itself. A command inside a double-quoted span is
-/// a line the skill prints for the operator. And a file that
-/// says in prose it has ``no `git <sub>` grant`` has declared
-/// the omission deliberate.
+/// Every backticked `git` command counts, including one inside a
+/// prose quotation: a file that only prints one for the operator
+/// says so with ``no `git <sub>` grant``, which exempts that
+/// subcommand file-wide. A chained span (`&&`, `||`, `;`, `|`)
+/// is checked per command. A best-effort line scan: fenced
+/// blocks, spans wrapping across lines and `git` after `$(` or a
+/// `VAR=` prefix are not seen, and a wildcard-less grant is read
+/// as a prefix, so it covers more than it names.
 fn ungranted_git(file: &str, content: &str) -> Vec<Finding> {
     let Some(grants) =
         content.lines().find(|l| l.starts_with("allowed-tools:"))
@@ -342,25 +350,36 @@ fn ungranted_git(file: &str, content: &str) -> Vec<Finding> {
     // collapsed. (The `allowed-tools:` grant read above is one
     // line.)
     let flat = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    let granted = GitGrants::parse(grants);
     let mut out = Vec::new();
     for (i, line) in content.lines().enumerate() {
         if line.starts_with("allowed-tools:") {
             continue;
         }
-        if line.contains('"') {
-            continue;
-        }
-        for span in line.split('`').skip(1).step_by(2) {
-            let Some(rest) = span.trim().strip_prefix("git ") else {
+        let commands = line
+            .split('`')
+            .skip(1)
+            .step_by(2)
+            .flat_map(|span| span.split([';', '|', '&']))
+            .map(str::trim);
+        for cmd in commands {
+            let Some(rest) = cmd.strip_prefix("git ") else {
                 continue;
             };
-            let sub = rest.split_whitespace().next().unwrap_or_default();
+            let mut words = rest.split_whitespace();
+            let sub = words.next().unwrap_or_default();
             if sub.is_empty() || sub.starts_with('<') {
                 continue;
             }
-            if grants.contains(&format!("Bash(git {sub}")) {
+            if granted.covers(cmd) {
                 continue;
             }
+            let shown = match words.next() {
+                Some(w) if !w.starts_with(['-', '<', '"']) => {
+                    format!("git {sub} {w}")
+                }
+                _ => format!("git {sub}"),
+            };
             // A file may state that it deliberately lacks a
             // grant, when the command is one it tells the
             // operator to run rather than running it. The
@@ -372,11 +391,65 @@ fn ungranted_git(file: &str, content: &str) -> Vec<Finding> {
                 kind: "grant",
                 file: file.to_string(),
                 line: i + 1,
-                message: format!("runs `git {sub}`, not in allowed-tools"),
+                message: format!("runs `{shown}`, not in allowed-tools"),
             });
         }
     }
     out
+}
+
+/// What an `allowed-tools:` line grants of `git`.
+struct GitGrants {
+    /// A whole-git grant: bare `Bash`, `Bash(*)`, `Bash(git:*)`
+    /// or `Bash(git *)`.
+    all: bool,
+    /// Each narrower grant's command text without its `:*` / `*`
+    /// wildcard: `Bash(git stash list:*)` gives `git stash list`.
+    prefixes: Vec<String>,
+}
+
+impl GitGrants {
+    fn parse(line: &str) -> Self {
+        let mut grants = Self {
+            all: false,
+            prefixes: Vec::new(),
+        };
+        let list = line.strip_prefix("allowed-tools:").unwrap_or(line);
+        for tool in list.split(',').map(str::trim) {
+            if tool == "Bash" {
+                grants.all = true;
+                continue;
+            }
+            let Some(inner) =
+                tool.strip_prefix("Bash(").and_then(|t| t.strip_suffix(')'))
+            else {
+                continue;
+            };
+            let cmd = inner
+                .strip_suffix(":*")
+                .or_else(|| inner.strip_suffix('*'))
+                .unwrap_or(inner)
+                .trim();
+            if cmd.is_empty() || cmd == "git" {
+                grants.all = true;
+            } else if cmd.starts_with("git ") {
+                grants.prefixes.push(cmd.to_string());
+            }
+        }
+        grants
+    }
+
+    /// True when `cmd` is a granted prefix, whole or followed by
+    /// a word boundary.
+    fn covers(&self, cmd: &str) -> bool {
+        self.all
+            || self.prefixes.iter().any(|g| {
+                cmd == g.as_str()
+                    || cmd
+                        .strip_prefix(g.as_str())
+                        .is_some_and(|tail| tail.starts_with(' '))
+            })
+    }
 }
 
 /// Prose lines wider than 80 columns.
@@ -460,15 +533,10 @@ fn is_backlog_id(word: &str) -> bool {
     else {
         return false;
     };
-    let parts: Vec<&str> = rest.splitn(4, '-').collect();
-    parts.len() == 4
-        && parts[0].len() == 4
-        && parts[1].len() == 2
-        && parts[2].len() == 2
-        && parts[..3]
-            .iter()
-            .all(|p| p.chars().all(|c| c.is_ascii_digit()))
-        && !parts[3].is_empty()
+    let (Some(date), Some(slug)) = (rest.get(..10), rest.get(10..)) else {
+        return false;
+    };
+    is_iso_date(date) && slug.len() > 1 && slug.starts_with('-')
 }
 
 /// The `### <id>` headings in a backlog file.
@@ -498,9 +566,9 @@ const CITATION_EXEMPT: &[&str] = &[
     "docs/issues/",
 ];
 
-/// True for a repo-relative path the citation scan reads.
-fn not_citation_exempt(rel: &str) -> bool {
-    !CITATION_EXEMPT
+/// True for a repo-relative path the citation scan skips.
+fn is_citation_exempt(rel: &str) -> bool {
+    CITATION_EXEMPT
         .iter()
         .any(|e| rel == *e || rel.starts_with(e))
 }
@@ -512,7 +580,7 @@ fn not_citation_exempt(rel: &str) -> bool {
 fn doc_citation_files(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     collect_docs_md(&root.join("docs"), root, &mut out);
-    out.retain(|f| not_citation_exempt(f));
+    out.retain(|f| !is_citation_exempt(f));
     out.sort();
     out
 }
@@ -688,11 +756,8 @@ mod tests {
     #[test]
     fn unresolved_xref_is_reported_and_resolved_one_is_not() {
         let t = targets("## Snapshot\n");
-        assert!(
-            xrefs("a.md", "see under **Snapshot** ok", &t).is_empty(),
-            "{:?}",
-            xrefs("a.md", "see under **Snapshot** ok", &t)
-        );
+        let got = xrefs("a.md", "see under **Snapshot** ok", &t);
+        assert!(got.is_empty(), "{got:?}");
         let bad = xrefs("a.md", "under **Nowhere** x", &t);
         assert_eq!(bad.len(), 1);
         assert_eq!(bad[0].kind, "xref");
@@ -703,11 +768,8 @@ mod tests {
     #[test]
     fn bold_after_other_prepositions_is_not_a_reference() {
         let t = BTreeSet::new();
-        assert!(
-            xrefs("a.md", "the only one asked what **worked**", &t).is_empty(),
-            "{:?}",
-            xrefs("a.md", "the only one asked what **worked**", &t)
-        );
+        let got = xrefs("a.md", "the only one asked what **worked**", &t);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     /// Every markdown file here wraps at 80 columns, so a
@@ -742,9 +804,8 @@ mod tests {
         assert!(!t.contains("Unclosed lead and a later"));
     }
 
-    /// A rule often opens a line partway through a paragraph.
-    /// Reading only the paragraph's first line loses it, which
-    /// is the defect the whole change exists to remove.
+    /// A rule often opens a line partway through a paragraph,
+    /// and is a target there too, not only on the first line.
     #[test]
     fn a_bold_lead_on_a_continuation_line_is_a_target() {
         let t = targets(
@@ -756,8 +817,7 @@ mod tests {
     /// An unclosed `under **` pairs with the *opening* `**`
     /// of the next pointer. Resuming after that pair would
     /// eat the second pointer's `under **` and stop checking
-    /// it, and joining the lines widened the loss from the
-    /// rest of a line to the rest of a paragraph.
+    /// every pointer after it in the paragraph.
     #[test]
     fn an_unclosed_bold_does_not_hide_the_next_pointer() {
         let bad = xrefs(
@@ -830,21 +890,25 @@ mod tests {
         assert_eq!((bad[0].line, bad[1].line), (1, 2));
     }
 
-    /// The citing side wraps too, and a pointer split over two
-    /// lines was checked by nothing at all.
+    /// The citing side wraps too: a pointer split over two lines
+    /// is still checked, and reported on the line it starts.
     #[test]
     fn a_wrapped_xref_is_checked_and_reported_on_its_own_line() {
         let t = targets("## Snapshot\n");
-        assert!(
-            xrefs("a.md", "as it says\nunder **Snapshot**, do it\n", &t)
-                .is_empty(),
-            "{:?}",
-            xrefs("a.md", "as it says\nunder **Snapshot**, do it\n", &t)
-        );
+        let got = xrefs("a.md", "as it says\nunder **Snapshot**, do it\n", &t);
+        assert!(got.is_empty(), "{got:?}");
         let bad = xrefs("a.md", "one\ntwo under **No\nsuch rule** x\n", &t);
         assert_eq!(bad.len(), 1);
         assert_eq!(bad[0].message, "**No such rule** names no heading");
         assert_eq!(bad[0].line, 2);
+    }
+
+    #[test]
+    fn only_the_quoted_crate_manifest_is_exempt() {
+        let none = |_: &str| false;
+        let f =
+            missing_paths("a.md", "see `crates/rustbase/src/gone.rs`", &none);
+        assert_eq!(f.len(), 1, "{f:?}");
     }
 
     #[test]
@@ -853,6 +917,13 @@ mod tests {
         let f = missing_paths("a.md", "see `xtask/src/gone.rs`", &none);
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].kind, "path");
+    }
+
+    #[test]
+    fn every_absent_path_states_its_reason() {
+        for (path, reason) in ABSENT_ON_PURPOSE {
+            assert!(!reason.trim().is_empty(), "{path} has no reason");
+        }
     }
 
     #[test]
@@ -875,11 +946,8 @@ mod tests {
     #[test]
     fn non_repo_backticks_are_not_paths() {
         let none = |_: &str| false;
-        assert!(
-            missing_paths("a.md", "`--dry-run` and `String`", &none).is_empty(),
-            "{:?}",
-            missing_paths("a.md", "`--dry-run` and `String`", &none)
-        );
+        let got = missing_paths("a.md", "`--dry-run` and `String`", &none);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -891,26 +959,62 @@ mod tests {
     }
 
     #[test]
-    fn granted_subcommand_and_narrower_grant_both_pass() {
-        let doc = "allowed-tools: Bash(git status:*), Bash(git config --get:*)\n\n`git status` and `git config --get user.email`\n";
-        assert!(
-            ungranted_git("c.md", doc).is_empty(),
-            "{:?}",
-            ungranted_git("c.md", doc)
-        );
+    fn a_quote_inside_the_command_does_not_hide_it() {
+        let doc = "allowed-tools: Bash(git status:*)\n\n\
+                   Run `git commit -m \"wip\"` now.\n";
+        let f = ungranted_git("c.md", doc);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("git commit"), "{f:?}");
     }
 
-    /// A quoted line is text the skill prints for the operator,
-    /// not a command it runs.
     #[test]
-    fn git_inside_a_quoted_span_is_not_the_skills_own_command() {
-        let doc =
-            "allowed-tools: Bash(git log:*)\n\n- \"Push with `git push`\"\n";
-        assert!(
-            ungranted_git("c.md", doc).is_empty(),
-            "{:?}",
-            ungranted_git("c.md", doc)
-        );
+    fn a_narrow_grant_does_not_cover_a_wider_form() {
+        let doc = "allowed-tools: Bash(git stash list:*)\n\n\
+                   `git stash list` then `git stash drop`\n";
+        let f = ungranted_git("c.md", doc);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("git stash drop"), "{f:?}");
+    }
+
+    #[test]
+    fn granted_subcommand_and_narrower_grant_both_pass() {
+        let doc = "allowed-tools: Bash(git status:*), Bash(git config --get:*)\n\n`git status` and `git config --get user.email`\n";
+        let got = ungranted_git("c.md", doc);
+        assert!(got.is_empty(), "{got:?}");
+    }
+
+    /// Quotes are not guessed at: a command the skill only prints
+    /// for the operator is declared, like any other ungranted one.
+    #[test]
+    fn a_printed_command_needs_the_declaration() {
+        let printed = "allowed-tools: Bash(git log:*)\n\n\
+                       - \"Push with `git push`\"\n";
+        let f = ungranted_git("c.md", printed);
+        assert_eq!(f.len(), 1, "{f:?}");
+        let declared =
+            format!("{printed}This skill has no `git push` grant.\n");
+        let got = ungranted_git("c.md", &declared);
+        assert!(got.is_empty(), "{got:?}");
+    }
+
+    #[test]
+    fn a_whole_git_grant_covers_every_git_command() {
+        for grant in ["Bash(git:*)", "Bash(git *)", "Bash", "Bash(*)"] {
+            let doc = format!(
+                "allowed-tools: Read, {grant}, Edit\n\n`git push -u origin x`\n"
+            );
+            let got = ungranted_git("c.md", &doc);
+            assert!(got.is_empty(), "{grant}: {got:?}");
+        }
+    }
+
+    #[test]
+    fn each_command_in_a_chain_is_checked() {
+        let doc = "allowed-tools: Bash(git status:*)\n\n\
+                   `git status && git push`\n";
+        let f = ungranted_git("c.md", doc);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("git push"), "{f:?}");
     }
 
     /// The declaration is prose and wraps, so the match has
@@ -918,31 +1022,22 @@ mod tests {
     #[test]
     fn a_declared_missing_grant_is_accepted_even_when_wrapped() {
         let doc = "allowed-tools: Bash(git log:*)\n\ntell them to run\n`git reset -- <path>` themselves; this skill has no\n`git reset` grant, deliberately.\n";
-        assert!(
-            ungranted_git("c.md", doc).is_empty(),
-            "{:?}",
-            ungranted_git("c.md", doc)
-        );
+        let got = ungranted_git("c.md", doc);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
     fn a_file_without_allowed_tools_is_not_checked_for_grants() {
-        assert!(
-            ungranted_git("x.md", "run `git push`\n").is_empty(),
-            "{:?}",
-            ungranted_git("x.md", "run `git push`\n")
-        );
+        let got = ungranted_git("x.md", "run `git push`\n");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
     fn over_wide_prose_is_reported() {
         let long = "x".repeat(81);
         assert_eq!(over_wide("a.md", &long).len(), 1);
-        assert!(
-            over_wide("a.md", &"y".repeat(80)).is_empty(),
-            "{:?}",
-            over_wide("a.md", &"y".repeat(80))
-        );
+        let got = over_wide("a.md", &"y".repeat(80));
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -967,11 +1062,8 @@ mod tests {
     fn unknown_backlog_id_is_reported_and_known_one_is_not() {
         let known: BTreeSet<String> =
             ["rt-2026-09-03-real".to_string()].into_iter().collect();
-        assert!(
-            unknown_ids("a.md", "see rt-2026-09-03-real", &known).is_empty(),
-            "{:?}",
-            unknown_ids("a.md", "see rt-2026-09-03-real", &known)
-        );
+        let got = unknown_ids("a.md", "see rt-2026-09-03-real", &known);
+        assert!(got.is_empty(), "{got:?}");
         let f = unknown_ids("a.md", "see rt-2026-09-03-ghost", &known);
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].kind, "id");
@@ -984,6 +1076,7 @@ mod tests {
         assert!(!is_backlog_id("rt-26-9-3-slug"));
         assert!(!is_backlog_id("xx-2026-09-03-slug"));
         assert!(!is_backlog_id("review"));
+        assert!(!is_backlog_id("rt-2026-13-45-bad-date"));
     }
 
     #[test]
@@ -998,11 +1091,11 @@ mod tests {
     fn record_and_working_files_are_exempt_from_the_citation_scan() {
         // Record files and issue docs cite IDs as data/provenance;
         // reference docs are read.
-        assert!(!not_citation_exempt("docs/developer/template-feedback.md"));
-        assert!(!not_citation_exempt("docs/developer/redteam-log.md"));
-        assert!(!not_citation_exempt("docs/issues/anything.md"));
-        assert!(not_citation_exempt("docs/architecture.md"));
-        assert!(not_citation_exempt("docs/developer/supply-chain.md"));
+        assert!(is_citation_exempt("docs/developer/template-feedback.md"));
+        assert!(is_citation_exempt("docs/developer/redteam-log.md"));
+        assert!(is_citation_exempt("docs/issues/anything.md"));
+        assert!(!is_citation_exempt("docs/architecture.md"));
+        assert!(!is_citation_exempt("docs/developer/supply-chain.md"));
     }
 
     #[test]

@@ -29,7 +29,8 @@ cargo xtask clean-cache       # drop stale target/{debug,release}/incremental/ c
 ```
 
 `cargo xtask validate` is the canonical quality gate;
-all PRs and the Stop hook run it. Coverage failures
+CI runs it, and the Stop hook runs a fast subset (fmt-check,
+clippy, doc, tests). Coverage failures
 include uncovered-line ranges per failing module, so
 diagnosis doesn't need a separate detail command.
 
@@ -48,7 +49,7 @@ Slash commands shipped under `.claude/commands/`:
 | `/ask` | Re-put the last decision raised in prose as a structured question |
 | `/rundown` | Grouped one-line rundown of the session, ending with what is open |
 | `/short` | Restate the reply above in under 40 words |
-| `/retrospect` | Workflow retrospective on the session (Efficiency / Quality / Speed). Invoked automatically by `/commit`; also callable manually mid-session |
+| `/retrospect` | Workflow retrospective on the session (Efficiency / Quality / Speed / Cleanup). Invoked automatically by `/commit`; also callable manually mid-session |
 | `/todo` | Capture a work item with a generated slug into `docs/todo.md` (capture only) |
 | `/implement` | Plan + execute a captured item. Phase 1 writes a working `docs/issues/<slug>.md` (removed at the end); Phase 2 codes with TDD; Phase 3 finalises and hands off to `/commit` |
 | `/template-sync` | Pull improvements from the upstream rustbase template into derived projects; cross-references open divergences from `template-feedback.md` so documented differences aren't re-proposed |

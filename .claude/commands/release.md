@@ -103,29 +103,30 @@ the deploy task refuses to ship a `HEAD` that is not on a
      platform you are on, but the template claims Windows,
      Linux and macOS as first-class. A release cut after a
      green local `validate` can still fail CI on the two
-     platforms nobody checked -- so lint every installed
-     target **other than the host** before the tag, not
-     after. `rustc -vV` prints the host on its `host:` line;
-     `rustup target list --installed` lists the targets. On
-     a Linux host that means e.g. `x86_64-pc-windows-msvc`;
-     on a Windows host, `x86_64-unknown-linux-gnu`. For each:
+     platforms nobody checked -- so lint the claimed
+     platforms **other than the host** before the tag, not
+     after. The claimed set is `x86_64-pc-windows-msvc`,
+     `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`;
+     do not iterate over every installed target (a `wasm32`
+     or embedded target installed for another project would
+     fail on this workspace). `rustc -vV` prints the host on
+     its `host:` line, and `rustup target list --installed`
+     shows which claimed targets are present. For each:
      ```bash
      cargo clippy --workspace --all-targets \
        --target <target> -- -D warnings
      ```
      Linting the host's own target repeats what `validate`
-     just did and checks no other platform. If no target
-     other than the host is installed, add one with
-     `rustup target add <target>` rather than skip the step.
+     just did and checks no other platform. If a claimed
+     non-host target is missing, add it with
+     `rustup target add <target>` rather than skip it.
      It must be **clippy**, not `cargo check --target`:
      `check --target` compiles and runs no lints, so it
      proves the build and says nothing about the lints
      (exactly how a cross-target check that had just run can
      still miss a lint failure). No linker for the other
      platform is needed -- only the cfg analysis and lints
-     run -- so this costs seconds on a warm target dir. Add
-     `aarch64-apple-darwin` too if you develop off macOS and
-     ship to it.
+     run -- so this costs seconds on a warm target dir.
    - **Standalone `cargo -q xtask audit`.** `validate`'s audit
      step degrades to a *warning* on a missing tool or an
      unreachable advisory DB, so "Validate OK" does **not**
@@ -140,9 +141,8 @@ the deploy task refuses to ship a `HEAD` that is not on a
    - Stage `crates/rustbase/Cargo.toml`, `Cargo.lock`,
      `CHANGELOG.md` (and nothing else).
    - Commit directly with `git commit` (do **not** route
-     through `/commit` -- the underlying changes were
-     reviewed at their own commit time, and a release
-     commit is a single-purpose bookkeeping commit; this
+     through `/commit` -- a release commit is a
+     single-purpose bookkeeping commit; this
      is the documented exception to the "all commits go
      through `/commit`" rule).
    - Use this message format (HEREDOC):
@@ -173,6 +173,9 @@ the deploy task refuses to ship a `HEAD` that is not on a
     - "Next: `cargo xtask deploy` will now accept this
       HEAD." (or "Push with `git push && git push
       --tags`" if appropriate)
+
+    This command has no `git push` grant, deliberately: the
+    operator pushes.
 
 ## Rules
 

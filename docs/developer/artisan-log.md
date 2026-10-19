@@ -8,13 +8,46 @@ them.
 Newest first; add new entries right after the `---`. Use a
 self-describing ID `aq-<YYYY-MM-DD>-<kebab-slug>` (no central
 counter); a later commit acting on an item cites the ID
-inline. Each entry: the ID heading, a `**Category:**` line,
+inline. Each entry: a `### <id>` heading, a `**Category:**` line,
 and a short description.
 
 **Threshold:** when 10+ items are open here, a full-codebase
 Artisan review is warranted before continuing feature work.
 
 ---
+
+### aq-2026-10-19-shared-cargo-diagnostic-filter
+
+**Category:** API Design (duplication)
+
+`is_diagnostic_line` in `xtask/src/doc_cmd.rs` is a near-copy of
+the one in `clippy_cmd.rs` (they differ only in `could not
+document` vs `could not compile`), and so is the "print the
+first N, then `... and K more`" loop. The copies already drifted
+once (the doc filter lacked `") generated "`, fixed in the same
+review). Extract one `helpers` filter taking the per-tool phrase,
+and one truncated-print helper.
+
+### aq-2026-10-19-todo-done-unchecked-arguments
+
+**Category:** API Design / Type Safety
+
+`move_to_done` in `xtask/src/todo.rs` takes two adjacent
+`Option<&str>` parameters (summary, doc) that swap silently, and
+the slug/date checks run only in `done_cmd`/`add`, so the pure
+helpers accept unchecked values. Pass a `DoneEntry` struct, or
+add `Slug` / `IsoDate` newtypes whose constructors are
+`check_slug` / `check_date`.
+
+### aq-2026-10-19-canon-check-kinds-as-enum
+
+**Category:** Type Safety
+
+`Finding.kind` in `xtask/src/canon.rs` is a free-form
+`&'static str` and `CHECK_COUNT = 5` is maintained by hand, so
+adding a sixth check leaves the summary saying "5 checks" and a
+tag typo compiles. Replace both with an `enum Check` carrying
+`Display`, `Ord` and `const ALL`.
 
 ### aq-2026-07-16-duplicated-name-arg-help-text
 

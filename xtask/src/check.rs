@@ -1,4 +1,4 @@
-use crate::helpers::run_cargo_capture;
+use crate::helpers::{run_cargo_capture, stderr_tail};
 
 /// Arguments for the `cargo check` invocation.
 ///
@@ -93,15 +93,6 @@ fn extract_error_lines(stderr: &str) -> Vec<&str> {
         .collect()
 }
 
-/// Return the last `n` non-empty lines of `stderr`.
-fn stderr_tail(stderr: &str, n: usize) -> Vec<&str> {
-    let mut lines: Vec<&str> =
-        stderr.lines().filter(|l| !l.trim().is_empty()).collect();
-    let start = lines.len().saturating_sub(n);
-    lines.drain(..start);
-    lines
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,20 +168,6 @@ error: aborting due to 1 previous error";
         let errors = extract_error_lines(stderr);
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("feature X required"));
-    }
-
-    #[test]
-    fn stderr_tail_returns_last_n_non_empty() {
-        let stderr = "one\n\ntwo\nthree\n\nfour\n";
-        let tail = stderr_tail(stderr, 2);
-        assert_eq!(tail, vec!["three", "four"]);
-    }
-
-    #[test]
-    fn stderr_tail_handles_short_input() {
-        let stderr = "only-one";
-        let tail = stderr_tail(stderr, 5);
-        assert_eq!(tail, vec!["only-one"]);
     }
 
     #[test]

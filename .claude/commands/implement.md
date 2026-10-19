@@ -5,8 +5,9 @@ allowed-tools: Bash(cargo xtask*), Bash(cargo -q xtask*), Bash(git status:*), Ba
 
 Plan and implement an item captured by `/todo`. The
 plan lives at `docs/issues/<slug>.md` while the work is
-in flight: it is committed and updated as the work
-progresses, and removed when the item is done (Phase 3).
+in flight: it is updated as the work progresses (and goes
+into any work-in-progress commit you make), and is removed
+when the item is done (Phase 3).
 
 ## Selecting the issue
 
@@ -115,9 +116,8 @@ particular:
 
 ## Phase 3 -- Finalise
 
-1. Run `cargo -q xtask validate`. All checks must pass
-   (fmt, clippy, tests, coverage >= 90%, duplication
-   <= 6%, frontend type-check).
+1. Run `cargo -q xtask validate`. Every gate listed
+   under **Definition of Done** in `CLAUDE.md` must pass.
 
 2. If the change affects developer workflow or skills,
    update the relevant files under `.claude/commands/`
@@ -165,11 +165,11 @@ particular:
 6. **Review, if you want the work hardened.** Run
    `/review` before committing; it is a separate
    process from `/commit` (see `CLAUDE.md` under
-   **Reviewing is its own process**). Run it *after*
-   step 5 when that verification is likely to reshape
-   the design, so the reviewers do not read code that is
-   about to change. Signals: inference / heuristic
-   logic, open clarifying questions, user data the agent
+   **Reviewing is its own process**). It comes after
+   step 5 on purpose: verification can reshape the
+   design, and reviewers should not read code that is
+   about to change. Reshaping is likely with inference /
+   heuristic logic, open clarifying questions, user data the agent
    has not seen, or an undo / inverse /
    optimistic-concurrency path -- a shape an adversarial
    review routinely overturns, because it looks right

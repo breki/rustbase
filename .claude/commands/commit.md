@@ -69,7 +69,7 @@ its own process** says why the two are separate.
      it. This bites hardest pre-1.0 (every fresh scaffold):
      check `git tag --list --sort=-v:refname` -- no tags
      means nothing has ever been released; otherwise the
-     first line is the latest tag (a bare `git tag` sorts
+     first line is the latest tag (a bare git tag listing sorts
      alphabetically, putting `v0.9.0` after `v0.11.0`) --
      and use `git log <latest-tag>..HEAD` or the `[Unreleased]`
      block, since behaviour introduced since the last

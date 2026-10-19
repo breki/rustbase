@@ -340,9 +340,11 @@ bitten too.
   not expose X" is the easiest kind of statement to invent,
   nothing fails when it is wrong, and it gets written into
   several files and believed. Measure, then state.
-- **Open every reply with a tagged summary.** Under forty
-  words, wrapped in `[short]` and `[/short]` tags on their
-  own lines, before the body. The reader reads the summary
+- **Open every reply to the operator with a tagged
+  summary.** Under forty words, wrapped in `[short]` and
+  `[/short]` tags on their own lines, before the body. (A
+  subagent's report is not such a reply; its agent file's
+  format wins.) The reader reads the summary
   first and the body only when the summary sends them
   there, and the fixed, tagged place lets a hook, notifier
   or log scraper lift it out without parsing the reply. If
@@ -375,11 +377,11 @@ bitten too.
 
 ### Code comments
 
-The rule above sets a floor on quantity; these say what goes
-in one. Budget: **two or three lines** unless the comment
-earns more, and two things earn more -- a list, when the
-thing described really is a list, and an absence, which has
-to be stated and then located.
+"All public items must have doc comments" sets a floor on
+quantity; these say what goes in one. Budget: **two or three
+lines** unless the comment earns more, and two things earn
+more -- a list, when the thing described really is a list,
+and an absence, which has to be stated and then located.
 
 - **One reason, not the chain.** Give the reason the code
   sits where it does and stop; the reader reaches the
@@ -395,10 +397,11 @@ to be stated and then located.
 - **Say what looks wrong and is not.** A deliberate oddity
   is the comment most worth keeping.
 
-Reasoning belongs in `docs/`, not in a comment, so there is
-one copy to keep true. The cost: a warning aimed at a future
-editor rather than a reader is not visible from the code, so
-it goes in an architecture-level doc under `docs/`.
+The one reason stays in the comment. Anything longer -- the
+argument behind it, the alternatives rejected -- belongs in
+`docs/`, so there is one copy to keep true. A warning aimed at a
+future editor rather than a reader goes there too, in an
+architecture-level doc.
 
 ## Test-Driven Development
 
@@ -458,6 +461,11 @@ Never use `git commit` directly. No "Co-Authored-By",
 no emoji. (The sole exception is `/release`, which makes
 one direct bookkeeping commit for the version bump.)
 
+**When git has no author identity, ask for it.** Do not
+offer one inferred from earlier commits as the default: past
+commits may use a different address than the operator wants
+on this machine.
+
 Committing and releasing are separate:
 
 - **`/commit`** is a save-point. It updates the
@@ -501,9 +509,9 @@ want work hardened before it becomes a commit, and skip it when
 you do not. A project that wants a review on every commit runs
 the two in sequence.
 
-The split is deliberate. Reviewing inside `/commit` turned
-every save-point into a multi-round session -- fixes needing
-their own commits, the reviewers firing again on each -- and a
+The split is deliberate. Reviewing inside a commit makes every
+save-point a multi-round session -- fixes need their own
+commits, and the reviewers fire again on each -- and a
 save-point should be cheap.
 
 **The reviewers get an immutable target.** Reviewing a live
@@ -511,13 +519,12 @@ working tree means reviewing something that changes while they
 read it, so `/review` writes a snapshot under `target/` and
 every reviewer reads that.
 
-**Stop when we would not fix anything the round found** --
-every finding deferred or declined. Reviewers always find
-something, so the stopping rule is agreement on what matters,
-not a clean sheet; a round's fixes make the next round's
-findings, so the count flattens well above zero. `/review`
-under **What earns another round** has the conditions and the
-three-round cap.
+**Another round only when the last one fixed a behaviour
+defect.** Reviewers always find something, so the stopping rule
+is agreement on what matters, not a clean sheet; a round's
+fixes make the next round's findings, so the count flattens
+well above zero. `/review` under **What earns another round**
+has the conditions and the three-round cap.
 
 ## Definition of Done
 
@@ -567,16 +574,30 @@ just when the code compiles:
     make it a no-op
 13. **Canon claims** (`cargo xtask canon-check`) -- reads
     `CLAUDE.md`, `.claude/commands/` and `.claude/agents/`
-    and fails on a backticked repo path that does not
-    exist, a bold cross-reference introduced by "under" that names no
-    heading or bold lead, a `git` subcommand a command file
-    runs without granting it in `allowed-tools`, prose past
-    80 columns, or a backlog ID (`rt-`/`aq-`/`fr-`) cited in
-    no backlog (this last check also reads `docs/`). Paths
-    that are correctly absent go in its `ABSENT_ON_PURPOSE`
-    table, each with a reason. `.claude/skills/` and the rest
-    of `docs/` are unchecked; a green gate says nothing about
-    them
+    and fails on any of five things:
+    - a backticked path under `crates/`, `xtask/`, `docs/`,
+      `scripts/` or `.claude/` that does not exist;
+    - a bold cross-reference introduced by "under" that names
+      no heading and no bold lead (a `**...**` run opening a
+      line);
+    - in a command file with an `allowed-tools` line, an
+      inline backticked `git` command no grant covers as a
+      word prefix -- checked inside a prose quotation too, and
+      per command of a chain. A file that only prints one for
+      the operator says it has "no `git <sub>` grant", which
+      exempts that subcommand file-wide;
+    - prose past 80 columns;
+    - a backlog ID (`rt-`/`aq-`/`fr-`) cited in no backlog
+      (this check also reads `docs/`).
+
+    Not seen: root files; path globs, `<placeholder>` paths
+    and paths ending in `/`; paths in its `ABSENT_ON_PURPOSE`
+    table (each with a reason); `git` in fenced blocks, in
+    spans that wrap across lines, or after `$(` or a `VAR=`
+    prefix (rt-2026-10-19-canon-git-check-gaps); width in
+    tables, fences, frontmatter and 4-space-indented lines;
+    `.claude/skills/` and the rest of `docs/`. A green gate
+    says nothing about these
 14. **Doc links** (`cargo xtask doc`) -- rustdoc with
     `-D warnings`, twice: once public and once with
     `--document-private-items`, because each pass sees a
@@ -873,6 +894,13 @@ For any script that runs more than ~30 seconds
   notification, or a `Monitor` with a line-buffered grep for
   progress; reserve `| tail -N` for already-finished
   commands.
+- **A background wrapper must exit with the command's
+  status.** `cmd > log; echo "exit=$?" >> log` records the
+  status, then exits 0 itself, so the completion
+  notification reports success while the command failed.
+  End such a wrapper with `exit` on the saved status, or
+  read the log's `exit=` line before trusting the
+  notification.
 
 ## Lints: `doc_markdown` allowlist via `clippy.toml`
 

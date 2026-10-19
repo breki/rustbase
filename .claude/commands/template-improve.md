@@ -69,9 +69,10 @@ three are in range:
 
 - **Commit bodies.** This project writes why, not just
   what, so a body often names the surprise directly.
-- **`docs/developer/redteam-log.md` and `artisan-log.md`.**
-  A deferred finding against template-provided code *is*
-  template feedback, and it is already written up.
+- **`docs/developer/redteam-log.md`, `artisan-log.md` and
+  `fresh-reader-log.md`.** A deferred finding against
+  template-provided code *is* template feedback, and it is
+  already written up.
 - **The diffs**, where a message is thin.
 
 ### 3. Decide what is the template's problem

@@ -43,9 +43,10 @@ and this project adheres to
 - cargo xtask check now compiles all targets (--all-targets), so a broken test
   call site (an altered signature) is caught by check rather than surfacing
   later under test.
-- `/release` now runs a cross-platform clippy on every installed target other
-  than the host, and a standalone `cargo xtask audit`, before the tag, because
-  validate lints only the current platform and its audit degrades to a warning.
+- `/release` now runs a cross-platform clippy on the claimed platforms
+  (Windows, Linux, macOS) other than the host, and a standalone `cargo xtask
+  audit`, before the tag, because validate lints only the current platform and
+  its audit degrades to a warning.
 - `/commit` no longer runs the reviewers; reviewing is the separate `/review`
   command. `/implement` likewise hands off to `/review` instead of pre-launching
   reviewers.
