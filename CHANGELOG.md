@@ -97,6 +97,10 @@ and this project adheres to
   fixes, then push and open the PR, so the PR never shows the unreviewed state.
   It also runs `rustup update` before `cargo xtask validate`, so local Clippy
   matches CI's, and says how to fix a CI failure the change caused.
+- `cargo xtask audit` errors now stand alone: a check that could not finish
+  names its reason instead of "see warnings above", and a vulnerability report
+  also names any source that did not finish (an unreachable npm registry used to
+  go unmentioned).
 
 ### Fixed
 
@@ -129,10 +133,11 @@ and this project adheres to
 - `cargo xtask dep-age-check` treats a lockfile absent at the base commit as
   wholly new and checks every entry, instead of reporting "no baseline" (which
   failed the standalone command and CI when a lockfile was first added).
-- `cargo xtask audit` found the frontend relative to the shell's working
-  directory, so run from inside `frontend/` it skipped `npm audit` and still
-  reported OK. It now finds `frontend/` from the workspace root and runs npm
-  inside it.
+- `cargo xtask audit` and `cargo xtask deny` ran their tools in the shell's
+  working directory, and audit looked for `frontend/` there too: run from inside
+  `frontend/`, the `validate` Audit step skipped `npm audit` with only a
+  warning. Both now run from the workspace root, and npm runs inside
+  `frontend/`.
 
 ### Removed
 

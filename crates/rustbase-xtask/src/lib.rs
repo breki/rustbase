@@ -27,8 +27,9 @@ pub enum Strictness {
     Warn,
 }
 
-/// Whether `stderr` is cargo reporting an absent subcommand, i.e.
-/// the backing tool is not installed. Only cargo's two actual
+/// Whether `stderr` (or any of cargo's captured output) is cargo
+/// reporting an absent subcommand, i.e. the backing tool is not
+/// installed. Only cargo's two actual
 /// spellings: a looser phrase like "not installed" would match a
 /// real gate failure that happens to say it.
 fn is_missing_subcommand(stderr: &str) -> bool {

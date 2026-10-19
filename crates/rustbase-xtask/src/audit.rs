@@ -20,66 +20,63 @@ use crate::{Config, Strictness, is_missing_subcommand};
 
 /// Parsed `cargo audit --json` result.
 #[derive(Debug, PartialEq, Eq)]
-pub struct CargoAudit {
+struct CargoAudit {
     /// Number of vulnerabilities (fatal).
-    pub vulnerabilities: u64,
+    vulnerabilities: u64,
     /// Number of advisory warnings (informational).
-    pub warnings: u64,
+    warnings: u64,
 }
 
 /// Parsed `npm audit --json` result.
 #[derive(Debug, PartialEq, Eq)]
-pub struct NpmAudit {
+struct NpmAudit {
     /// Total vulnerabilities across all severities.
-    pub total: u64,
+    total: u64,
     /// High-severity count (for the summary line).
-    pub high: u64,
+    high: u64,
     /// Critical-severity count (for the summary line).
-    pub critical: u64,
+    critical: u64,
 }
 
 /// Combined audit outcome.
 #[derive(Debug)]
-pub struct AuditResult {
+struct AuditResult {
     /// Human-readable detail for the step line.
-    pub detail: String,
+    detail: String,
     /// `Some` **only** on a positive vulnerability finding.
-    pub error: Option<String>,
+    error: Option<String>,
     /// Why a check could not finish (a tool missing, the network
     /// unreachable, an unparseable response).
-    pub warnings: Vec<String>,
+    warnings: Vec<String>,
 }
 
-/// Run the audit and apply `strictness`: the detail line on
-/// success, else the error. Prints the detail on a finding and
-/// each warning, to stderr.
+/// Runs the gate: the detail line on success, else the error.
+/// Under [`Strictness::Warn`] a check that could not finish is
+/// printed to stderr as a warning and the gate passes.
 ///
 /// `npm_dir` is audited only when it holds a `package.json`.
 ///
 /// # Errors
 ///
 /// On a vulnerability, or under [`Strictness::Fail`] when a check
-/// could not finish.
-pub fn audit(
+/// could not finish. Each error names everything that went wrong.
+pub fn check(
     cfg: &Config,
     npm_dir: Option<&Path>,
     strictness: Strictness,
 ) -> Result<String, String> {
-    verdict(check(cfg, npm_dir), strictness)
-}
-
-/// Run both audits and classify the results, without deciding
-/// what a check that could not finish means.
-pub fn check(cfg: &Config, npm_dir: Option<&Path>) -> AuditResult {
-    check_with(
+    let r = collect(
         npm_dir,
         || process::cargo(&cfg.root, &["audit", "--json"]),
         |dir| process::npm(dir, &["audit", "--json"]),
-    )
+    );
+    verdict(r, strictness)
 }
 
-/// [`check`] with the two spawns injected.
-fn check_with(
+/// Run both audits through the injected spawns and classify the
+/// results, without deciding what a check that could not finish
+/// means.
+fn collect(
     npm_dir: Option<&Path>,
     cargo: impl FnOnce() -> Result<Captured, String>,
     npm: impl FnOnce(&Path) -> Result<Captured, String>,
@@ -145,8 +142,10 @@ fn parse_npm_audit(stdout: &str) -> Result<NpmAudit, String> {
 }
 
 /// Classify per-source outcomes: a positive vulnerability count is
-/// the `error`; a runner `Err` is a `warning`.
-pub fn classify(
+/// the `error`. Any `Err`, from the spawn or from parsing its
+/// output, means that check did not finish and goes in `warnings`,
+/// which are not cargo-audit's advisory warnings.
+fn classify(
     cargo: Result<CargoAudit, String>,
     npm: Option<Result<NpmAudit, String>>,
 ) -> AuditResult {
@@ -202,15 +201,23 @@ pub fn classify(
 /// Apply `strictness` to a result: a finding always fails;
 /// warnings fail only under [`Strictness::Fail`].
 fn verdict(r: AuditResult, strictness: Strictness) -> Result<String, String> {
+    let unfinished = r.warnings.join("; ");
     if let Some(err) = r.error {
-        eprintln!("  {}", r.detail);
-        return Err(err);
+        let also = if unfinished.is_empty() {
+            String::new()
+        } else {
+            format!("; also: {unfinished}")
+        };
+        return Err(format!("{err} ({}){also}", r.detail));
+    }
+    if r.warnings.is_empty() {
+        return Ok(r.detail);
+    }
+    if strictness == Strictness::Fail {
+        return Err(format!("audit could not complete: {unfinished}"));
     }
     for w in &r.warnings {
         eprintln!("  warning: {w}");
-    }
-    if strictness == Strictness::Fail && !r.warnings.is_empty() {
-        return Err("audit could not complete (see warnings above)".into());
     }
     Ok(r.detail)
 }
@@ -409,6 +416,28 @@ mod tests {
     }
 
     #[test]
+    fn a_strict_failure_names_why_the_check_did_not_finish() {
+        // The error stands alone: a caller that does not forward
+        // stderr still learns the reason.
+        let e = verdict(incomplete(), Strictness::Fail).unwrap_err();
+        assert!(e.contains("offline"), "{e}");
+    }
+
+    #[test]
+    fn a_finding_also_reports_a_source_that_did_not_finish() {
+        let r = classify(
+            Ok(CargoAudit {
+                vulnerabilities: 1,
+                warnings: 0,
+            }),
+            Some(Err("registry unreachable".into())),
+        );
+        let e = verdict(r, Strictness::Warn).unwrap_err();
+        assert!(e.contains("1 RUSTSEC"), "{e}");
+        assert!(e.contains("registry unreachable"), "{e}");
+    }
+
+    #[test]
     fn a_clean_run_passes_when_strict() {
         let r = classify(Ok(clean_cargo()), None);
         assert!(verdict(r, Strictness::Fail).is_ok());
@@ -421,14 +450,14 @@ mod tests {
             panic!("npm must not run without a package.json")
         };
         let cargo = || Ok(captured(true, CLEAN_CARGO, ""));
-        let r = check_with(Some(&dir.0), cargo, unreachable);
+        let r = collect(Some(&dir.0), cargo, unreachable);
         assert!(!r.detail.contains("npm"), "{}", r.detail);
-        let r = check_with(None, cargo, unreachable);
+        let r = collect(None, cargo, unreachable);
         assert!(!r.detail.contains("npm"), "{}", r.detail);
 
         std::fs::write(dir.0.join("package.json"), "{}").unwrap();
         let mut ran_in = None;
-        let r = check_with(Some(&dir.0), cargo, |d| {
+        let r = collect(Some(&dir.0), cargo, |d| {
             ran_in = Some(d.to_path_buf());
             // npm exits non-zero on a finding; its report counts.
             Ok(captured(false, NPM_THREE, ""))
@@ -439,7 +468,7 @@ mod tests {
 
     #[test]
     fn a_cargo_spawn_failure_is_a_warning() {
-        let r = check_with(
+        let r = collect(
             None,
             || Err("failed to run cargo".into()),
             |_| unreachable!(),

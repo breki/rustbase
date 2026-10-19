@@ -20,7 +20,7 @@ fn frontend_dir(cfg: &rustbase_xtask::Config) -> PathBuf {
 pub fn audit() -> Result<(), String> {
     let cfg = tasks_config();
     let detail =
-        audit::audit(&cfg, Some(&frontend_dir(&cfg)), Strictness::Fail)?;
+        audit::check(&cfg, Some(&frontend_dir(&cfg)), Strictness::Fail)?;
     println!("Audit OK ({detail})");
     Ok(())
 }
@@ -31,6 +31,6 @@ pub fn audit() -> Result<(), String> {
 pub fn step() -> Step {
     Step::new("Audit", "audit", || {
         let cfg = tasks_config();
-        audit::audit(&cfg, Some(&frontend_dir(&cfg)), Strictness::Warn)
+        audit::check(&cfg, Some(&frontend_dir(&cfg)), Strictness::Warn)
     })
 }

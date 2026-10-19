@@ -18,6 +18,28 @@ work.
 
 ---
 
+### fr-2026-10-19-audit-result-warnings-name
+
+**Category:** naming
+
+In `crates/rustbase-xtask/src/audit.rs`, `AuditResult.warnings`
+holds the reasons a check did not finish, which can fail the gate
+under `Strictness::Fail`; `CargoAudit.warnings` counts cargo-audit's
+harmless advisory warnings. Same word, opposite weight. `verdict`
+already calls the first `unfinished`; rename the field to match.
+Deferred because stage 3 does not rename code.
+
+### fr-2026-10-19-coverage-per-file-floor-undocumented
+
+**Category:** missing explanation
+
+`CLAUDE.md` (Definition of Done item 4, "Coverage exceptions for
+hardware-bound code") states only the 90% crate-wide gate. The
+per-file floor (`MODULE_THRESHOLD = 85.0` in
+`xtask/src/coverage.rs`) is stated only in `docs/xtask-library.md`,
+so a file can fail while the documented figure passes. Say both in
+`CLAUDE.md`.
+
 ### fr-2026-10-19-validate-order-rationale-copies
 
 **Category:** Duplication (one rule, four homes)
