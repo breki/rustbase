@@ -77,6 +77,8 @@ and this project adheres to
   instead of resetting the lockfile first, which re-floated every transitive
   into the cooldown; it also documents exact pins, scoped `overrides` and an
   audit-vs-cooldown recipe (#1).
+- `cargo xtask coverage` names the least-covered files and their uncovered line
+  ranges when the overall threshold fails, instead of printing only the total.
 
 ### Fixed
 

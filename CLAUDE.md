@@ -319,20 +319,25 @@ bitten too.
   problem statement (save those for the option
   descriptions). It states *what the decision means*, not
   *how it is implemented*.
-- **Edit with `Edit`, not a slurp-mode regex, for YAML and
-  anything next to a doc comment.** A whole-file
-  `perl -0pi -e 's/.../.../'` has no idea which block it
-  landed in. Two shapes are reliably dangerous. Indentation
-  -carrying formats (YAML, TOML tables): a wrong-block match
-  still parses, so it fails *silently* -- a substitution
-  aimed at one workflow job splices into another and only
-  surfaces steps later. And anything adjacent to a `///`
-  block: inserting before an item reassigns the comment above
-  it to the new item, so a function ends up documented as
-  doing the opposite of what it does, with both rustdoc
-  passes clean. `sed`/`perl` remain fine for flat text and
-  one-line substitutions; reach for `Edit` the moment
-  indentation or a doc comment is in play.
+- **Edit with `Edit`, not a slurp-mode regex, for YAML, any
+  multi-line change to a `.rs` file, and anything next to a
+  doc comment.** A whole-file `perl -0pi -e 's/.../.../'` has
+  no idea which block it landed in. Three shapes are reliably
+  dangerous. Indentation-carrying formats (YAML, TOML
+  tables): a wrong-block match still parses, so it fails
+  *silently* -- a substitution aimed at one workflow job
+  splices into another and only surfaces steps later.
+  Anything adjacent to a `///` block: inserting before an
+  item reassigns the comment above it to the new item, and
+  cutting an item but missing its comment leaves the comment
+  glued to the next item's doc, so a function ends up
+  documented as doing something else, with both rustdoc
+  passes clean. And Rust source generally: a delimiter that
+  also appears in the code (`|` with `||`, `{}` around a
+  block) silently changes what the pattern matches.
+  `sed`/`perl` remain fine for flat text and one-line
+  substitutions; reach for `Edit` the moment a change spans
+  lines of Rust, indentation, or a doc comment.
 - **Print the variable before claiming what it holds.** A
   claim about what an environment variable, a file, or a
   platform actually contains has to arrive with the command

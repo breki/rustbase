@@ -223,8 +223,13 @@ pub struct CoverageResult {
 /// for tooling, etc.). Render via [`format_failure`].
 pub enum CoverageFailure {
     /// Workspace overall percentage fell below
-    /// [`OVERALL_THRESHOLD`].
-    Overall { pct: f64, threshold: f64 },
+    /// [`OVERALL_THRESHOLD`]. `least_covered` names the files
+    /// to look at, so the failure says where, not only how much.
+    Overall {
+        pct: f64,
+        threshold: f64,
+        least_covered: Vec<FailingModule>,
+    },
     /// One or more modules fell below
     /// [`MODULE_THRESHOLD`] while the overall figure
     /// was still healthy.
@@ -287,12 +292,14 @@ pub fn coverage_check() -> Result<CoverageResult, String> {
     let covered = totals["covered"].as_u64().ok_or("missing lines.covered")?;
     let total = totals["count"].as_u64().ok_or("missing lines.count")?;
 
-    let below = scan_failing_modules(&json["data"][0]["files"])?;
+    let files = &json["data"][0]["files"];
+    let below = scan_modules(files, MODULE_THRESHOLD)?;
 
     let error = if line_pct < OVERALL_THRESHOLD {
         Some(CoverageFailure::Overall {
             pct: line_pct,
             threshold: OVERALL_THRESHOLD,
+            least_covered: least_covered(files, LEAST_COVERED_SHOWN)?,
         })
     } else if !below.is_empty() {
         Some(CoverageFailure::Modules(below))
@@ -326,20 +333,45 @@ pub fn coverage() -> Result<(), String> {
 /// the same structured failure type.
 pub fn format_failure(failure: &CoverageFailure) -> String {
     match failure {
-        CoverageFailure::Overall { pct, threshold } => format!(
-            "coverage {pct:.1}% is below \
-             {threshold}% threshold"
-        ),
+        CoverageFailure::Overall {
+            pct,
+            threshold,
+            least_covered,
+        } => {
+            let mut msg =
+                format!("coverage {pct:.1}% is below {threshold}% threshold");
+            if !least_covered.is_empty() {
+                msg.push_str("; least covered:");
+                write_modules(&mut msg, least_covered);
+            }
+            msg
+        }
         CoverageFailure::Modules(modules) => format_module_failures(modules),
     }
 }
 
-/// Walk the per-file array and collect modules below
-/// [`MODULE_THRESHOLD`] together with their uncovered
-/// line ranges. Files with zero counted lines are
-/// skipped (no signal to derive a percentage from).
-fn scan_failing_modules(
+/// How many files an overall failure lists.
+const LEAST_COVERED_SHOWN: usize = 8;
+
+/// Files below full coverage, least covered first, at most
+/// `limit` of them.
+fn least_covered(
     files: &serde_json::Value,
+    limit: usize,
+) -> Result<Vec<FailingModule>, String> {
+    let mut all = scan_modules(files, 100.0)?;
+    all.sort_by(|a, b| a.pct.total_cmp(&b.pct));
+    all.truncate(limit);
+    Ok(all)
+}
+
+/// Walk the per-file array and collect modules below
+/// `threshold` together with their uncovered line ranges.
+/// Files with zero counted lines are skipped (no signal to
+/// derive a percentage from).
+fn scan_modules(
+    files: &serde_json::Value,
+    threshold: f64,
 ) -> Result<Vec<FailingModule>, String> {
     let Some(arr) = files.as_array() else {
         return Ok(Vec::new());
@@ -349,7 +381,7 @@ fn scan_failing_modules(
         let name = file["filename"].as_str().unwrap_or("?");
         let pct = file["summary"]["lines"]["percent"].as_f64().unwrap_or(0.0);
         let count = file["summary"]["lines"]["count"].as_u64().unwrap_or(0);
-        if count == 0 || pct >= MODULE_THRESHOLD {
+        if count == 0 || pct >= threshold {
             continue;
         }
         let segments = parse_segments(&file["segments"]).map_err(|e| {
@@ -370,14 +402,20 @@ fn scan_failing_modules(
 
 fn format_module_failures(below: &[FailingModule]) -> String {
     let mut msg = String::from("modules below coverage threshold:");
-    for m in below {
+    write_modules(&mut msg, below);
+    msg
+}
+
+/// Append one `name: pct` line per module, each followed by its
+/// uncovered ranges when it has any.
+fn write_modules(msg: &mut String, modules: &[FailingModule]) {
+    for m in modules {
         let _ = write!(msg, "\n    {}: {:.1}%", m.name, m.pct);
         if !m.ranges.is_empty() {
             let _ =
                 write!(msg, "\n      uncovered: {}", format_ranges(&m.ranges));
         }
     }
-    msg
 }
 
 /// A single llvm-cov segment. The JSON wire form is a
@@ -750,8 +788,44 @@ mod tests {
         let f = CoverageFailure::Overall {
             pct: 82.3,
             threshold: 90.0,
+            least_covered: Vec::new(),
         };
         assert_eq!(format_failure(&f), "coverage 82.3% is below 90% threshold");
+    }
+
+    #[test]
+    fn format_failure_overall_names_the_least_covered_files() {
+        // A failing total alone gives nothing to act on; the
+        // message must say where the uncovered lines are.
+        let f = CoverageFailure::Overall {
+            pct: 79.8,
+            threshold: 90.0,
+            least_covered: vec![FailingModule {
+                name: "dep_age/gate.rs".into(),
+                pct: 79.3,
+                ranges: vec![(234, 245)],
+            }],
+        };
+        let out = format_failure(&f);
+        assert!(out.starts_with("coverage 79.8% is below 90% threshold"));
+        assert!(out.contains("dep_age/gate.rs: 79.3%"), "{out}");
+        assert!(out.contains("uncovered: 234-245"), "{out}");
+    }
+
+    #[test]
+    fn least_covered_lists_files_below_full_worst_first() {
+        let files = json!([
+            {"filename": "/w/src/full.rs", "segments": [],
+             "summary": {"lines": {"percent": 100.0, "count": 10}}},
+            {"filename": "/w/src/half.rs", "segments": [],
+             "summary": {"lines": {"percent": 50.0, "count": 10}}},
+            {"filename": "/w/src/most.rs", "segments": [],
+             "summary": {"lines": {"percent": 80.0, "count": 10}}},
+        ]);
+        let got = least_covered(&files, 8).unwrap();
+        let names: Vec<_> = got.iter().map(|m| m.pct).collect();
+        assert_eq!(names, vec![50.0, 80.0]);
+        assert_eq!(least_covered(&files, 1).unwrap().len(), 1);
     }
 
     #[test]
