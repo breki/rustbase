@@ -621,13 +621,13 @@ just when the code compiles:
       (this check also reads `docs/`).
 
     Not seen: root files; path globs, `<placeholder>` paths
-    and paths ending in `/`; paths in its `ABSENT_ON_PURPOSE`
-    table (each with a reason); `git` in fenced blocks, in
-    spans that wrap across lines, or after `$(` or a `VAR=`
-    prefix (rt-2026-10-19-canon-git-check-gaps); width in
-    tables, fences, frontmatter and 4-space-indented lines;
-    `.claude/skills/` and the rest of `docs/`. A green gate
-    says nothing about these
+    and paths ending in `/`; paths a project exempts in
+    `tasks_config()` (each with a reason); `git` in fenced
+    blocks, in spans that wrap across lines, or after `$(`
+    or a `VAR=` prefix (rt-2026-10-19-canon-git-check-gaps);
+    width in tables, fences, frontmatter and 4-space-indented
+    lines; `.claude/skills/` and the rest of `docs/`. A green
+    gate says nothing about these
 14. **Doc links** (`cargo xtask doc`) -- rustdoc with
     `-D warnings`, twice: once public and once with
     `--document-private-items`, because each pass sees a

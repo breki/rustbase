@@ -66,6 +66,13 @@ and this project adheres to
   limits are `Config::thresholds` (coverage 90% overall and 85% per file,
   duplication 6% pooled across crates and 12% per crate) by default; a project
   overrides them in `tasks_config()` (part of #6).
+- The `rustbase-xtask` library now holds the `doc` and `canon` gates, completing
+  the gate extraction (#6). Canon-check's exemptions are configuration:
+  `Config::canon` carries the paths that are absent on purpose (each with a
+  reason; a blank reason fails the gate), the files whose backlog-ID citations
+  are not checked, the repo path prefixes and the column limit, set in
+  `tasks_config()`. The library also exports its cargo-output and ISO-date
+  helpers as `rustbase_xtask::text`.
 
 ### Changed
 

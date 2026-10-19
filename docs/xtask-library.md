@@ -154,7 +154,7 @@ the library is a possible later step, not part of this plan.
 | `dep_age` (+ gate, preflight) | extracted (prototype) |
 | `audit`, `deny` | extracted; `audit` takes a `Strictness` (fail or warn when it cannot finish), `deny` none: a missing tool always fails |
 | `coverage`, `dupes` | extracted; limits are `Config::thresholds`; kozmotic's coverage hardening (unreadable manifest, vacuous run) and jutro's pooled-plus-per-crate duplication limit taken (copies between crates unmeasured: #15) |
-| `doc_cmd`, `canon` | library-ready; canon exemptions knob |
+| `doc_cmd`, `canon` | extracted; canon exemptions are `Config::canon` (`canon::Rules`), set in `tasks_config()` |
 | `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | library-ready (output parsing); take bombyx's and hoard's fixes |
 | `changelog`, `todo` | library-ready behind config; todo format pluggable (bombyx) |
 | `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
@@ -188,8 +188,7 @@ signature check, `.ports` reader, worktree setup and log tee.
 2. Decouple feature selection: registered `validate` steps, helpers
    grouped by user (done: #5).
 3. Extract `audit`, `deny`, `coverage`, `dupes`, `doc_cmd`, `canon`,
-   taking the downstream fixes listed above (#6; all but `doc_cmd`
-   and `canon` done).
+   taking the downstream fixes listed above (done: #6).
 4. Extract the output parsers (`check`, `clippy_cmd`, `test_cmd`,
    `fmt_cmd`) and `changelog`/`todo` with a pluggable todo format.
 5. Extension points for project subcommands and steps.

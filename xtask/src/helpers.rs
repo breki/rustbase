@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+use rustbase_xtask::canon::Exempt;
+pub use rustbase_xtask::text::{is_iso_date, pair_with_locations};
+
 /// Resolve the cargo binary path. Prefers the `CARGO`
 /// env var (set by cargo when running xtask) over a
 /// PATH lookup.
@@ -21,9 +24,30 @@ pub fn workspace_root() -> PathBuf {
 /// gates. A derived project changes the name here (and with it
 /// the `<NAME>_DEP_AGE_ALLOW` variable and the user agent), and
 /// overrides a limit on the returned value, e.g.
-/// `cfg.thresholds.coverage_file = 80.0;`.
+/// `cfg.thresholds.coverage_file = 80.0;`. The canon check's
+/// exemptions are here too: paths canon names that are correct to
+/// be absent, each with its reason.
 pub fn tasks_config() -> rustbase_xtask::Config {
-    rustbase_xtask::Config::for_project("rustbase", workspace_root())
+    let mut cfg =
+        rustbase_xtask::Config::for_project("rustbase", workspace_root());
+    cfg.canon.absent_on_purpose = vec![
+        Exempt::new(
+            "scripts/e2e.sh",
+            "the CLI-only prune deletes it, and CLAUDE.md's prune \
+             instructions still name it as the file to delete",
+        ),
+        Exempt::new(
+            "crates/rustbase/Cargo.toml",
+            "the version file, quoted throughout canon; a derived \
+             project renames its crate",
+        ),
+        Exempt::new(
+            "docs/developer/backfeed-ledger.toml",
+            "/template-backfeed and its ledger live in the template \
+             repo only",
+        ),
+    ];
+    cfg
 }
 
 /// Run a cargo command and capture its output.
@@ -68,34 +92,6 @@ pub fn run_cargo_stream(args: &[&str]) -> Result<(), String> {
     }
 }
 
-/// Keep every line for which `keep` returns true, plus the
-/// `-->` source-location line that immediately follows a
-/// kept line, so a diagnostic is surfaced together with
-/// where it fired; without the paired location a failure
-/// names the lint/error but not the `file:line`, forcing a
-/// raw re-run. Only the location line *immediately* after a
-/// kept line is taken, so a `-->` following a filtered line
-/// is never wrongly attached.
-pub fn pair_with_locations<F>(stderr: &str, keep: F) -> Vec<&str>
-where
-    F: Fn(&str) -> bool,
-{
-    let mut out: Vec<&str> = Vec::new();
-    let mut prev_kept = false;
-    for line in stderr.lines() {
-        if keep(line) {
-            out.push(line);
-            prev_kept = true;
-        } else if prev_kept && line.trim_start().starts_with("-->") {
-            out.push(line);
-            prev_kept = false;
-        } else {
-            prev_kept = false;
-        }
-    }
-    out
-}
-
 /// Return the last `n` non-empty lines of `stderr`.
 pub fn stderr_tail(stderr: &str, n: usize) -> Vec<&str> {
     let mut lines: Vec<&str> =
@@ -104,27 +100,6 @@ pub fn stderr_tail(stderr: &str, n: usize) -> Vec<&str> {
     lines.drain(..start);
     lines
 }
-
-/// True when `s` is a well-formed ISO `YYYY-MM-DD` date:
-/// exactly ten chars, `dddd-dd-dd`, with month `01..=12` and
-/// day `01..=31`. A shallow calendar check -- it does not
-/// reject Feb 30 -- which is enough for lexical watermark
-/// comparison (ISO dates sort lexically iff well-formed).
-pub fn is_iso_date(s: &str) -> bool {
-    let b = s.as_bytes();
-    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
-        return false;
-    }
-    let digits = |r: &[u8]| r.iter().all(u8::is_ascii_digit);
-    if !digits(&b[0..4]) || !digits(&b[5..7]) || !digits(&b[8..10]) {
-        return false;
-    }
-    let two = |a: u8, c: u8| (a - b'0') * 10 + (c - b'0');
-    let month = two(b[5], b[6]);
-    let day = two(b[8], b[9]);
-    (1..=12).contains(&month) && (1..=31).contains(&day)
-}
-
 /// Canonical markdown column width for the project (matches the
 /// 80-column rule in `rustfmt.toml`). Shared by the `changelog`
 /// and `todo` bullet writers.
@@ -237,35 +212,6 @@ mod tests {
         let stderr = "only-one";
         let tail = stderr_tail(stderr, 5);
         assert_eq!(tail, vec!["only-one"]);
-    }
-
-    #[test]
-    fn is_iso_date_accepts_valid_and_rejects_junk() {
-        assert!(is_iso_date("2026-07-16"));
-        assert!(is_iso_date("1999-12-31"));
-        assert!(!is_iso_date("2026-13-01")); // month 13
-        assert!(!is_iso_date("2026-07-32")); // day 32
-        assert!(!is_iso_date("2026-7-16")); // not zero-padded
-        assert!(!is_iso_date("2026/07/16")); // wrong separator
-        assert!(!is_iso_date("not a date"));
-        assert!(!is_iso_date("2026-07-16 "));
-    }
-
-    #[test]
-    fn pair_with_locations_keeps_kept_lines_and_following_arrows() {
-        let input = "\
-keep me
-    --> a/b.rs:1:1
-drop me
-    --> should/not/appear.rs:2:2
-keep me too";
-        let out = pair_with_locations(input, |l| l.starts_with("keep"));
-        assert_eq!(out.len(), 3);
-        assert!(out[0].starts_with("keep me"));
-        assert!(out[1].contains("--> a/b.rs:1:1"));
-        assert!(out[2].starts_with("keep me too"));
-        // The `-->` after the dropped line must not appear.
-        assert!(!out.iter().any(|l| l.contains("should/not/appear")));
     }
 
     #[test]
