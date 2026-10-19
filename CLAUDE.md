@@ -574,13 +574,16 @@ just when the code compiles:
    with each one alone
 3. **All tests pass**: `cargo test`
 4. **Coverage >= 90%**, and >= 85% in each file
-5. **Code duplication <= 6%** across the workspace and
-   <= 12% in any one crate (production code, tests
-   excluded)
+5. **Code duplication <= 6%** pooled across the crates
+   (duplicate lines over total lines) and <= 12% in any
+   one crate (production code, tests excluded). Each
+   crate is measured alone, so a copy between two crates
+   is not counted.
 
-The coverage and duplication limits are the
-`thresholds` field of the `Config` built in
-`tasks_config()` (`xtask/src/helpers.rs`).
+   Items 4 and 5 default to `Thresholds::default()` in
+   `crates/rustbase-xtask/src/lib.rs`; a project
+   overrides them in `tasks_config()`
+   (`xtask/src/helpers.rs`).
 6. **Frontend format** (Prettier), auto-fixed by default
 7. **Frontend type check** (svelte-check)
 8. **Frontend duplication** (jscpd, threshold 6%)
@@ -875,11 +878,12 @@ gate honest without weakening it:
    section leaves the baseline unchanged, but a
    missing/unreadable manifest fails the gate: the baseline
    alone would report the excluded files as a coverage drop.
-   A pattern that would match *every* file (`.`, `.*`, `.+`)
-   is rejected, and a run that measured no files fails
-   whatever pattern caused it -- either would silently neuter
-   the gate. Only the `[workspace.metadata.coverage]` +
-   line-leading `ignore = [...]` shape is read; the dotted-key
+   A blank entry is ignored; a pattern that would match
+   *every* file (`.`, `.*`, `.+`, `.*?`) is rejected; and a
+   run that measured no files fails whatever pattern caused
+   it -- either would silently neuter the gate. Only the
+   `[workspace.metadata.coverage]` + line-leading
+   `ignore = [...]` shape is read; the dotted-key
    (`coverage.ignore = ...`) and inline-table spellings are
    not.
 3. **Add a `*_TEST_*` env-var escape hatch in the

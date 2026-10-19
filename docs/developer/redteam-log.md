@@ -15,6 +15,17 @@ red team review is warranted before continuing feature work.
 
 ---
 
+### rt-2026-10-19-coverage-failure-paths-ambiguous
+
+**Category:** output (failure message)
+
+The coverage gate names failing files by the part of the path after
+`src/` (`shorten_path` in `crates/rustbase-xtask/src/coverage.rs`), so
+two crates' `lib.rs` read the same in one failure list and the
+operator cannot tell which crate to fix. Name the crate too, e.g. a
+workspace-relative path. Pre-existing; raised by the fresh-reader
+stage of the coverage/dupes extraction (#6).
+
 ### rt-2026-10-19-release-deploy-existing-tag
 
 **Category:** Correctness (procedure)

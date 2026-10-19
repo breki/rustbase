@@ -1,6 +1,6 @@
 //! The line-coverage gate.
 //!
-//! Runs `cargo llvm-cov` over the workspace (the tooling crate
+//! Runs `cargo llvm-cov` over the workspace (the `xtask` package
 //! left out) and fails when the workspace falls below
 //! [`Thresholds::coverage_overall`](crate::Thresholds) or any one
 //! file below [`Thresholds::coverage_file`](crate::Thresholds). A
@@ -9,26 +9,22 @@
 //! A project excludes hardware-bound files with regex fragments in
 //! `[workspace.metadata.coverage] ignore` in the root `Cargo.toml`.
 
-use std::fmt::Write as _;
-use std::fs;
-use std::path::Path;
+use std::fmt::{self, Write as _};
 
 use serde_json::Value;
 
 use crate::process::{self, Captured};
 use crate::{Config, TOOLING_CRATE, Thresholds};
 
-/// Regex passed to `llvm-cov --ignore-filename-regex`, on both
-/// path separators: the `src/main.rs` bootstrap and everything
-/// under `src/bin/`. A binary's shell is exercised by spawning it,
-/// which llvm-cov cannot fully credit; the testable logic belongs
-/// in a library crate.
-const IGNORE_REGEX: &str = r"src[/\\](main\.rs$|bin[/\\])";
+mod ignore;
+
+use ignore::ignore_regex;
 
 /// How many files an overall failure lists.
 const LEAST_COVERED_SHOWN: usize = 8;
 
-/// What a passing run measured.
+/// What a passing run measured. Displays as the success line,
+/// `93.9% >= 90%`.
 #[derive(Debug, PartialEq)]
 pub struct Report {
     /// Covered lines.
@@ -37,6 +33,14 @@ pub struct Report {
     pub total: u64,
     /// Line coverage of the workspace, in percent.
     pub line_pct: f64,
+    /// The overall threshold it was held to.
+    pub threshold: f64,
+}
+
+impl fmt::Display for Report {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:.1}% >= {}%", self.line_pct, self.threshold)
+    }
 }
 
 /// Runs the gate in the workspace root.
@@ -82,156 +86,6 @@ fn measure(
     evaluate(&json, &cfg.thresholds)
 }
 
-/// The full `--ignore-filename-regex`: [`IGNORE_REGEX`] merged with
-/// the project's `[workspace.metadata.coverage] ignore` patterns.
-/// An unreadable manifest is an error rather than the baseline:
-/// the baseline would drop the project's exclusions and report
-/// the excluded files as a coverage regression.
-fn ignore_regex(root: &Path) -> Result<String, String> {
-    let path = root.join("Cargo.toml");
-    let manifest = fs::read_to_string(&path).map_err(|e| {
-        format!(
-            "cannot read {} for [workspace.metadata.coverage]: {e}",
-            path.display()
-        )
-    })?;
-    let patterns = validate_ignore_patterns(parse_coverage_ignore(&manifest))?;
-    Ok(build_ignore_regex(IGNORE_REGEX, &patterns))
-}
-
-/// The baseline followed by the project's patterns, joined by `|`
-/// (top-level alternation).
-fn build_ignore_regex(default: &str, user: &[String]) -> String {
-    let mut out = String::from(default);
-    for pattern in user {
-        out.push('|');
-        out.push_str(pattern);
-    }
-    out
-}
-
-/// Drop blank patterns and reject any that match every file. A
-/// blank would append a bare `|` (matching every path); `.`, `.*`,
-/// `.+` match everything outright. A blank is dropped as a typo, a
-/// match-all fails loudly.
-fn validate_ignore_patterns(
-    patterns: Vec<String>,
-) -> Result<Vec<String>, String> {
-    let mut kept = Vec::new();
-    for pattern in patterns {
-        let trimmed = pattern.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        if matches!(trimmed, "." | ".*" | ".+" | ".*?") {
-            return Err(format!(
-                "coverage ignore pattern {pattern:?} matches every file \
-                 -- refusing a vacuous coverage gate; fix or remove it in \
-                 [workspace.metadata.coverage] ignore"
-            ));
-        }
-        kept.push(pattern);
-    }
-    Ok(kept)
-}
-
-/// The `[workspace.metadata.coverage]` `ignore = [...]` patterns
-/// of a root `Cargo.toml`, in declared order; empty when the
-/// section or key is absent. A dependency-free scan (no `toml`
-/// crate), quote-aware so `]` and `#` inside a pattern are
-/// literal; both `"..."` and `'...'` strings are read. Only a
-/// line-leading `ignore = [...]` under that header is recognised,
-/// not the dotted-key or inline-table spellings.
-fn parse_coverage_ignore(manifest: &str) -> Vec<String> {
-    let body = coverage_section_body(manifest);
-    ignore_value_region(&body)
-        .map(scan_quoted)
-        .unwrap_or_default()
-}
-
-/// The lines of the `[workspace.metadata.coverage]` section, up to
-/// the next section header, kept verbatim so the value scan sees
-/// comments and brackets in context.
-fn coverage_section_body(manifest: &str) -> String {
-    let mut in_section = false;
-    let mut body = String::new();
-    for line in manifest.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            let name = trimmed.trim_matches(|c| c == '[' || c == ']').trim();
-            in_section = name == "workspace.metadata.coverage";
-            continue;
-        }
-        if in_section {
-            body.push_str(line);
-            body.push('\n');
-        }
-    }
-    body
-}
-
-/// The text after the `=` of a line-leading `ignore` key, through
-/// the end of `body` so a multi-line array is scanned whole.
-fn ignore_value_region(body: &str) -> Option<&str> {
-    let mut offset = 0;
-    for line in body.split_inclusive('\n') {
-        if let Some(after) = line.trim_start().strip_prefix("ignore")
-            && after.trim_start().starts_with('=')
-            && let Some(eq) = line.find('=')
-        {
-            return Some(&body[offset + eq + 1..]);
-        }
-        offset += line.len();
-    }
-    None
-}
-
-/// The contents of each quoted string in `region`, stopping at the
-/// first `]` outside a quote (the array's close). `#` outside a
-/// quote starts a comment to end of line. An unterminated final
-/// quote is discarded.
-fn scan_quoted(region: &str) -> Vec<String> {
-    enum State {
-        Normal,
-        Comment,
-        Double,
-        Single,
-    }
-    let mut state = State::Normal;
-    let mut out = Vec::new();
-    let mut cur = String::new();
-    for c in region.chars() {
-        match state {
-            State::Normal => match c {
-                '#' => state = State::Comment,
-                '"' => state = State::Double,
-                '\'' => state = State::Single,
-                ']' => break,
-                _ => {}
-            },
-            State::Comment => {
-                if c == '\n' {
-                    state = State::Normal;
-                }
-            }
-            State::Double | State::Single => {
-                let close = if matches!(state, State::Double) {
-                    '"'
-                } else {
-                    '\''
-                };
-                if c == close {
-                    out.push(std::mem::take(&mut cur));
-                    state = State::Normal;
-                } else {
-                    cur.push(c);
-                }
-            }
-        }
-    }
-    out
-}
-
 /// Why the gate failed. Kept apart from its rendering in
 /// [`format_failure`].
 enum CoverageFailure {
@@ -270,9 +124,9 @@ fn evaluate(json: &Value, t: &Thresholds) -> Result<Report, String> {
     let measured = files.as_array().map_or(0, Vec::len);
     if measured == 0 || total == 0 {
         return Err(format!(
-            "coverage measured {measured} files ({total} lines) -- the gate \
-             is vacuous. Check [workspace.metadata.coverage] ignore in the \
-             root Cargo.toml; a pattern there is excluding everything."
+            "coverage measured {measured} files ({total} lines), so the gate \
+             is vacuous; check [workspace.metadata.coverage] ignore in the \
+             root Cargo.toml for a pattern excluding everything"
         ));
     }
 
@@ -292,6 +146,7 @@ fn evaluate(json: &Value, t: &Thresholds) -> Result<Report, String> {
             covered,
             total,
             line_pct,
+            threshold: t.coverage_overall,
         }),
     }
 }
@@ -405,8 +260,10 @@ fn parse_segment(v: &Value) -> Result<Segment, String> {
     let a = v.as_array().filter(|a| a.len() == 6).ok_or_else(shape)?;
     let num = |i: usize| a[i].as_u64().ok_or_else(shape);
     let flag = |i: usize| a[i].as_bool().ok_or_else(shape);
-    num(1)?;
-    flag(4)?;
+    // Unread columns, still type-checked so a shape change is an
+    // error rather than a misread.
+    let _col = num(1)?;
+    let _region_entry = flag(4)?;
     Ok(Segment {
         line: num(0)?,
         count: num(2)?,
@@ -482,6 +339,7 @@ fn shorten_path(name: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
+    use std::fs;
     use std::path::PathBuf;
 
     use serde_json::json;
@@ -502,128 +360,6 @@ mod tests {
 
     fn t() -> Thresholds {
         Thresholds::default()
-    }
-
-    #[test]
-    fn build_ignore_regex_returns_default_without_user_patterns() {
-        assert_eq!(build_ignore_regex(IGNORE_REGEX, &[]), IGNORE_REGEX);
-    }
-
-    #[test]
-    fn build_ignore_regex_appends_user_patterns_in_order() {
-        let user = vec!["src/audio/native.rs".to_string(), "src/x.rs".into()];
-        assert_eq!(
-            build_ignore_regex("base", &user),
-            "base|src/audio/native.rs|src/x.rs"
-        );
-    }
-
-    #[test]
-    fn parse_coverage_ignore_reads_an_inline_array() {
-        let toml = "[workspace.metadata.coverage]\n\
-                    ignore = [\"src/a.rs\", \"src/b.rs\"]\n";
-        assert_eq!(parse_coverage_ignore(toml), ["src/a.rs", "src/b.rs"]);
-    }
-
-    #[test]
-    fn parse_coverage_ignore_reads_a_multiline_array() {
-        let toml = "[workspace.metadata.coverage]\nignore = [\n  \
-                    \"src/a.rs\",  # a comment\n  \"src/b.rs\",\n]\n";
-        assert_eq!(parse_coverage_ignore(toml), ["src/a.rs", "src/b.rs"]);
-    }
-
-    #[test]
-    fn parse_coverage_ignore_keeps_brackets_inside_a_pattern() {
-        // Regex char classes contain `]`, which must not end the
-        // array. The TOML value is `src[/\\]a\.rs`.
-        let toml = "[workspace.metadata.coverage]\nignore = [\n  \
-                    \"src[/\\\\]a\\.rs\",\n  \"src/b\\.rs\",\n]\n";
-        assert_eq!(
-            parse_coverage_ignore(toml),
-            [r"src[/\\]a\.rs", r"src/b\.rs"]
-        );
-    }
-
-    #[test]
-    fn parse_coverage_ignore_keeps_hash_inside_a_pattern() {
-        let toml = "[workspace.metadata.coverage]\n\
-                    ignore = [\"src/v#2/a.rs\"]\n";
-        assert_eq!(parse_coverage_ignore(toml), ["src/v#2/a.rs"]);
-    }
-
-    #[test]
-    fn parse_coverage_ignore_reads_single_quoted_literals() {
-        let toml = "[workspace.metadata.coverage]\n\
-                    ignore = ['src[/\\]a.rs']\n";
-        assert_eq!(parse_coverage_ignore(toml), [r"src[/\]a.rs"]);
-    }
-
-    #[test]
-    fn parse_coverage_ignore_drops_an_unterminated_quote() {
-        let toml = "[workspace.metadata.coverage]\nignore = [\"a.rs\", \"b";
-        assert_eq!(parse_coverage_ignore(toml), ["a.rs"]);
-    }
-
-    #[test]
-    fn parse_coverage_ignore_empty_when_section_absent() {
-        let toml = "[workspace]\nmembers = []\n\n\
-                    [profile.release-fast]\ninherits = \"release\"\n";
-        let got = parse_coverage_ignore(toml);
-        assert!(got.is_empty(), "{got:?}");
-    }
-
-    #[test]
-    fn parse_coverage_ignore_empty_when_key_absent() {
-        // A later section's `ignore` must not leak in.
-        let toml = "[workspace.metadata.coverage]\nother = 1\n\n\
-                    [other.section]\nignore = [\"nope.rs\"]\n";
-        let got = parse_coverage_ignore(toml);
-        assert!(got.is_empty(), "{got:?}");
-    }
-
-    #[test]
-    fn validate_ignore_patterns_drops_blanks() {
-        let got = validate_ignore_patterns(vec![
-            "src/a.rs".into(),
-            String::new(),
-            "  ".into(),
-        ])
-        .unwrap();
-        assert_eq!(got, ["src/a.rs"]);
-    }
-
-    #[test]
-    fn validate_ignore_patterns_rejects_match_all() {
-        for p in [".", ".*", ".+", ".*?"] {
-            assert!(
-                validate_ignore_patterns(vec![p.to_string()]).is_err(),
-                "{p:?} should be rejected"
-            );
-        }
-    }
-
-    #[test]
-    fn ignore_regex_reads_the_root_manifest() {
-        let dir = test_repo::empty_dir();
-        fs::write(
-            dir.0.join("Cargo.toml"),
-            "[workspace.metadata.coverage]\nignore = ['src/io\\.rs']\n",
-        )
-        .unwrap();
-        assert_eq!(
-            ignore_regex(&dir.0).unwrap(),
-            format!(r"{IGNORE_REGEX}|src/io\.rs")
-        );
-    }
-
-    #[test]
-    fn an_unreadable_manifest_is_an_error_not_the_baseline() {
-        // The baseline would drop the project's exclusions and
-        // report them as a coverage regression.
-        let dir = test_repo::empty_dir();
-        let e = ignore_regex(&dir.0).unwrap_err();
-        assert!(e.contains("cannot read"), "{e}");
-        assert!(e.contains("Cargo.toml"), "{e}");
     }
 
     fn seg(line: u64, count: u64, is_gap: bool) -> Segment {
@@ -712,14 +448,17 @@ mod tests {
     #[test]
     fn a_healthy_report_passes() {
         let r = evaluate(&report(95.0, &[file("/w/src/a.rs", 95.0, 10)]), &t());
+        let r = r.unwrap();
         assert_eq!(
-            r.unwrap(),
+            r,
             Report {
                 covered: 9,
                 total: 10,
-                line_pct: 95.0
+                line_pct: 95.0,
+                threshold: 90.0,
             }
         );
+        assert_eq!(r.to_string(), "95.0% >= 90%");
     }
 
     #[test]

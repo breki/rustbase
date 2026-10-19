@@ -19,7 +19,9 @@ pub fn workspace_root() -> PathBuf {
 
 /// This project's settings for the shared `rustbase-xtask`
 /// gates. A derived project changes the name here (and with it
-/// the `<NAME>_DEP_AGE_ALLOW` variable and the user agent).
+/// the `<NAME>_DEP_AGE_ALLOW` variable and the user agent), and
+/// overrides a limit on the returned value, e.g.
+/// `cfg.thresholds.coverage_file = 80.0;`.
 pub fn tasks_config() -> rustbase_xtask::Config {
     rustbase_xtask::Config::for_project("rustbase", workspace_root())
 }

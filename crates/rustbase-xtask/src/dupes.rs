@@ -1,26 +1,35 @@
 //! The code-duplication gate.
 //!
 //! Runs `code-dupes` over each workspace crate's `src/` (tests and
-//! the tooling crate left out) and fails when exact duplication
-//! across all crates together exceeds
+//! the `xtask` package left out) and fails when the duplication
+//! found, pooled across crates (duplicate lines over total lines),
+//! exceeds
 //! [`Thresholds::dupes_workspace`](crate::Thresholds), or in any
 //! one crate exceeds [`Thresholds::dupes_crate`](crate::Thresholds).
-//! The workspace figure is the real measure; the per-crate one
-//! catches a hotspot the total would dilute.
+//! Each run sees only its own crate, so code copied from one crate
+//! into another is not measured.
 
+use std::ffi::OsStr;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
 use crate::process::{self, Captured};
 use crate::{Config, TOOLING_CRATE, Thresholds};
 
+/// A workspace member to measure.
+#[derive(Debug, PartialEq)]
+struct CrateSrc {
+    name: String,
+    /// Its `src/` directory.
+    src: PathBuf,
+}
+
 /// One crate's duplication figures.
 #[derive(Debug, PartialEq)]
 struct CrateStats {
-    name: String,
-    src: String,
+    krate: CrateSrc,
     total_lines: u64,
     exact_lines: u64,
 }
@@ -37,18 +46,22 @@ impl CrateStats {
 /// # Errors
 ///
 /// When a limit is exceeded (naming the crates and how to list
-/// their duplicates), or when `cargo metadata` or `code-dupes`
-/// cannot run or be read.
+/// their duplicates), when nothing was counted, or when `cargo
+/// metadata` or `code-dupes` cannot run or be read.
 pub fn check(cfg: &Config) -> Result<String, String> {
     collect(
         cfg,
         |args| process::cargo(&cfg.root, args),
+        // `code-dupes -p <src> --exclude-tests --format json stats`,
+        // captured through a pipe. An older note said code-dupes
+        // missed sources when piped; `stats` reports the same counts
+        // piped as on a terminal (checked with 0.2.1).
         |src| {
-            process::tool(
-                &cfg.root,
-                "code-dupes",
-                &["-p", src, "--exclude-tests", "--format", "json", "stats"],
-            )
+            let args = ["-p", "--exclude-tests", "--format", "json", "stats"]
+                .map(OsStr::new);
+            let mut all = vec![args[0], src.as_os_str()];
+            all.extend(&args[1..]);
+            process::tool(&cfg.root, "code-dupes", &all)
         },
     )
 }
@@ -57,32 +70,34 @@ pub fn check(cfg: &Config) -> Result<String, String> {
 fn collect(
     cfg: &Config,
     cargo: impl FnOnce(&[&str]) -> Result<Captured, String>,
-    mut dupes: impl FnMut(&str) -> Result<Captured, String>,
+    mut dupes: impl FnMut(&Path) -> Result<Captured, String>,
 ) -> Result<String, String> {
     let meta = cargo(&["metadata", "--format-version", "1", "--no-deps"])?;
     if !meta.ok {
         return Err(format!("cargo metadata failed:\n{}", meta.stderr));
     }
     let mut stats = Vec::new();
-    for (name, src) in crate_src_dirs(&meta.stdout)? {
-        let out = dupes(&src).map_err(|e| {
+    for krate in crate_src_dirs(&meta.stdout)? {
+        let out = dupes(&krate.src).map_err(|e| {
             format!("{e}\n  Install with: cargo install code-dupes")
         })?;
         if !out.ok {
             return Err(format!(
-                "code-dupes failed for {name} ({src}):\n{}",
+                "code-dupes failed for {} ({}):\n{}",
+                krate.name,
+                krate.src.display(),
                 out.stderr
             ));
         }
-        stats.push(read_stats(name, src, &out.stdout)?);
+        stats.push(read_stats(krate, &out.stdout)?);
     }
     judge(&stats, &cfg.thresholds)
 }
 
-/// Each workspace member's name and `src/` directory, from `cargo
-/// metadata` JSON. The tooling crate and members without a `src/`
-/// are left out; finding none at all is an error, not a pass.
-fn crate_src_dirs(metadata: &str) -> Result<Vec<(String, String)>, String> {
+/// Each workspace member with a `src/` directory, from `cargo
+/// metadata` JSON, the `xtask` package left out. Finding none at all
+/// is an error, not a pass.
+fn crate_src_dirs(metadata: &str) -> Result<Vec<CrateSrc>, String> {
     let meta: Value = serde_json::from_str(metadata)
         .map_err(|e| format!("failed to parse cargo metadata: {e}"))?;
     let mut dirs = Vec::new();
@@ -95,7 +110,10 @@ fn crate_src_dirs(metadata: &str) -> Result<Vec<(String, String)>, String> {
         if let Some(src) = manifest.parent().map(|d| d.join("src"))
             && src.is_dir()
         {
-            dirs.push((name.to_owned(), src.to_string_lossy().into_owned()));
+            dirs.push(CrateSrc {
+                name: name.to_owned(),
+                src,
+            });
         }
     }
     if dirs.is_empty() {
@@ -108,11 +126,8 @@ fn crate_src_dirs(metadata: &str) -> Result<Vec<(String, String)>, String> {
 }
 
 /// Read `code-dupes --format json stats` output for one crate.
-fn read_stats(
-    name: String,
-    src: String,
-    stdout: &str,
-) -> Result<CrateStats, String> {
+fn read_stats(krate: CrateSrc, stdout: &str) -> Result<CrateStats, String> {
+    let name = &krate.name;
     let j: Value = serde_json::from_str(stdout).map_err(|e| {
         format!("failed to parse code-dupes JSON for {name}: {e}")
     })?;
@@ -124,8 +139,7 @@ fn read_stats(
     Ok(CrateStats {
         total_lines: field("total_lines")?,
         exact_lines: field("exact_duplicate_lines")?,
-        name,
-        src,
+        krate,
     })
 }
 
@@ -133,6 +147,13 @@ fn read_stats(
 fn judge(stats: &[CrateStats], t: &Thresholds) -> Result<String, String> {
     let total: u64 = stats.iter().map(|s| s.total_lines).sum();
     let exact: u64 = stats.iter().map(|s| s.exact_lines).sum();
+    if total == 0 {
+        return Err(format!(
+            "code-dupes counted 0 lines across {} crates, so the gate is \
+             vacuous",
+            stats.len()
+        ));
+    }
     let workspace = percent(exact, total);
     let hot: Vec<&CrateStats> =
         stats.iter().filter(|s| s.pct() > t.dupes_crate).collect();
@@ -140,14 +161,14 @@ fn judge(stats: &[CrateStats], t: &Thresholds) -> Result<String, String> {
     let mut reasons = Vec::new();
     if workspace > t.dupes_workspace {
         reasons.push(format!(
-            "workspace at {workspace:.1}% > {:.1}%",
+            "all crates at {workspace:.1}% > {:.1}%",
             t.dupes_workspace
         ));
     }
     if !hot.is_empty() {
         let names: Vec<String> = hot
             .iter()
-            .map(|s| format!("{} at {:.1}%", s.name, s.pct()))
+            .map(|s| format!("{} at {:.1}%", s.krate.name, s.pct()))
             .collect();
         reasons.push(format!(
             "over {:.1}% per crate: {}",
@@ -157,7 +178,7 @@ fn judge(stats: &[CrateStats], t: &Thresholds) -> Result<String, String> {
     }
     if reasons.is_empty() {
         return Ok(format!(
-            "workspace {workspace:.1}% <= {:.1}%, each crate <= {:.1}%",
+            "all crates {workspace:.1}% <= {:.1}%, each crate <= {:.1}%",
             t.dupes_workspace, t.dupes_crate
         ));
     }
@@ -170,8 +191,11 @@ fn judge(stats: &[CrateStats], t: &Thresholds) -> Result<String, String> {
     let mut msg = format!("duplication exceeded: {}", reasons.join("; "));
     msg.push_str("\n  list the duplicates with:");
     for s in listed {
-        let _ =
-            write!(msg, "\n    code-dupes -p {} --exclude-tests check", s.src);
+        let _ = write!(
+            msg,
+            "\n    code-dupes -p \"{}\" --exclude-tests report",
+            s.krate.src.display()
+        );
     }
     Err(msg)
 }
@@ -196,10 +220,16 @@ mod tests {
     use super::*;
     use crate::test_repo;
 
+    fn krate(name: &str) -> CrateSrc {
+        CrateSrc {
+            name: name.into(),
+            src: PathBuf::from(format!("/w/{name}/src")),
+        }
+    }
+
     fn stats(name: &str, total_lines: u64, exact_lines: u64) -> CrateStats {
         CrateStats {
-            name: name.into(),
-            src: format!("/w/{name}/src"),
+            krate: krate(name),
             total_lines,
             exact_lines,
         }
@@ -212,7 +242,7 @@ mod tests {
     #[test]
     fn a_clean_workspace_passes_with_both_limits_named() {
         let d = judge(&[stats("a", 1000, 4), stats("b", 13, 0)], &t()).unwrap();
-        assert_eq!(d, "workspace 0.4% <= 6.0%, each crate <= 12.0%");
+        assert_eq!(d, "all crates 0.4% <= 6.0%, each crate <= 12.0%");
     }
 
     #[test]
@@ -230,16 +260,19 @@ mod tests {
         let e = judge(&[stats("big", 1000, 10), stats("hot", 100, 15)], &t())
             .unwrap_err();
         assert!(e.contains("over 12.0% per crate: hot at 15.0%"), "{e}");
-        assert!(e.contains("code-dupes -p /w/hot/src"), "{e}");
+        assert!(
+            e.contains("code-dupes -p \"/w/hot/src\" --exclude-tests report"),
+            "{e}"
+        );
         assert!(!e.contains("/w/big/src"), "only the hot crate: {e}");
-        assert!(!e.contains("workspace at"), "{e}");
+        assert!(!e.contains("all crates at"), "{e}");
     }
 
     #[test]
     fn the_workspace_total_fails_even_when_no_crate_is_hot() {
         let e = judge(&[stats("a", 100, 10), stats("b", 100, 10)], &t())
             .unwrap_err();
-        assert!(e.contains("workspace at 10.0% > 6.0%"), "{e}");
+        assert!(e.contains("all crates at 10.0% > 6.0%"), "{e}");
         assert!(e.contains("/w/a/src") && e.contains("/w/b/src"), "{e}");
     }
 
@@ -253,24 +286,30 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_crate_counts_as_zero() {
+    fn an_empty_crate_beside_a_measured_one_counts_as_zero() {
         assert_eq!(stats("a", 0, 0).pct(), 0.0);
-        assert!(judge(&[stats("a", 0, 0)], &t()).is_ok());
+        assert!(judge(&[stats("a", 0, 0), stats("b", 100, 0)], &t()).is_ok());
+    }
+
+    #[test]
+    fn a_run_that_counted_no_lines_fails() {
+        let e = judge(&[stats("a", 0, 0), stats("b", 0, 0)], &t()).unwrap_err();
+        assert!(e.contains("vacuous"), "{e}");
     }
 
     #[test]
     fn read_stats_takes_the_line_counts() {
         let out = r#"{"total_lines": 1077, "exact_duplicate_lines": 4,
                       "exact_duplicate_percent": 0.37}"#;
-        let s = read_stats("a".into(), "/a/src".into(), out).unwrap();
+        let s = read_stats(krate("a"), out).unwrap();
         assert_eq!((s.total_lines, s.exact_lines), (1077, 4));
     }
 
     #[test]
     fn read_stats_rejects_garbage_and_missing_fields() {
-        let e = read_stats("a".into(), String::new(), "nope").unwrap_err();
+        let e = read_stats(krate("a"), "nope").unwrap_err();
         assert!(e.contains("parse code-dupes JSON for a"), "{e}");
-        let e = read_stats("a".into(), String::new(), "{}").unwrap_err();
+        let e = read_stats(krate("a"), "{}").unwrap_err();
         assert!(e.contains("missing total_lines"), "{e}");
     }
 
@@ -302,8 +341,8 @@ mod tests {
         let (dir, meta) = workspace();
         let got = crate_src_dirs(&meta).unwrap();
         assert_eq!(got.len(), 1, "{got:?}");
-        assert_eq!(got[0].0, "a");
-        assert!(got[0].1.starts_with(&*dir.0.to_string_lossy()));
+        assert_eq!(got[0].name, "a");
+        assert!(got[0].src.starts_with(&dir.0));
     }
 
     #[test]
@@ -338,7 +377,7 @@ mod tests {
                 Ok(captured(true, &meta, ""))
             },
             |src| {
-                seen.borrow_mut().push(src.to_owned());
+                seen.borrow_mut().push(src.to_path_buf());
                 Ok(captured(
                     true,
                     r#"{"total_lines": 100, "exact_duplicate_lines": 1}"#,
@@ -347,7 +386,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(d.starts_with("workspace 1.0%"), "{d}");
+        assert!(d.starts_with("all crates 1.0%"), "{d}");
         assert_eq!(seen.into_inner().len(), 1);
     }
 

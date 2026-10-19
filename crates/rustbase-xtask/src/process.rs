@@ -6,6 +6,7 @@
 //! (`current_dir`), not a `--prefix` or `-C` flag: npm resolves
 //! relative `file:` specifiers against the caller's directory.
 
+use std::ffi::OsStr;
 use std::path::Path;
 use std::process::Command;
 
@@ -39,11 +40,12 @@ pub(crate) fn npm(dir: &Path, args: &[&str]) -> Result<Captured, String> {
     run(cmd, bin)
 }
 
-/// Run `bin <args>` in `dir`.
+/// Run `bin <args>` in `dir`. The arguments are `OsStr`, so a path
+/// reaches the tool unchanged even when it is not UTF-8.
 pub(crate) fn tool(
     dir: &Path,
     bin: &str,
-    args: &[&str],
+    args: &[&OsStr],
 ) -> Result<Captured, String> {
     let mut cmd = Command::new(bin);
     cmd.current_dir(dir).args(args);

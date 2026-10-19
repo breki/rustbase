@@ -7,22 +7,15 @@ use crate::step::Step;
 
 /// Standalone `cargo xtask coverage`.
 pub fn coverage() -> Result<(), String> {
-    let cfg = tasks_config();
-    let r = coverage::check(&cfg)?;
+    let r = coverage::check(&tasks_config())?;
     println!("  lines: {}/{} ({:.1}%)", r.covered, r.total, r.line_pct);
-    let min = cfg.thresholds.coverage_overall;
-    println!("  coverage OK ({:.1}% >= {min}%)", r.line_pct);
+    println!("  coverage OK ({r})");
     Ok(())
 }
 
 /// The `validate` step.
 pub fn step() -> Step {
     Step::new("Coverage", "coverage", || {
-        let cfg = tasks_config();
-        let r = coverage::check(&cfg)?;
-        Ok(format!(
-            "{:.1}% >= {}%",
-            r.line_pct, cfg.thresholds.coverage_overall
-        ))
+        Ok(coverage::check(&tasks_config())?.to_string())
     })
 }
