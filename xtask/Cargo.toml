@@ -12,6 +12,24 @@ license = "MIT"
 [lints]
 workspace = true
 
+# Optional command groups. A project that has no use for one drops
+# it from `default` -- no code edits. `cargo xtask clippy` lints
+# every feature off and each one alone, so a dropped group leaves
+# no dead code behind. See "Optional xtask features" in CLAUDE.md.
+[features]
+default = ["frontend", "deploy", "template-tools", "clean-cache"]
+# The four `frontend-*` gates and subcommands (npm, svelte-check,
+# jscpd, vitest).
+frontend = []
+# `deploy` and `deploy-setup`.
+deploy = []
+# `/template-sync` and `/template-backfeed` support:
+# `sync-candidates`, `feedback-add`, `backfeed-diff`,
+# `backfeed-record`.
+template-tools = []
+# `clean-cache`.
+clean-cache = ["dep:windows-sys"]
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
@@ -24,4 +42,4 @@ rustbase-xtask = { path = "../crates/rustbase-xtask", features = ["clap"] }
 # value from windows-sys avoids a hand-typed Win32
 # magic number diverging from the OS header.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"], optional = true }

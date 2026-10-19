@@ -1,4 +1,5 @@
 use crate::helpers::{run_cargo_capture, run_cargo_stream};
+use crate::validate::Step;
 
 /// Maximum failure detail lines per test.
 const MAX_DETAIL_LINES: usize = 5;
@@ -110,6 +111,15 @@ pub fn test_check_xtask() -> Result<(), String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     report_failure(&stdout, &stderr)
+}
+
+/// The `validate` step: xtask's own tests only, since
+/// Coverage runs every other crate's tests.
+pub fn step() -> Step {
+    Step::new("Test (xtask only)", "test", || {
+        test_check_xtask()?;
+        Ok(String::new())
+    })
 }
 
 /// Print failure diagnostics to stderr and return the

@@ -4,6 +4,7 @@ use std::fs;
 use serde::Deserialize;
 
 use crate::helpers::{run_cargo_capture, workspace_root};
+use crate::validate::Step;
 
 /// Minimum line coverage percentage for the workspace
 /// as a whole. The validate pipeline fails when the
@@ -545,6 +546,17 @@ fn format_ranges(ranges: &[(u64, u64)]) -> String {
         }
     }
     parts.join(", ")
+}
+
+/// The `validate` step -- returns "N.N% >= 90%" detail.
+pub fn step() -> Step {
+    Step::new("Coverage", "coverage", || {
+        let r = coverage_check()?;
+        match r.error {
+            None => Ok(format!("{:.1}% >= {}%", r.line_pct, OVERALL_THRESHOLD)),
+            Some(failure) => Err(format_failure(&failure)),
+        }
+    })
 }
 
 /// Shorten a file path to just the part after `src/`.

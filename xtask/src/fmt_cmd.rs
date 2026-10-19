@@ -1,4 +1,18 @@
 use crate::helpers::{run_cargo_capture, run_cargo_stream};
+use crate::validate::Step;
+
+/// The `validate` step. Auto-fixes unless `check` selects the
+/// read-only path; empty detail on success.
+pub fn step(check: bool) -> Step {
+    Step::new("Fmt", "fmt", move || {
+        if check {
+            fmt_check()?;
+        } else {
+            fmt()?;
+        }
+        Ok(String::new())
+    })
+}
 
 /// Run `cargo fmt --all`.
 pub fn fmt() -> Result<(), String> {

@@ -2,6 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::helpers::cargo_bin;
+use crate::validate::Step;
 
 /// Maximum allowed exact duplication percentage
 /// (production code only, tests excluded).
@@ -25,6 +26,17 @@ pub fn dupes() -> Result<(), String> {
         }
         Some(err) => Err(err),
     }
+}
+
+/// The `validate` step.
+pub fn step() -> Step {
+    Step::new("Duplication", "dupes", || {
+        let r = dupes_check()?;
+        match r.error {
+            None => Ok(r.detail),
+            Some(err) => Err(err),
+        }
+    })
 }
 
 /// Run duplication check, return structured result.

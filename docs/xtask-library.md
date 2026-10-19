@@ -96,13 +96,20 @@ ignores. Knobs the survey found real projects need:
 
 ### Feature selection without code edits
 
-The template's `main.rs`, `validate.rs` and `helpers.rs` reference
-every module directly, so dropping a feature means editing shared
+The template's `main.rs`, `validate.rs` and `helpers.rs` referenced
+every module directly, so dropping a feature meant editing shared
 files; kozmotic carries ten `#[allow(dead_code)]` helpers just to
-compile. Before extracting the coupled modules, gates must be
-registered rather than hard-wired, and helpers must live with the
-gate that uses them. The library then exposes each gate as a step a
-project's `validate` includes or omits.
+compile.
+
+Done in breki/rustbase#5. The optional groups (`frontend`,
+`deploy`, `template-tools`, `clean-cache`) are Cargo features of
+`xtask`. Each gate builds its own `validate` step, and each group's
+helpers live in the group. `cargo xtask clippy` lints every feature
+off and each one alone, so dead code from a dropped group fails the
+gate (`CLAUDE.md`, "Optional xtask features"). Cargo features were
+chosen over a step registry a project edits, because dropping a
+group then needs no code edit and the result is lint-checked. The
+library can expose the same groups as its own optional features.
 
 ### Extension points
 
@@ -139,8 +146,8 @@ the library is a possible later step, not part of this plan.
 | `doc_cmd`, `canon` | library-ready; canon exemptions knob |
 | `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | library-ready (output parsing); take bombyx's and hoard's fixes |
 | `changelog`, `todo` | library-ready behind config; todo format pluggable (bombyx) |
-| `clean_cache`, `helpers` | split by user; Windows-only code stays behind `cfg` |
-| `validate` | becomes the step runner with registered gates |
+| `clean_cache`, `helpers` | split by user (done, #5); Windows-only code stays behind `cfg` |
+| `validate` | step runner; each gate supplies its `step()` (done, #5) |
 | `frontend*` | library-ready, optional feature |
 | `deploy*` | last; generic pieces (remote run, tag guard, staging, crash check) only, with hooks |
 | `backfeed`, `feedback`, `sync` | template-maintenance tools; stay in the template |
@@ -166,7 +173,7 @@ signature check, `.ports` reader, worktree setup and log tee.
 
 1. Settle the crate name and publish `0.1` with the cooldown module.
 2. Decouple feature selection: registered `validate` steps, helpers
-   grouped by user.
+   grouped by user (done: #5).
 3. Extract `audit`, `deny`, `coverage`, `dupes`, `doc_cmd`, `canon`,
    taking the downstream fixes listed above.
 4. Extract the output parsers (`check`, `clippy_cmd`, `test_cmd`,

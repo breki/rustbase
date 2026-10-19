@@ -25,10 +25,11 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::helpers::{
-    BACKFEED_LEDGER_REL, FEEDBACK_REL, is_fence, is_iso_date, today_iso,
-    workspace_root,
-};
+use crate::feedback::{FEEDBACK_REL, is_fence, today_iso};
+use crate::helpers::{is_iso_date, workspace_root};
+
+/// Repo-relative path of the machine-owned backfeed ledger.
+pub const BACKFEED_LEDGER_REL: &str = "docs/developer/backfeed-ledger.toml";
 
 /// Canonical header re-emitted on every ledger rewrite so the
 /// machine-owned file stays self-documenting.

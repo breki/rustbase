@@ -4,7 +4,17 @@
 //! web crate is optional); errors when the frontend exists
 //! but its `node_modules` is not installed.
 
-use crate::frontend::{FrontendResult, report_cmd, run_npm_script};
+use crate::frontend::{
+    FrontendResult, report_cmd, run_npm_script, step_result,
+};
+use crate::validate::Step;
+
+/// The `validate` step.
+pub fn step() -> Step {
+    Step::new("Frontend check", "frontend-check", || {
+        step_result(frontend_check()?)
+    })
+}
 
 /// Run `npm run check` in `frontend/`.
 pub fn frontend_check() -> Result<FrontendResult, String> {

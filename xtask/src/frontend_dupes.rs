@@ -7,7 +7,17 @@
 //! exit status -- unlike the Rust `dupes.rs`, no JSON is
 //! parsed here.
 
-use crate::frontend::{FrontendResult, report_cmd, run_npm_script};
+use crate::frontend::{
+    FrontendResult, report_cmd, run_npm_script, step_result,
+};
+use crate::validate::Step;
+
+/// The `validate` step.
+pub fn step() -> Step {
+    Step::new("Frontend dupes", "frontend-dupes", || {
+        step_result(frontend_dupes()?)
+    })
+}
 
 /// Run jscpd over the frontend sources.
 pub fn frontend_dupes() -> Result<FrontendResult, String> {

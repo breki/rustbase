@@ -28,6 +28,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::helpers::{is_iso_date, workspace_root};
+use crate::validate::Step;
 
 /// One thing canon claims that the tree does not support.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -715,6 +716,11 @@ pub fn canon_check_detail() -> Result<String, String> {
     } else {
         Err(render(&findings))
     }
+}
+
+/// The `validate` step.
+pub fn step() -> Step {
+    Step::new("Canon", "canon-check", canon_check_detail)
 }
 
 /// Run the checks standalone, printing the outcome.

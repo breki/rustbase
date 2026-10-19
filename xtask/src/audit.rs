@@ -24,6 +24,7 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::helpers::{is_missing_subcommand, run_cargo_capture};
+use crate::validate::Step;
 
 /// Parsed `cargo audit --json` result.
 #[derive(Debug, PartialEq, Eq)]
@@ -218,6 +219,22 @@ pub fn audit() -> Result<(), String> {
     } else {
         Err("audit could not complete (see warnings above)".into())
     }
+}
+
+/// The `validate` step. Fails on any vulnerability, but unlike
+/// the standalone command it only warns when the audit could
+/// not complete, so an offline run is not blocked.
+pub fn step() -> Step {
+    Step::new("Audit", "audit", || {
+        let r = audit_check();
+        if let Some(err) = r.error {
+            return Err(err);
+        }
+        for w in &r.warnings {
+            eprintln!("  warning: {w}");
+        }
+        Ok(r.detail)
+    })
 }
 
 #[cfg(test)]

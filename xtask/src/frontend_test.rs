@@ -7,7 +7,17 @@
 //! broken assertion or a runtime error in a `.test` file
 //! passes `validate` unnoticed.
 
-use crate::frontend::{FrontendResult, report_cmd, run_npm_script};
+use crate::frontend::{
+    FrontendResult, report_cmd, run_npm_script, step_result,
+};
+use crate::validate::Step;
+
+/// The `validate` step.
+pub fn step() -> Step {
+    Step::new("Frontend test", "frontend-test", || {
+        step_result(frontend_test()?)
+    })
+}
 
 /// Run `npm run test` (vitest) in `frontend/`.
 pub fn frontend_test() -> Result<FrontendResult, String> {

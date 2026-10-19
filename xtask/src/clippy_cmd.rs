@@ -1,4 +1,5 @@
 use crate::helpers::run_cargo_capture;
+use crate::validate::Step;
 
 /// Clippy argument list, shared between standalone and
 /// check modes.
@@ -26,7 +27,7 @@ pub fn clippy() -> Result<(), String> {
             Ok(())
         }
         Some(err) => {
-            eprintln!("FAILED: clippy warning(s)\n");
+            eprintln!("FAILED: {err}\n");
             for line in r.items.iter().take(MAX_WARNING_LINES) {
                 eprintln!("  {line}");
             }
@@ -41,6 +42,22 @@ pub fn clippy() -> Result<(), String> {
     }
 }
 
+/// The `validate` step; empty detail on success.
+pub fn step() -> Step {
+    Step::new("Clippy", "clippy", || {
+        let r = clippy_check()?;
+        match r.error {
+            None => Ok(String::new()),
+            Some(err) => {
+                for line in r.items.iter().take(5) {
+                    eprintln!("  {line}");
+                }
+                Err(err)
+            }
+        }
+    })
+}
+
 /// Result from a clippy run, for use by validate.
 pub struct ClippyResult {
     /// The warning/error lines (empty on success).
@@ -51,8 +68,41 @@ pub struct ClippyResult {
 
 /// Run clippy and return structured result without
 /// printing.
+///
+/// After the workspace pass, lints `xtask` once with every
+/// optional feature off and once with each feature alone. The
+/// default build compiles every group, so only these passes
+/// find a helper that turning a group off leaves dead, or a
+/// group that needs another one.
 pub fn clippy_check() -> Result<ClippyResult, String> {
-    let output = run_cargo_capture(CLIPPY_ARGS)?;
+    let r = run_clippy(CLIPPY_ARGS, "clippy warning(s)")?;
+    if r.error.is_some() {
+        return Ok(r);
+    }
+    let meta =
+        run_cargo_capture(&["metadata", "--format-version", "1", "--no-deps"])?;
+    if !meta.status.success() {
+        let stderr = String::from_utf8_lossy(&meta.stderr);
+        return Err(format!("cargo metadata failed:\n{stderr}"));
+    }
+    let meta: serde_json::Value = serde_json::from_slice(&meta.stdout)
+        .map_err(|e| format!("failed to parse cargo metadata: {e}"))?;
+    for set in feature_sets(&xtask_features(&meta)) {
+        let mut args = vec!["clippy", "-p", "xtask", "--all-targets"];
+        args.extend(set.iter().map(String::as_str));
+        args.extend(["--", "-D", "warnings"]);
+        let error = format!("clippy warning(s) in xtask `{}`", set.join(" "));
+        let r = run_clippy(&args, &error)?;
+        if r.error.is_some() {
+            return Ok(r);
+        }
+    }
+    Ok(r)
+}
+
+/// One clippy run; `error` names the run when it fails.
+fn run_clippy(args: &[&str], error: &str) -> Result<ClippyResult, String> {
+    let output = run_cargo_capture(args)?;
 
     if output.status.success() {
         return Ok(ClippyResult {
@@ -68,9 +118,40 @@ pub fn clippy_check() -> Result<ClippyResult, String> {
         .collect();
 
     Ok(ClippyResult {
-        error: Some("clippy warning(s)".into()),
+        error: Some(error.into()),
         items,
     })
+}
+
+/// The `xtask` package's optional features, sorted, from
+/// `cargo metadata` output. `default` is a list of the others,
+/// not a feature of its own.
+fn xtask_features(meta: &serde_json::Value) -> Vec<String> {
+    let mut features: Vec<String> = meta["packages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|p| p["name"] == "xtask")
+        .filter_map(|p| p["features"].as_object())
+        .flat_map(serde_json::Map::keys)
+        .filter(|k| *k != "default")
+        .cloned()
+        .collect();
+    features.sort();
+    features
+}
+
+/// The cargo arguments for each feature pass: all off, then
+/// each feature alone.
+fn feature_sets(features: &[String]) -> Vec<Vec<String>> {
+    let off = || vec!["--no-default-features".to_owned()];
+    let mut sets = vec![off()];
+    for f in features {
+        let mut set = off();
+        set.extend(["--features".to_owned(), f.clone()]);
+        sets.push(set);
+    }
+    sets
 }
 
 /// Extract clippy diagnostics from stderr, filtering out
@@ -163,6 +244,40 @@ error: aborting due to 1 previous error";
             generated again";
         let lines = extract_warning_lines(stderr);
         assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn xtask_features_reads_the_xtask_package_without_default() {
+        let meta = serde_json::json!({ "packages": [
+            { "name": "rustbase", "features": { "extra": [] } },
+            { "name": "xtask", "features": {
+                "default": ["frontend", "deploy"],
+                "frontend": [],
+                "deploy": [],
+            } },
+        ] });
+        assert_eq!(xtask_features(&meta), vec!["deploy", "frontend"]);
+    }
+
+    #[test]
+    fn xtask_features_is_empty_without_a_features_table() {
+        let meta = serde_json::json!({ "packages": [
+            { "name": "xtask", "features": {} },
+        ] });
+        assert!(xtask_features(&meta).is_empty());
+    }
+
+    #[test]
+    fn feature_sets_are_all_off_then_each_alone() {
+        let sets = feature_sets(&["deploy".into(), "frontend".into()]);
+        assert_eq!(
+            sets,
+            vec![
+                vec!["--no-default-features"],
+                vec!["--no-default-features", "--features", "deploy"],
+                vec!["--no-default-features", "--features", "frontend"],
+            ]
+        );
     }
 
     #[test]

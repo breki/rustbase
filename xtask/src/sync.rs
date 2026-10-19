@@ -12,7 +12,9 @@
 
 use std::process::Command;
 
-use crate::helpers::{BACKFEED_LEDGER_REL, FEEDBACK_REL, workspace_root};
+use crate::backfeed::BACKFEED_LEDGER_REL;
+use crate::feedback::FEEDBACK_REL;
+use crate::helpers::workspace_root;
 
 /// Template-internal paths that must never appear as sync
 /// candidates. A trailing `/` marks a directory prefix; every
