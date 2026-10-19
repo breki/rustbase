@@ -155,7 +155,7 @@ the library is a possible later step, not part of this plan.
 | `audit`, `deny` | extracted; `audit` takes a `Strictness` (fail or warn when it cannot finish), `deny` none: a missing tool always fails |
 | `coverage`, `dupes` | extracted; limits are `Config::thresholds`; kozmotic's coverage hardening (unreadable manifest, vacuous run) and jutro's pooled-plus-per-crate duplication limit taken (copies between crates unmeasured: #15) |
 | `doc_cmd`, `canon` | extracted; canon exemptions are `Config::canon` (`canon::Rules`), set in `tasks_config()` (`xtask/src/helpers.rs`) |
-| `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | library-ready (output parsing); take bombyx's and hoard's fixes |
+| `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | extracted (#7): one `Failure` report per gate, one shared cargo-diagnostic filter; bombyx's and hoard's `check` fixes taken |
 | `changelog`, `todo` | library-ready behind config; todo format pluggable (bombyx) |
 | `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
 | `validate` | step runner; each gate supplies its `step()` (done, #5) |
@@ -190,7 +190,8 @@ signature check, `.ports` reader, worktree setup and log tee.
 3. Extract `audit`, `deny`, `coverage`, `dupes`, `doc_cmd`, `canon`,
    taking the downstream fixes listed above (done: #6).
 4. Extract the output parsers (`check`, `clippy_cmd`, `test_cmd`,
-   `fmt_cmd`) and `changelog`/`todo` with a pluggable todo format.
+   `fmt_cmd`) and `changelog`/`todo` with a pluggable todo format
+   (#7; the parsers done).
 5. Extension points for project subcommands and steps.
 6. Migrate clockdump, then the other downstreams.
 7. Deploy: decide what, if anything, is shared.

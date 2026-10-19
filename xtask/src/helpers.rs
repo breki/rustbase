@@ -1,15 +1,6 @@
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
 use rustbase_xtask::canon::Exempt;
-pub use rustbase_xtask::text::{is_iso_date, pair_with_locations};
-
-/// Resolve the cargo binary path. Prefers the `CARGO`
-/// env var (set by cargo when running xtask) over a
-/// PATH lookup.
-pub fn cargo_bin() -> String {
-    std::env::var("CARGO").unwrap_or_else(|_| "cargo".into())
-}
+pub use rustbase_xtask::text::is_iso_date;
+use std::path::PathBuf;
 
 /// Resolve the workspace root (the parent of the xtask
 /// crate directory).
@@ -52,44 +43,6 @@ pub fn tasks_config() -> rustbase_xtask::Config {
     cfg
 }
 
-/// Run a cargo command and capture its output.
-///
-/// Strips ANSI codes via `CARGO_TERM_COLOR=never`.
-pub fn run_cargo_capture(args: &[&str]) -> Result<Output, String> {
-    let bin = cargo_bin();
-    Command::new(&bin)
-        .args(args)
-        .env("CARGO_TERM_COLOR", "never")
-        .output()
-        .map_err(|e| format!("failed to run {bin}: {e}"))
-}
-
-/// Run a cargo command, streaming output to the
-/// terminal. Used for `--verbose` mode and fmt.
-pub fn run_cargo_stream(args: &[&str]) -> Result<(), String> {
-    let bin = cargo_bin();
-    let status = Command::new(&bin)
-        .args(args)
-        .status()
-        .map_err(|e| format!("failed to run {bin}: {e}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        match status.code() {
-            Some(code) => Err(format!("{bin} exited with {code}")),
-            None => Err(format!("{bin} terminated by signal")),
-        }
-    }
-}
-
-/// Return the last `n` non-empty lines of `stderr`.
-pub fn stderr_tail(stderr: &str, n: usize) -> Vec<&str> {
-    let mut lines: Vec<&str> =
-        stderr.lines().filter(|l| !l.trim().is_empty()).collect();
-    let start = lines.len().saturating_sub(n);
-    lines.drain(..start);
-    lines
-}
 /// Canonical markdown column width for the project (matches the
 /// 80-column rule in `rustfmt.toml`). Shared by the `changelog`
 /// and `todo` bullet writers.
@@ -206,20 +159,6 @@ mod tests {
         ] {
             assert!(paths.contains(&p), "{p} not exempt: {paths:?}");
         }
-    }
-
-    #[test]
-    fn stderr_tail_returns_last_n_non_empty() {
-        let stderr = "one\n\ntwo\nthree\n\nfour\n";
-        let tail = stderr_tail(stderr, 2);
-        assert_eq!(tail, vec!["three", "four"]);
-    }
-
-    #[test]
-    fn stderr_tail_handles_short_input() {
-        let stderr = "only-one";
-        let tail = stderr_tail(stderr, 5);
-        assert_eq!(tail, vec!["only-one"]);
     }
 
     #[test]
