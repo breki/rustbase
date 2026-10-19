@@ -12,11 +12,14 @@
 use std::path::PathBuf;
 
 pub mod audit;
+pub mod canon;
 pub mod coverage;
 pub mod deny;
 pub mod dep_age;
+pub mod doc;
 pub mod dupes;
 mod process;
+pub mod text;
 
 /// The project's `xtask` package, left out of the coverage and
 /// duplication measurements: a binary of glue around this library.
@@ -58,12 +61,14 @@ pub struct Config {
     pub user_agent: String,
     /// The coverage and duplication limits.
     pub thresholds: Thresholds,
+    /// The canon check's exemptions and limits.
+    pub canon: canon::Rules,
 }
 
 impl Config {
     /// The defaults for a project called `project`:
     /// `<PROJECT>_DEP_AGE_ALLOW`, `<project>-xtask-dep-age` and
-    /// the default [`Thresholds`].
+    /// the default [`Thresholds`] and canon [`Rules`](canon::Rules).
     pub fn for_project(project: &str, root: PathBuf) -> Self {
         let prefix = project.to_ascii_uppercase().replace('-', "_");
         Self {
@@ -71,6 +76,7 @@ impl Config {
             dep_age_allow_env: format!("{prefix}_DEP_AGE_ALLOW"),
             user_agent: format!("{project}-xtask-dep-age"),
             thresholds: Thresholds::default(),
+            canon: canon::Rules::default(),
         }
     }
 }

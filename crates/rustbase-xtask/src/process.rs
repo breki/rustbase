@@ -24,11 +24,22 @@ pub(crate) struct Captured {
 /// Run `cargo <args>` in `root`, colour off. Prefers the `CARGO`
 /// env var (set when cargo runs xtask) over a `PATH` lookup.
 pub(crate) fn cargo(root: &Path, args: &[&str]) -> Result<Captured, String> {
+    cargo_env(root, args, &[])
+}
+
+/// [`cargo`] with extra environment variables, for settings cargo
+/// takes only from the environment (such as `RUSTDOCFLAGS`).
+pub(crate) fn cargo_env(
+    root: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> Result<Captured, String> {
     let bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cmd = Command::new(&bin);
     cmd.current_dir(root)
         .args(args)
-        .env("CARGO_TERM_COLOR", "never");
+        .env("CARGO_TERM_COLOR", "never")
+        .envs(env.iter().copied());
     run(cmd, &bin)
 }
 
