@@ -43,6 +43,11 @@ and this project adheres to
 - `cargo xtask dep-age <eco> <pkg> --latest-aged --within <line>` keeps the pin
   target on one release line (`3`, `3.x`, `0.4`), so it can no longer suggest a
   major the tree cannot use (#1).
+- A `crates/rustbase-xtask` library crate (prototype, unpublished) now holds the
+  dependency-cooldown gate; the template's `xtask` calls it with a per-project
+  `Config` (`Config::for_project` derives the `<NAME>_DEP_AGE_ALLOW` variable
+  and registry user agent). `docs/xtask-library.md` records the investigation
+  and recommendation (#2).
 
 ### Changed
 

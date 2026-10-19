@@ -32,16 +32,15 @@
 //! its own resolution quirks (`ERESOLVE`, the `cd frontend`
 //! trap) and is left to `/update-deps`.
 
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::process::Command;
-
-use super::gate::{git_show, new_locked_versions, parse_cargo_lock};
+use super::gate::{new_locked_versions, parse_cargo_lock};
+use super::io::{cargo_update_precise, git_show};
 use super::{
     COOLDOWN_DAYS, Ecosystem, age_in_days, cargo_versions, fetch_registry,
     today_days, version_key,
 };
-use crate::helpers::workspace_root;
+use crate::Config;
+use std::collections::{HashMap, HashSet};
+use std::fs;
 
 /// Safety backstop on the pin-and-re-resolve loop. Each pin
 /// permanently ages one crate, and the dependency tree is
@@ -125,9 +124,9 @@ type FetchVersions<'a> = &'a dyn Fn(&str) -> Result<Vec<(String, i64)>, String>;
 type Pin<'a> = &'a dyn Fn(&str, &str, &str) -> Result<(), String>;
 
 /// Injected I/O so the loop [`run`] is fully unit-testable with
-/// fakes. The real implementations ([`real_io`]) shell out to
-/// git, curl, and `cargo update`; the tests substitute
-/// closures.
+/// fakes. The real implementations (wired in
+/// [`dep_preflight`]) shell out to git, curl, and
+/// `cargo update`; the tests substitute closures.
 pub(super) struct Io<'a> {
     /// Read the working-tree `Cargo.lock` text.
     pub read_lock: ReadLock<'a>,
@@ -276,59 +275,42 @@ pub(super) fn run(io: &Io) -> Result<Report, String> {
 }
 
 /// Read the working-tree `Cargo.lock`.
-fn real_read_lock() -> Result<String, String> {
-    let path = workspace_root().join("Cargo.lock");
+fn real_read_lock(cfg: &Config) -> Result<String, String> {
+    let path = cfg.root.join("Cargo.lock");
     fs::read_to_string(&path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))
 }
 
 /// `(version, publish-day)` for a crate from crates.io.
-fn real_fetch_versions(name: &str) -> Result<Vec<(String, i64)>, String> {
-    let json = fetch_registry(Ecosystem::Cargo, name)?;
+fn real_fetch_versions(
+    cfg: &Config,
+    name: &str,
+) -> Result<Vec<(String, i64)>, String> {
+    let json = fetch_registry(cfg, Ecosystem::Cargo, name)?;
     Ok(cargo_versions(&json))
-}
-
-/// Pin `name@current` to `target` via `cargo update --precise`
-/// (index-only; no fetch of tarballs, no compile). Run through
-/// the process working directory, not `git -C`/`cargo -C`, to
-/// stay coverable by a blanket permission rule.
-fn real_pin(name: &str, current: &str, target: &str) -> Result<(), String> {
-    let spec = format!("{name}@{current}");
-    let output = Command::new("cargo")
-        .current_dir(workspace_root())
-        .args(["update", "-p", &spec, "--precise", target])
-        .output()
-        .map_err(|e| format!("failed to run cargo update: {e}"))?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
-    }
-}
-
-/// The `HEAD:Cargo.lock` baseline, or `None` when it is absent
-/// (no commit yet, path not tracked, git unavailable).
-fn real_baseline_lock() -> Option<String> {
-    git_show("HEAD", "Cargo.lock")
-}
-
-/// Wire the real shell-out I/O.
-fn real_io() -> Io<'static> {
-    Io {
-        read_lock: &real_read_lock,
-        baseline_lock: &real_baseline_lock,
-        fetch_versions: &real_fetch_versions,
-        pin: &real_pin,
-        today: today_days(),
-    }
 }
 
 /// `cargo xtask dep-preflight` entry point. Prints what was
 /// pinned and any warnings; errors when the tree cannot be
 /// certified clear of the cooldown so the operator does not
 /// build on an unremediated (or unverified) change.
-pub fn dep_preflight() -> Result<(), String> {
-    let report = run(&real_io())?;
+pub fn dep_preflight(cfg: &Config) -> Result<(), String> {
+    // The real shell-out I/O; `None` from the baseline means no
+    // commit yet, the path is not tracked, or git is missing.
+    let read_lock = || real_read_lock(cfg);
+    let baseline_lock = || git_show(&cfg.root, "HEAD", "Cargo.lock");
+    let fetch_versions = |name: &str| real_fetch_versions(cfg, name);
+    let pin = |name: &str, current: &str, target: &str| {
+        cargo_update_precise(&cfg.root, name, current, target)
+    };
+    let io = Io {
+        read_lock: &read_lock,
+        baseline_lock: &baseline_lock,
+        fetch_versions: &fetch_versions,
+        pin: &pin,
+        today: today_days(),
+    };
+    let report = run(&io)?;
 
     for p in &report.pinned {
         println!("  pinned {p}");
@@ -479,6 +461,74 @@ mod tests {
         assert!(r.clean);
         assert!(r.pinned.is_empty(), "{:?}", r.pinned);
         assert_eq!(r.iterations, 1);
+    }
+
+    #[test]
+    fn run_reports_a_crate_missing_from_the_registry() {
+        let base_lock = lock(&[]);
+        let current = lock(&[("ghost", "9.9.9")]);
+        let read = || Ok(current.clone());
+        let base = || Some(base_lock.clone());
+        let fetch = |_: &str| Ok(vec![("1.0.0".to_string(), day(2026, 1, 1))]);
+        let pin = |_: &str, _: &str, _: &str| Ok(());
+        let io = Io {
+            read_lock: &read,
+            baseline_lock: &base,
+            fetch_versions: &fetch,
+            pin: &pin,
+            today: TODAY(),
+        };
+        let r = run(&io).unwrap();
+        assert!(!r.clean);
+        assert!(
+            r.warnings.iter().any(|w| w.contains("not in the registry")),
+            "{:?}",
+            r.warnings
+        );
+    }
+
+    #[test]
+    fn run_gives_up_at_its_round_ceiling() {
+        // Each round surfaces a different fresh crate, so every
+        // round makes progress and only the ceiling stops it.
+        let base_lock = lock(&[]);
+        let round = RefCell::new(0u32);
+        let read = || {
+            *round.borrow_mut() += 1;
+            let name = format!("c{}", round.borrow());
+            Ok(lock(&[(name.as_str(), "1.5.0")]))
+        };
+        let base = || Some(base_lock.clone());
+        let fetch = |_: &str| {
+            Ok(vec![
+                ("1.4.0".to_string(), day(2026, 6, 1)),
+                ("1.5.0".to_string(), day(2026, 7, 14)),
+            ])
+        };
+        let pin = |_: &str, _: &str, _: &str| Ok(());
+        let io = Io {
+            read_lock: &read,
+            baseline_lock: &base,
+            fetch_versions: &fetch,
+            pin: &pin,
+            today: TODAY(),
+        };
+        let r = run(&io).unwrap();
+        assert!(!r.clean);
+        assert_eq!(r.iterations, MAX_ITERS);
+        assert!(
+            r.warnings.iter().any(|w| w.contains("did not converge")),
+            "{:?}",
+            r.warnings
+        );
+    }
+
+    #[test]
+    fn the_entry_point_passes_an_unchanged_repo() {
+        let repo =
+            crate::test_repo::with_lock(&lock(&[("serde", "1.0.0")]), true);
+        let cfg = Config::for_project("t", repo.0.clone());
+        assert!(dep_preflight(&cfg).is_ok());
     }
 
     #[test]

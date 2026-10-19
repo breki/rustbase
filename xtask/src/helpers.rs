@@ -225,6 +225,13 @@ pub fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// This project's settings for the shared `rustbase-xtask`
+/// gates. A derived project changes the name here (and with it
+/// the `<NAME>_DEP_AGE_ALLOW` variable and the user agent).
+pub fn tasks_config() -> rustbase_xtask::Config {
+    rustbase_xtask::Config::for_project("rustbase", workspace_root())
+}
+
 /// Run a cargo command and capture its output.
 ///
 /// Strips ANSI codes via `CARGO_TERM_COLOR=never`.

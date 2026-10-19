@@ -1,0 +1,21 @@
+[package]
+name = "rustbase-xtask"
+version = "0.1.0"
+edition = "2024"
+# Working name; a prototype of the shared tooling library
+# investigated in breki/rustbase#2. Not published until that
+# investigation settles the name and API.
+publish = false
+license = "MIT"
+description = "Shared cargo-xtask tooling for rustbase-derived projects"
+
+[lints]
+workspace = true
+
+[features]
+# Derive `clap::ValueEnum` on the public enums, for an xtask CLI.
+clap = ["dep:clap"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"], optional = true }
+serde_json = "1"
