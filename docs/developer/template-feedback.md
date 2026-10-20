@@ -30,7 +30,7 @@ section they belong to.
 
 ## Open divergences
 
-### tf-2026-05-17-build-ps1-build-command-double-validates -- `build.ps1 build` command double-validates
+### tf-2026-04-10-build-ps1-build-command-double-validates -- `build.ps1 build` command double-validates
 
 `Invoke-Build` (line 36) calls `Invoke-Validate`, which
 runs `cargo xtask validate` (fmt + clippy + test +
@@ -54,7 +54,7 @@ users understand the cost. Alternatively, consider a
 against the release profile directly, avoiding the
 redundant debug build.
 
-### tf-2026-05-17-playwright-fixture-isolation-pattern-not-shipped -- Playwright fixture-isolation pattern not shipped
+### tf-2026-04-16-playwright-fixture-isolation-pattern-not-shipped -- Playwright fixture-isolation pattern not shipped
 
 `rustbase-web` has no persistent data -- `/api/status`
 and `/api/greeting` return static values -- so a
@@ -1018,7 +1018,7 @@ because hoard's deploy was specific to a Raspberry Pi
 porting hoard's deploy-as-xtask pattern (generalized
 for any Linux+systemd target) into the template.
 
-### tf-2026-05-17-vite-config-js-uses-commonjs-dirname-in-esm-cont -- `vite.config.js` uses CommonJS `__dirname` in ESM context
+### tf-2026-04-10-vite-config-js-uses-commonjs-dirname-in-esm-cont -- `vite.config.js` uses CommonJS `__dirname` in ESM context
 
 `frontend/package.json` declares `"type": "module"`,
 which means all `.js` files are ES modules. However,
@@ -1030,7 +1030,7 @@ idiomatic and would break if copy-pasted elsewhere.
 **Fix:** Replaced with `import.meta.dirname`
 (available since Node 21.2 / 22+).
 
-### tf-2026-05-17-tokio-used-features-full-unnecessarily -- Tokio used `features = ["full"]` unnecessarily
+### tf-2026-04-10-tokio-used-features-full-unnecessarily -- Tokio used `features = ["full"]` unnecessarily
 
 `crates/rustbase-web/Cargo.toml` depended on
 `tokio = { version = "1", features = ["full"] }`. The
@@ -1041,7 +1041,7 @@ binary size.
 **Fix:** Replaced with explicit feature list
 (`["macros", "rt-multi-thread", "net", "signal"]`).
 
-### tf-2026-05-17-health-endpoint-returned-plain-text-not-json -- `/health` endpoint returned plain text, not JSON
+### tf-2026-04-10-health-endpoint-returned-plain-text-not-json -- `/health` endpoint returned plain text, not JSON
 
 The `/health` endpoint returned `"OK"` as plain text,
 while `/api/status` and `/api/greeting` both returned
@@ -1051,7 +1051,7 @@ that expect JSON.
 **Fix:** `/health` now returns `{ "status": "ok" }`
 with `Content-Type: application/json`.
 
-### tf-2026-05-17-release-workflow-assumed-7z-is-available-on-wind -- Release workflow assumed `7z` is available on Windows
+### tf-2026-04-10-release-workflow-assumed-7z-is-available-on-wind -- Release workflow assumed `7z` is available on Windows
 
 `.github/workflows/release.yml` used `7z a "${STAGING}.zip" ...`.
 GitHub-hosted Windows runners include 7-Zip, but
@@ -1060,7 +1060,7 @@ self-hosted runners may not.
 **Fix:** Replaced with PowerShell's built-in
 `Compress-Archive`, requiring no external tools.
 
-### tf-2026-05-17-release-notes-extraction-from-changelog-was-frag -- Release notes extraction from CHANGELOG was fragile
+### tf-2026-04-10-release-notes-extraction-from-changelog-was-frag -- Release notes extraction from CHANGELOG was fragile
 
 The release workflow used an `awk` script to extract
 notes by heading match. Format deviations would
@@ -1071,7 +1071,7 @@ when CHANGELOG extraction produces empty release notes;
 extraction uses exact version match instead of
 substring.
 
-### tf-2026-05-17-no-frontend-linting-or-formatting-tools -- No frontend linting or formatting tools
+### tf-2026-04-10-no-frontend-linting-or-formatting-tools -- No frontend linting or formatting tools
 
 The Rust side had strict quality gates; the frontend
 had nothing comparable. No ESLint config, no Prettier
@@ -1084,7 +1084,7 @@ Prettier with `prettier-plugin-svelte`. `lint`,
 `frontend/package.json`. `svelte-check` step added to
 `cargo xtask validate`.
 
-### tf-2026-05-17-no-frontend-unit-test-infrastructure -- No frontend unit test infrastructure
+### tf-2026-04-10-no-frontend-unit-test-infrastructure -- No frontend unit test infrastructure
 
 The template included Playwright for E2E but had no
 setup for unit/component tests in isolation.

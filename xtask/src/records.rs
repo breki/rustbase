@@ -1,7 +1,7 @@
 //! `cargo xtask records-check`: the shared library's integrity check
-//! of the record files (the work queue and the backlogs): the
-//! library's default list, unless `tasks_config()` sets
-//! `record_files`.
+//! of the record files (the work queue, the reviewer logs and the
+//! template feedback): the library's default list, unless
+//! `tasks_config()` sets `record_files`.
 
 use rustbase_xtask::records;
 

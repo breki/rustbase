@@ -614,13 +614,14 @@ fn is_backlog_id(word: &str) -> bool {
     is_iso_date(date) && slug.len() > 1 && slug.starts_with('-')
 }
 
-/// The `### <id>` headings in a backlog file.
+/// The backlog ids of a backlog file's entries, read by the records
+/// parser so this check and `records-check` agree on what an entry
+/// is.
 fn ids_in_backlog(content: &str) -> BTreeSet<String> {
-    content
-        .lines()
-        .filter_map(|l| l.strip_prefix("### "))
-        .map(|s| s.trim().to_string())
-        .filter(|s| is_backlog_id(s))
+    crate::records::parse(content)
+        .into_iter()
+        .map(|e| e.id)
+        .filter(|id| is_backlog_id(id))
         .collect()
 }
 
@@ -724,7 +725,9 @@ fn collect(
     }
 
     // The reviewer logs every rustbase-derived project keeps; the
-    // location is fixed, not part of `Rules`.
+    // location is fixed, not part of `Rules`. Found by their
+    // `-log.md` name, unlike `records-check`, which reads
+    // `Config::record_files`: a new log goes in that list too.
     let mut known_ids = BTreeSet::new();
     if let Ok(entries) = std::fs::read_dir(root.join("docs/developer")) {
         for e in entries.filter_map(Result::ok) {
@@ -1277,6 +1280,15 @@ mod tests {
             ids_in_backlog("# Log\n\n### rt-2026-09-03-one\n\n### Not an id\n");
         assert_eq!(ids.len(), 1);
         assert!(ids.contains("rt-2026-09-03-one"));
+    }
+
+    #[test]
+    fn backlog_headings_are_read_as_the_records_check_reads_them() {
+        // A titled heading is an entry; one in a code block is not.
+        let ids = ids_in_backlog(
+            "### rt-2026-09-03-two -- A title\n\n```\n### rt-2026-09-03-x\n```\n",
+        );
+        assert_eq!(ids, BTreeSet::from(["rt-2026-09-03-two".to_owned()]));
     }
 
     #[test]

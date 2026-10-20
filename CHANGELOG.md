@@ -99,9 +99,17 @@ and this project adheres to
   (`docs/todo.md`, the three reviewer logs and
   `docs/developer/template-feedback.md`) for an id used twice, an id that is not
   kebab-case, an unknown field label, and a `Depends on` / `Supersedes` id that
-  names no entry. The 37 template-feedback entries whose headings had no id now
-  carry a `tf-<date>-<slug>` id, dated from the heading or, when it had none,
-  from when it first appeared in git.
+  names no entry; a configured file that does not exist is skipped and named.
+  The 37 template-feedback entries whose headings had no id now carry a
+  `tf-<date>-<slug>` id, dated from the heading or, when it had none, from when
+  the entry first appeared in git. A derived project whose feedback file still
+  has headings without a `tf-` id (`### 2026-05-18 -- title`, or a title alone)
+  converts them once by hand, the one exception `/template-improve`'s rules
+  allow to that file's no-hand-edit rule. `feedback-add` now refuses a body the
+  check would reject (one opening with an unknown `**Label:**`, holding a
+  column-0 `### ` line outside a code block, or leaving a code block open), and
+  `todo list`/`add`/`done` refuse any `###` heading in `docs/todo.md` that is
+  not an item.
 
 ### Changed
 
