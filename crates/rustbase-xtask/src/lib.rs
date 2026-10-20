@@ -186,7 +186,8 @@ pub struct Thresholds {
     /// Maximum exact duplication pooled across crates: duplicate
     /// lines over total lines, each crate measured alone. A crate of
     /// 1000 lines with 10 duplicated and one of 50 with 5 pool to
-    /// 15/1050 = 1.4%. Copies between crates are not measured.
+    /// 15/1050 = 1.4%. Copies between crates are not measured, by
+    /// design.
     pub dupes_workspace: f64,
     /// Maximum exact duplication in any one crate. Wider than
     /// the workspace limit: one copied block is a large share of
