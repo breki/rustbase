@@ -173,8 +173,8 @@ impl Slug {
         if !is_slug(raw) {
             return Err(format!(
                 "slug '{raw}' is not kebab-case; use lowercase letters, \
-                 digits and dashes, the only shape docs/todo.md can be read \
-                 back as"
+                 digits and dashes, starting with a letter: the only shape \
+                 docs/todo.md can be read back as"
             ));
         }
         Ok(Self(raw.to_owned()))
