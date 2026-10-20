@@ -183,7 +183,7 @@ only std and `serde_json` beyond its project's own helpers.
 | hoard `repo_hygiene` (scripts staged executable) | 231 | moved (#28): `scripts`, the Scripts step | nothing: the `scripts/` convention |
 | jutro `tag_signature` (SSH-signed release tags) | 409 | moved (#32) as `tag_signature`, `verify-release-tag`; `/release` signs and runs it when `.github/release-signers` is tracked | placeholder strings naming jutro, now generic |
 | jutro `xtask_log` (tee output to `target/<name>.log`) | 421 | moved (#29) as `tee`, used by `validate`; its cargo-streaming variants stay in jutro | nothing |
-| jutro `ports` (`.ports` reader) | 312 | move, frontend projects only | the web stack's default ports |
+| jutro `ports` (`.ports` reader) | 312 | keep (#33): reads only the two dev ports, its callers (`worktree`, `local-redeploy`, `shot`, `frontend-dev`) are jutro's own, and no other downstream or the template reads `.ports` from Rust | the web stack's default ports |
 | jutro `worktree` (a worktree with free ports) | 573 | keep | the `jutro-` prefix, `ports`, `vite`, npm |
 | hoard `systemd_unit` (unit-file parser) | 435 | keep; too niche | its embedded unit file and paths |
 
