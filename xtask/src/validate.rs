@@ -10,6 +10,7 @@ use crate::dep_age_gate;
 use crate::doc_cmd;
 use crate::dupes;
 use crate::fmt_cmd;
+use crate::records;
 use crate::step::Step;
 use crate::test_cmd;
 #[cfg(feature = "frontend")]
@@ -39,6 +40,7 @@ fn steps(check: bool) -> Vec<Step> {
         // Reads markdown only, so it needs no compilation and
         // sits ahead of every gate that does.
         canon::step(),
+        records::step(),
         dupes::step(),
         clippy_cmd::step(),
         // Reuses the metadata Clippy just produced, so both rustdoc

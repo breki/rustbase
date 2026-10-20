@@ -95,6 +95,13 @@ and this project adheres to
   `/release` now calls both instead of doing the work in prose. The
   `rustbase-xtask` library holds `changelog` and a public `markdown` module
   (part of #7).
+- `cargo xtask records-check`, also a `validate` step: checks the record files
+  (`docs/todo.md`, the three reviewer logs and
+  `docs/developer/template-feedback.md`) for an id used twice, an id that is not
+  kebab-case, an unknown field label, and a `Depends on` / `Supersedes` id that
+  names no entry. The 37 template-feedback entries whose headings had no id now
+  carry a `tf-<date>-<slug>` id, dated from the heading or, when it had none,
+  from when it first appeared in git.
 
 ### Changed
 

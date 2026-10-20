@@ -90,6 +90,7 @@ cargo xtask test --ignored    # run #[ignore]-tagged tests
 cargo xtask clippy            # lint (+ xtask: all features off, each alone)
 cargo xtask doc               # rustdoc twice (public + private), links must resolve
 cargo xtask canon-check       # claims canon prose makes: paths, xrefs, grants, width
+cargo xtask records-check     # record files: ids unique and well-formed, refs resolve
 cargo xtask coverage          # coverage only (>=90%)
 cargo xtask fmt               # format code
 cargo xtask dupes             # code duplication check
@@ -633,7 +634,16 @@ just when the code compiles:
     width in tables, fences, frontmatter and 4-space-indented
     lines; `.claude/skills/` and the rest of `docs/`. A green
     gate says nothing about these
-14. **Doc links** (`cargo xtask doc`) -- rustdoc with
+14. **Record files** (`cargo xtask records-check`) -- reads
+    the work queue, the three reviewer logs and the template
+    feedback (`Config::record_files`), where each entry opens
+    with a `### <id>` heading and a block of `**Label:**`
+    fields. Fails on an id used twice across the files, an id
+    that is not kebab-case, a field label outside the known
+    set (`Category`, `Summary`, `Source`, `Issue`, `Depends
+    on`, `Supersedes`), and a `Depends on` or `Supersedes` id
+    that names no entry. An id cited in prose is not checked
+15. **Doc links** (`cargo xtask doc`) -- rustdoc with
     `-D warnings`, twice: once public and once with
     `--document-private-items`, because each pass sees a
     class of broken link the other cannot
@@ -644,7 +654,7 @@ in, and `validate` refuses to run while `frontend/` exists.
 The dependency-cooldown gate runs **first** (it is a
 no-op on unchanged lockfiles, and fails fast on a within
 -cooldown dependency before anything compiles it); after it
-the gates run cheapest-first (Fmt, Canon, Duplication,
+the gates run cheapest-first (Fmt, Canon, Records, Duplication,
 Clippy, Doc, Deny, then the frontend static gates) before the
 expensive dynamic gates
 (frontend + Rust tests, Coverage, then the network Audit), and
