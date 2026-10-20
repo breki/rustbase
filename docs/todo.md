@@ -16,8 +16,10 @@ into the reference docs first -- see the `/implement` skill.
 Each item is a headed entry: an `### <slug>` heading, a
 `**Summary:**` line, then any prose body. Add and complete items
 through `cargo xtask todo`; completing one removes it, and git
-history records what shipped. A body may be edited directly, as
-long as the heading and Summary lines are left intact.
+history records what shipped. The file is this introduction, then
+items only: `list`, `add` and `done` refuse a non-item heading after the
+first item. Do not hand-edit it: `todo add` refuses a body line that
+would read as a heading, and a hand edit can slip one in.
 
 ### xtask-strip-web
 
@@ -52,18 +54,6 @@ ignore filter (doubles the slowest gate) or counting the excluded files
 line-by-line; the per-file floor has the same blind spot. Not a mechanical port
 -- bombyx only suggested it, never implemented it.
 
-### todo-edit-subcommand
-
-**Summary:** Add `cargo xtask todo edit` to revise a captured entry
-
-The `/todo` rules forbid hand-editing an entry's heading and Summary line, but
-`todo` offers only list/add/done, so a correction to a captured summary forces a
-hand edit or a duplicate slug describing the same work. Add `todo edit --slug
-<slug>` that rewrites the summary, the body, or both through the existing render
-path, so a revised entry is indistinguishable from a fresh one; the reader
-already tolerates a multi-paragraph body, and the writer must preserve that.
-Sourced from bombyx template feedback (2026-08-30).
-
 ### drop-npm-cooldown-pins
 
 **Summary:** Remove the npm cooldown pins after 2026-11-01
@@ -90,3 +80,16 @@ all left pointing at a web server that no longer exists. Extend the recipe: drop
 `deploy` from xtask's default features, prune build.ps1's deploy targets, delete
 deploy/ and docs/deployment.md, add `deploy` to the step-6 sweep names. Found by
 red-team (RT-1) while reviewing issue #5.
+
+### todo-edit-subcommand
+
+**Summary:** Add `cargo xtask todo edit` to revise a captured entry
+
+The `/todo` rules forbid hand-editing `docs/todo.md`, but `todo` offers only
+list/add/done, so a correction to a captured item forces a hand edit or a
+duplicate slug describing the same work. Add `todo edit --slug <slug>` that
+rewrites the summary, the body, or both through the existing wrap-and-render
+path, so a revised entry is indistinguishable from a fresh one; the reader
+already tolerates a multi-paragraph body, and the writer must preserve that.
+Failing that, soften the rule in `.claude/commands/todo.md` to name the edit the
+tooling cannot make. Sourced from bombyx template feedback (2026-08-30).

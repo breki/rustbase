@@ -113,7 +113,10 @@ fn is_target_section(line: &str, kw: &str) -> bool {
 
 /// Index of the first section header matching `kw`, skipping
 /// any `## `-looking line inside a fenced code block so a code
-/// sample cannot be chosen as the insertion point.
+/// sample cannot be chosen as the insertion point. Feedback entries
+/// are written at column 0 (`### <id> -- <title>`, body unindented),
+/// so `rustbase_xtask::markdown::section_bounds`'s column-0-only rule
+/// does not hold here and fences must be tracked.
 fn find_section(lines: &[&str], kw: &str) -> Option<usize> {
     let mut in_fence = false;
     for (idx, l) in lines.iter().enumerate() {
@@ -259,13 +262,9 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 }
 
 /// True when `line` opens or closes a fenced code block (its
-/// first non-whitespace run is ```` ``` ```` or `~~~`).
-///
-/// Unlike `CHANGELOG.md` and `docs/todo.md`, whose entries are
-/// indented under a bullet, feedback entries are written at column 0
-/// (`### <id> -- <title>`, body unindented). The library's
-/// column-0-only section rule does not hold here, so `find_section`
-/// tracks fences to skip a `## ` line inside a code sample.
+/// first non-whitespace run is ```` ``` ```` or `~~~`). A copy of
+/// `rustbase_xtask::markdown::is_fence`, pending
+/// fr-2026-10-20-feedback-keeps-its-own-is-fence.
 pub fn is_fence(line: &str) -> bool {
     let t = line.trim_start();
     t.starts_with("```") || t.starts_with("~~~")

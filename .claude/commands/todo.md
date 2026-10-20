@@ -36,17 +36,21 @@ the user's words into a slug and a summary.
 
    ```
    cargo -q xtask todo add --slug <slug> \
-     --summary "<one-line summary, <= 80 chars>"
+     --summary "<one-line summary, <= 67 chars>"
    ```
 
    Add `--body "<longer text>"` when the user gave
-   more than a one-liner (kept verbatim, wrapped by the
-   command). The command refuses a slug that already
+   more than a one-liner (the user's words, with
+   paragraphs reflowed to 80 columns by the command).
+   The command refuses a slug that already
    exists; if it errors on a collision, append `-2` /
    `-3` to the slug and retry. It also refuses a summary
    that will not fit one 80-column line (move the detail
    into `--body`) and a body line that would read as a
-   heading.
+   heading. If it reports that `docs/todo.md` uses the old
+   Pending/Done layout, stop and hand the conversion to the
+   operator: its error says how, and converting is the one
+   hand edit this command does not make.
    Keep the user's wording -- do not paraphrase or
    expand.
 

@@ -39,11 +39,7 @@ pub fn todo(action: TodoAction) -> Result<(), String> {
     match action {
         TodoAction::List => {
             for item in todo::list(&cfg)? {
-                if item.summary.is_empty() {
-                    println!("{}", item.slug);
-                } else {
-                    println!("{} -- {}", item.slug, item.summary);
-                }
+                println!("{item}");
             }
         }
         TodoAction::Add {

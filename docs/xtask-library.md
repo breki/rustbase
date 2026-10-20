@@ -97,7 +97,8 @@ ignores. Knobs the survey found real projects need:
 
 - project name (env-var prefix, user agent, temp-dir prefix);
 - primary crate manifest path (version source, deploy guard);
-- todo file location and format; feedback-file sections;
+- feedback-file sections (the todo file is fixed: `docs/todo.md`, one
+  layout);
 - thresholds: coverage overall/file, duplication pooled/per crate,
   module size, the cooldown window;
 - strictness of the network gates (fail or warn when they cannot
@@ -156,7 +157,7 @@ the library is a possible later step, not part of this plan.
 | `coverage`, `dupes` | extracted; limits are `Config::thresholds`; kozmotic's coverage hardening (unreadable manifest, vacuous run) and jutro's pooled-plus-per-crate duplication limit taken (copies between crates unmeasured: #15) |
 | `doc_cmd`, `canon` | extracted; canon exemptions are `Config::canon` (`canon::Rules`), set in `tasks_config()` (`xtask/src/helpers.rs`) |
 | `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | extracted (#7) as the library's `check`, `clippy`, `cargo_test` and `fmt`: one `Failure` report per gate, a tail of the output when nothing else is found, one shared cargo-diagnostic filter; bombyx's drop of per-target `could not compile` lines and hoard's single-report `check` error taken |
-| `changelog`, `todo` | extracted (#7): `changelog` with jutro's `infer-bump` / `promote`; the markdown helpers as `markdown` with hoard's hardening (CRLF-preserving rejoin, sections found by column-0 headings only, structure-preserving wrap); `todo` in bombyx's layout (one `### <slug>` entry per item, removed when done), the only layout (operator's choice) |
+| `changelog`, `todo` | extracted (#7): `changelog` with jutro's `infer-bump` / `promote`; the markdown helpers as `markdown` with hoard's hardening (CRLF-preserving rejoin, sections found by column-0 headings only, structure-preserving wrap); `todo` in bombyx's layout (one `### <slug>` entry per item, removed when done), the only layout: every attempt to allow other headings among the items let an edit misplace or cut text, so the file is an introduction then items only |
 | `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
 | `validate` | step runner; each gate supplies its `step()` (done, #5) |
 | `frontend*` | library-ready, optional feature |

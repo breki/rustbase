@@ -12,11 +12,11 @@ when the item is done (Phase 3).
 ## Selecting the issue
 
 - **With a slug argument** (e.g.
-  `/implement search-bar-perf`): use that slug. If it
-  does not exist under `## Pending` in `docs/todo.md`,
-  stop and tell the user.
-- **Without arguments**: read `docs/todo.md`, list
-  the pending slugs with their summaries, and ask the
+  `/implement search-bar-perf`): use that slug. If
+  `cargo -q xtask todo list` does not show it, stop and
+  tell the user.
+- **Without arguments**: run `cargo -q xtask todo list`
+  for the pending slugs with their summaries, and ask the
   user which one to implement (use
   `AskUserQuestion`). Do not pick one yourself.
 
@@ -40,8 +40,9 @@ when the item is done (Phase 3).
    # <slug>
 
    **Status:** Planning
-   **Captured:** <date the item was added, if known,
-   else "unknown">
+   **Captured:** <date the item was added: the oldest
+   commit `git log -S '### <slug>' -- docs/todo.md`
+   lists, else "unknown">
    **Started:** <today's date>
 
    ## Problem
@@ -182,5 +183,7 @@ particular:
 - Never start implementing before the user explicitly
   approves the plan.
 - Never remove an item from `docs/todo.md` except
-  through `cargo xtask todo done` when finalising.
+  through `cargo xtask todo done` when finalising. If a
+  `todo` command reports the old Pending/Done layout,
+  stop and hand the conversion to the operator.
 - Use 80-character margins in all Markdown.
