@@ -18,6 +18,33 @@ work.
 
 ---
 
+### fr-2026-10-20-licenses-publishable-wording
+
+**Category:** wording (output, help)
+
+The licence generator (`crates/rustbase-xtask/src/licenses.rs`)
+attributes every workspace member not marked `publish = false`; its
+docs and `licenses/graph.rs` call those "distributed". Two strings
+the program shows say "publishable" instead, which reads as "could
+go to crates.io" and leaves open whether a private-registry crate
+counts (it does): the `--package` help in
+`crates/rustbase-xtask/src/cli.rs` ("every publishable member") and
+the empty-set error in `check_complete` ("no workspace member is
+publishable"). Say "not marked `publish = false`" in both.
+
+### fr-2026-10-20-licence-license-spelling
+
+**Category:** naming
+
+`crates/rustbase-xtask/src/licenses.rs` mixes spellings: prose,
+`LicenceText` and the file's "THIRD-PARTY LICENCES" title say
+"licence"; `is_license_file`, `is_license_terms`, the output name
+`THIRD-PARTY-LICENSES`, the `licenses` command and "Licenses OK" say
+"license". A search for one spelling misses the other half. The
+cargo field `license` fixes the identifier spelling; renaming
+`LicenceText` and the title to match, and saying once that prose
+stays British, would settle it.
+
 ### fr-2026-10-20-scripts-gate-committed-wording
 
 **Category:** wording (output, help, test name)

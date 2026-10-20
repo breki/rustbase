@@ -163,8 +163,8 @@ fn is_missing_subcommand(stderr: &str) -> bool {
 /// relative to `root` (an absolute one is taken as it is).
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// The project's name, as written in generated files such as the
-    /// third-party licence file.
+    /// The project's name, as the third-party licence file's header
+    /// gives it.
     pub name: String,
     /// The workspace root: where `Cargo.lock` lives and where
     /// `git` and `cargo` run.
@@ -201,8 +201,8 @@ impl Config {
         self.audit_npm_dir.as_ref().map(|d| self.root.join(d))
     }
 
-    /// The defaults for a project called `project`:
-    /// `<PROJECT>_DEP_AGE_ALLOW` and `<PROJECT>_DEP_AGE_STRICT`,
+    /// The defaults for a project called `project`: `project` as
+    /// `name`, `<PROJECT>_DEP_AGE_ALLOW` and `<PROJECT>_DEP_AGE_STRICT`,
     /// `<project>-xtask-dep-age`, the default [`Thresholds`], canon
     /// [`Rules`](canon::Rules) and [record files](records::DEFAULT_FILES),
     /// no npm project to audit, and `crates/<project>/Cargo.toml` as

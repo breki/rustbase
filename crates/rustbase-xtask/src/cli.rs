@@ -107,13 +107,18 @@ pub enum LibCommand {
     /// (THIRD-PARTY-LICENSES): every crate that goes into building it,
     /// with its licence texts; fails when a crate ships none
     Licenses {
-        /// Where to write it (default: THIRD-PARTY-LICENSES at the
-        /// workspace root)
+        /// Where to write it: a file, or a directory to put
+        /// THIRD-PARTY-LICENSES in -- an existing one, or a path ending
+        /// in `/`, which is created (default: cargo's target directory)
         #[arg(long)]
         out: Option<std::path::PathBuf>,
         /// Target triple the binary is built for (default: the host's)
         #[arg(long)]
         target: Option<String>,
+        /// The workspace member whose binary ships (default: every
+        /// publishable member)
+        #[arg(long)]
+        package: Option<String>,
         /// How many crates may ship no licence text; raise it only
         /// with a stated reason
         #[arg(long, default_value_t = 0)]
@@ -283,16 +288,17 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
         LibCommand::Licenses {
             out,
             target,
+            package,
             max_missing,
-        } => println!(
-            "{}",
-            licenses::write(
-                cfg,
-                out.as_deref(),
-                target.as_deref(),
-                max_missing
-            )?
-        ),
+        } => {
+            let opts = licenses::Options {
+                out: out.as_deref(),
+                target: target.as_deref(),
+                package: package.as_deref(),
+                max_missing,
+            };
+            println!("{}", licenses::write(cfg, &opts)?);
+        }
         LibCommand::VersionSync => println!("{}", version_sync::sync(cfg)?),
         LibCommand::Todo { action } => run_todo(action, cfg)?,
     }
@@ -378,7 +384,8 @@ mod tests {
         std::fs::create_dir_all(dir.0.join("crates/p/src")).unwrap();
         std::fs::write(
             dir.0.join("crates/p/Cargo.toml"),
-            "[package]\nname = \"p\"\nversion = \"1.0.0\"\nedition = \"2024\"\n",
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\n\
+             edition = \"2024\"\n",
         )
         .unwrap();
         std::fs::write(dir.0.join("crates/p/src/lib.rs"), "").unwrap();

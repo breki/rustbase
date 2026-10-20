@@ -17,8 +17,8 @@ use serde_json::Value;
 /// `publish = false` in a manifest is the honest signal that a crate
 /// is not shipped. `xtask` is the case that matters here: it is a
 /// workspace member and a binary, so neither "is a member" nor
-/// "builds a bin" separates it, and its `clap` and `serde_json` are
-/// in nobody's release archive.
+/// "builds a bin" separates it, and the crates only it uses are in
+/// nobody's release archive.
 ///
 /// The test is an **empty** `publish` array, not the absence of one.
 /// Cargo reports `publish = false` as `[]`, an unrestricted crate as
@@ -47,11 +47,10 @@ fn publish_disabled(publish: &Value) -> bool {
 
 /// The workspace members' package ids.
 ///
-/// One place for the `workspace_members` JSON shape, because two
-/// callers need it and the shape is not stable: cargo's package
-/// ids appear as a `name version (source)` string in some versions
-/// and a `PackageIdSpec` URL in others. A format change should
-/// mean one edit.
+/// The one reader of the `workspace_members` JSON shape, which is
+/// not stable: cargo's package ids appear as a `name version
+/// (source)` string in some versions and a `PackageIdSpec` URL in
+/// others. Either way an id is unique per package.
 pub(super) fn workspace_members(json: &Value) -> Vec<&str> {
     json["workspace_members"]
         .as_array()
@@ -66,9 +65,7 @@ pub(super) fn workspace_members(json: &Value) -> Vec<&str> {
 /// `"build"` is not in the binary, so following one would put
 /// `assert_cmd`, `predicates` and `difflib` in the attribution
 /// file, which `cargo tree -i difflib -e normal` flatly
-/// contradicts. "Goes into building" is the wording throughout,
-/// never "linked into"; the parent module says why the
-/// distinction has to hold.
+/// contradicts.
 ///
 /// Platform filtering is not done here -- `--filter-platform` on the
 /// `cargo metadata` call already prunes `resolve` to one target, so
