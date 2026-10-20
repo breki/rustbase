@@ -28,6 +28,9 @@ One line per gate (abridged):
 Validate OK
 ```
 
+The same lines, and a failure's report, are also in
+`target/validate.log`, rewritten each run.
+
 ## Implementation
 
 ```
