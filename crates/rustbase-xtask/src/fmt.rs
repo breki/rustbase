@@ -2,6 +2,7 @@
 //! checking it read-only.
 
 use crate::process::{self, Captured};
+use crate::text::pair_with_locations;
 use crate::{Config, Failure};
 
 /// Arguments of the read-only check.
@@ -33,8 +34,29 @@ fn check_with(
     if out.ok {
         return Ok(());
     }
-    let items = out.stdout.lines().map(String::from).collect();
-    Err(Failure::new("formatting issues", items))
+    if out.stdout.trim().is_empty() {
+        // A parse error or a missing rustfmt prints no diff; the
+        // cause is on stderr.
+        let none: [&str; 0] = [];
+        return Err(Failure::of_run(
+            "cargo fmt --check failed with no diff to show",
+            none,
+            &out,
+        ));
+    }
+    // A file that does not parse puts its error on stderr even when
+    // other files produced a diff; formatting will not fix it, so it
+    // leads the report.
+    let errors = pair_with_locations(&out.stderr, |l| {
+        l.starts_with("error") || l.starts_with("Error")
+    });
+    if errors.is_empty() {
+        return Err(Failure::new("formatting issues", out.stdout.lines()));
+    }
+    Err(Failure::new(
+        "files that do not parse, and formatting issues",
+        errors.into_iter().chain(out.stdout.lines()),
+    ))
 }
 
 #[cfg(test)]
@@ -76,6 +98,53 @@ mod tests {
         assert_eq!(f.summary, "formatting issues");
         assert_eq!(fix(&cfg), Ok(()));
         assert_eq!(check(&cfg), Ok(()));
+    }
+
+    #[test]
+    fn a_failure_with_no_diff_carries_the_stderr_tail() {
+        // A parse error or a missing rustfmt prints no diff; the
+        // cause is on stderr.
+        let out = Captured {
+            ok: false,
+            status: String::new(),
+            stdout: String::new(),
+            stderr: "error: expected one of `;` or `}`\n  --> src/a.rs:3:1"
+                .into(),
+        };
+        let f = check_with(|| Ok(out)).unwrap_err();
+        assert!(f.summary.contains("no diff"), "{}", f.summary);
+        assert!(f.items.iter().any(|l| l.contains("src/a.rs:3:1")));
+    }
+
+    #[test]
+    fn a_parse_error_beside_a_diff_is_reported_too() {
+        // One crate drifts (a diff on stdout), another does not parse
+        // (an error on stderr): formatting will not fix the second.
+        let out = Captured {
+            ok: false,
+            status: String::new(),
+            stdout: "Diff in b/src/lib.rs:1:\n-pub fn b(){}\n+pub fn b() {}"
+                .into(),
+            stderr: "error: this file contains an unclosed delimiter\n  \
+                     --> a/src/lib.rs:1:15"
+                .into(),
+        };
+        let f = check_with(|| Ok(out)).unwrap_err();
+        assert!(f.items.iter().any(|l| l.contains("unclosed delimiter")));
+        assert!(f.items.iter().any(|l| l.contains("Diff in b/src/lib.rs")));
+        assert!(f.summary.contains("parse"), "{}", f.summary);
+    }
+
+    #[test]
+    fn rustfmt_errors_with_a_capital_e_are_reported_too() {
+        let out = Captured {
+            ok: false,
+            status: String::new(),
+            stdout: "Diff in a/src/lib.rs:1:".into(),
+            stderr: "Error writing files: failed to resolve mod `nope`".into(),
+        };
+        let f = check_with(|| Ok(out)).unwrap_err();
+        assert!(f.items.iter().any(|l| l.contains("failed to resolve mod")));
     }
 
     #[test]

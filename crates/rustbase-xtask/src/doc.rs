@@ -6,10 +6,9 @@ use crate::process::{self, Captured};
 use crate::text::{is_cargo_diagnostic, pair_with_locations};
 use crate::{Config, Failure};
 
-/// How many lines of a failure a short report shows (the `validate`
-/// step prints this many). When no diagnostic is located, the stderr
-/// fallback keeps no more than this, so its last line, the cause, is
-/// always among those shown.
+/// Non-progress stderr lines doc's own fallback keeps when no
+/// diagnostic is located: the last line is the cause. The template's
+/// `validate` step shows this many too, so the cause is never cut.
 pub const STDERR_TAIL_LINES: usize = 5;
 
 /// Cargo's progress verbs, which say nothing about a failure.
@@ -79,9 +78,10 @@ fn run_passes(
         }
         let out = cargo(&args)?;
         if !out.ok {
-            return Err(Failure::new(
+            return Err(Failure::of_run(
                 format!("cargo doc failed ({})", pass.what),
                 failure_items(&out.stderr),
+                &out,
             ));
         }
     }
@@ -221,6 +221,14 @@ warning: build failed, waiting for other jobs to finish...";
         .unwrap_err();
         assert_eq!(f.summary, "cargo doc failed (internal cross-references)");
         assert_eq!(f.items.len(), 2, "{:?}", f.items);
+    }
+
+    #[test]
+    fn a_failed_pass_with_nothing_useful_on_stderr_still_reports_something() {
+        for stderr in ["", "   Compiling a v0.1.0\n Documenting a v0.1.0"] {
+            let f = run_passes(|_| Ok(captured(false, stderr))).unwrap_err();
+            assert!(!f.items.is_empty(), "{stderr:?}: {:?}", f.items);
+        }
     }
 
     #[test]

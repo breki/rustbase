@@ -40,7 +40,8 @@ fn run_passes(
     judge(&cargo(CLIPPY_ARGS)?, "clippy warning(s)")?;
     let meta = cargo(&["metadata", "--format-version", "1", "--no-deps"])?;
     if !meta.ok {
-        return Err(format!("cargo metadata failed:\n{}", meta.stderr).into());
+        let none: [&str; 0] = [];
+        return Err(Failure::of_run("cargo metadata failed", none, &meta));
     }
     let meta: Value = serde_json::from_str(&meta.stdout)
         .map_err(|e| format!("failed to parse cargo metadata: {e}"))?;
@@ -59,11 +60,19 @@ fn judge(out: &Captured, summary: &str) -> Result<(), Failure> {
     if out.ok {
         return Ok(());
     }
-    let items = pair_with_locations(&out.stderr, is_cargo_diagnostic)
-        .into_iter()
-        .map(String::from)
-        .collect();
-    Err(Failure::new(summary, items))
+    let mut items = pair_with_locations(&out.stderr, is_cargo_diagnostic);
+    // A diagnostic counts as found if it is an `error` line or has a
+    // `-->` location, as every lint does. Cargo's own location-less
+    // warnings (a manifest key, a build script) are not why the pass
+    // failed, so alone they count as nothing and the tail shows the
+    // cause.
+    let found = items
+        .iter()
+        .any(|l| l.starts_with("error") || l.trim_start().starts_with("-->"));
+    if !found {
+        items.clear();
+    }
+    Err(Failure::of_run(summary, items, out))
 }
 
 /// The `xtask` package's optional features, sorted, from `cargo
@@ -232,6 +241,35 @@ error: aborting due to 1 previous error";
         .unwrap_err();
         assert!(f.summary.contains("--features deploy"), "{}", f.summary);
         assert_eq!(f.items.len(), 2);
+    }
+
+    #[test]
+    fn a_pass_that_failed_with_no_diagnostic_shows_the_tail() {
+        // A killed rustc: cargo's summary lines are all there is.
+        let stderr = "error: could not compile `w` (lib)\nCaused by:\n  \
+                      process didn't exit successfully: (signal: 9, SIGKILL)\n\
+                      warning: build failed, waiting for other jobs";
+        let f = judge(&captured(false, "", stderr), "clippy warning(s)")
+            .unwrap_err();
+        assert!(
+            f.items.iter().any(|l| l.contains("SIGKILL")),
+            "{:?}",
+            f.items
+        );
+    }
+
+    #[test]
+    fn cargo_warnings_beside_a_killed_rustc_do_not_hide_the_cause() {
+        let stderr = "warning: unused manifest key: package.foo\n\
+                      error: could not compile `w` (lib)\nCaused by:\n  \
+                      process didn't exit successfully: (signal: 9, SIGKILL)";
+        let f = judge(&captured(false, "", stderr), "clippy warning(s)")
+            .unwrap_err();
+        assert!(
+            f.items.iter().any(|l| l.contains("SIGKILL")),
+            "{:?}",
+            f.items
+        );
     }
 
     #[test]

@@ -15,6 +15,19 @@ red team review is warranted before continuing feature work.
 
 ---
 
+### rt-2026-10-20-check-counts-cargo-errors-as-compile-errors
+
+**Category:** output (misleading summary)
+
+`extract_error_lines` in `crates/rustbase-xtask/src/check.rs` keeps
+every line starting `error:`, so cargo's own errors -- a bad manifest
+(`error: string values must be quoted` then ` --> Cargo.toml:3:9`), an
+unresolvable dependency -- are reported as `1 compilation error(s)`,
+with the location and context lines dropped. Count only rustc
+diagnostics (a `path:line:col: error` prefix or `error[E`) and send
+the rest to the `Failure::of_run` tail. Pre-existing; found by the
+review of the parser extraction (#7).
+
 ### rt-2026-10-19-canon-rules-can-switch-checks-off
 
 **Category:** correctness (configuration)

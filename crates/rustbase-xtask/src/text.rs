@@ -2,14 +2,9 @@
 //! commands: filtering cargo's diagnostics and recognising ISO
 //! dates.
 
-/// Keep every line for which `keep` returns true, plus the
-/// `-->` source-location line that immediately follows a
-/// kept line, so a diagnostic is surfaced together with
-/// where it fired; without the paired location a failure
-/// names the lint/error but not the `file:line`, forcing a
-/// raw re-run. Only the location line *immediately* after a
-/// kept line is taken, so a `-->` following a filtered line
-/// is never wrongly attached.
+/// Every line `keep` accepts, plus the `-->` location line
+/// immediately after a kept line, so each diagnostic arrives with
+/// its `file:line`. A `-->` after a dropped line is never kept.
 pub fn pair_with_locations<F>(stderr: &str, keep: F) -> Vec<&str>
 where
     F: Fn(&str) -> bool,
@@ -30,7 +25,8 @@ where
     out
 }
 
-/// The last `n` non-empty lines of `stderr`.
+/// The last `n` non-empty lines of any captured output (stderr, or
+/// stdout when stderr is empty).
 pub fn stderr_tail(stderr: &str, n: usize) -> Vec<&str> {
     let mut lines: Vec<&str> =
         stderr.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -42,8 +38,8 @@ pub fn stderr_tail(stderr: &str, n: usize) -> Vec<&str> {
 /// True for a real cargo/rustc diagnostic line (`warning:`,
 /// `error[`, `error:`), false for the summary lines that share
 /// those prefixes: `could not compile` / `could not document` (one
-/// per failing target), `aborting due to`, `build failed` and the
-/// `... generated N warnings` counts. A summary repeats what the
+/// per failing target), `aborting due to`, `build failed`, the
+/// `... generated N warnings` counts and `N warning(s) emitted`. A summary repeats what the
 /// diagnostics already say and pushes them out of a short report.
 pub fn is_cargo_diagnostic(line: &str) -> bool {
     // `") generated "` is anchored to its grammar (`crate (target)

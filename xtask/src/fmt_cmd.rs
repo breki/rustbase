@@ -23,7 +23,8 @@ pub fn step(check: bool) -> Step {
     })
 }
 
-/// Run `cargo fmt --all`.
+/// Run `cargo fmt --all`. Its output streams to the terminal, so a
+/// failure's error is only that it failed; the cap does not apply.
 pub fn fmt() -> Result<(), String> {
     fmt::fix(&tasks_config()).map_err(|f| f.report(MAX_DIFF_LINES))
 }

@@ -2,7 +2,6 @@
 //! as the compilation errors alone.
 
 use crate::process::{self, Captured};
-use crate::text::stderr_tail;
 use crate::{Config, Failure};
 
 /// Arguments for the `cargo check` invocation.
@@ -18,16 +17,14 @@ const CHECK_ARGS: &[&str] = &[
     "--message-format=short",
 ];
 
-/// Stderr lines kept when cargo fails with no compilation error to
-/// show (a bad manifest, a corrupted `Cargo.lock`, no network).
-const STDERR_TAIL_LINES: usize = 20;
-
 /// Type-checks the workspace in its root.
 ///
 /// # Errors
 ///
-/// The compilation errors, or stderr's tail when cargo failed for
-/// another reason, or why cargo could not run.
+/// The `error` lines, or the output's tail when there are none, or
+/// why cargo could not run. Cargo's own `error:` lines (a bad
+/// manifest, an unresolvable dependency) are counted as compilation
+/// errors too.
 pub fn check(cfg: &Config) -> Result<(), Failure> {
     judge(&process::cargo(&cfg.root, CHECK_ARGS)?)
 }
@@ -37,15 +34,13 @@ fn judge(out: &Captured) -> Result<(), Failure> {
     if out.ok {
         return Ok(());
     }
-    let errors: Vec<String> = extract_error_lines(&out.stderr)
-        .into_iter()
-        .map(String::from)
-        .collect();
+    let errors = extract_error_lines(&out.stderr);
     if errors.is_empty() {
-        let tail = stderr_tail(&out.stderr, STDERR_TAIL_LINES);
-        return Err(Failure::new(
+        let none: [&str; 0] = [];
+        return Err(Failure::of_run(
             "cargo check failed with no compilation error to show",
-            tail.into_iter().map(String::from).collect(),
+            none,
+            out,
         ));
     }
     Err(Failure::new(

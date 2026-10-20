@@ -32,6 +32,10 @@ pub mod text;
 /// too, but it is measured: its logic is what the gates run.
 const TOOLING_CRATE: &str = "xtask";
 
+/// Output lines a failed run shows when its gate found no
+/// diagnostic in it.
+const RUN_TAIL_LINES: usize = 10;
+
 /// Why a gate failed: a one-line summary and the diagnostic lines
 /// behind it (empty when there are none, as when a tool could not
 /// be run at all).
@@ -45,11 +49,39 @@ pub struct Failure {
 
 impl Failure {
     /// A failure with diagnostics.
-    pub fn new(summary: impl Into<String>, items: Vec<String>) -> Self {
+    pub fn new(
+        summary: impl Into<String>,
+        items: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
         Self {
             summary: summary.into(),
-            items,
+            items: items.into_iter().map(Into::into).collect(),
         }
+    }
+
+    /// A failed tool run, reported by `found` -- the diagnostics the
+    /// calling gate pulled out of the output, such as the lines
+    /// `check::extract_error_lines` keeps -- or, when it found none,
+    /// by the tail of the run's stderr, then stdout, then just its
+    /// exit status. A failure never reports nothing, whatever the tool
+    /// printed.
+    pub(crate) fn of_run(
+        summary: impl Into<String>,
+        found: impl IntoIterator<Item = impl Into<String>>,
+        out: &process::Captured,
+    ) -> Self {
+        let mut f = Self::new(summary, found);
+        if f.items.is_empty() {
+            let mut items = text::stderr_tail(&out.stderr, RUN_TAIL_LINES);
+            if items.is_empty() {
+                items = text::stderr_tail(&out.stdout, RUN_TAIL_LINES);
+            }
+            f.items = items.into_iter().map(String::from).collect();
+        }
+        if f.items.is_empty() {
+            f.items.push(format!("{}, and no output", out.status));
+        }
+        f
     }
 
     /// The summary, then at most `max` items indented beneath it and
@@ -72,9 +104,18 @@ impl From<String> for Failure {
     /// A failure with no diagnostics, such as a tool that could not
     /// run.
     fn from(summary: String) -> Self {
-        Self::new(summary, Vec::new())
+        Self::new(summary, Vec::<String>::new())
     }
 }
+
+/// The whole report, every item; [`Failure::report`] caps it.
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.report(usize::MAX))
+    }
+}
+
+impl std::error::Error for Failure {}
 
 /// What a gate does when it cannot finish (a tool missing, the
 /// network down), as opposed to finishing and finding a problem,
@@ -227,11 +268,34 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_run_never_reports_nothing() {
+        let run = |stdout: &str, stderr: &str| process::Captured {
+            ok: false,
+            status: "exit status: 101".into(),
+            stdout: stdout.into(),
+            stderr: stderr.into(),
+        };
+        let none: [&str; 0] = [];
+        let found = Failure::of_run("s", ["a diagnostic"], &run("", "noise"));
+        assert_eq!(found.items, ["a diagnostic"]);
+        let tail = Failure::of_run("s", none, &run("out", "err line"));
+        assert_eq!(tail.items, ["err line"]);
+        let out = Failure::of_run("s", none, &run("only stdout", " "));
+        assert_eq!(out.items, ["only stdout"]);
+        let bare = Failure::of_run("s", none, &run("", ""));
+        assert_eq!(bare.items, ["exit status: 101, and no output"]);
+    }
+
+    #[test]
     fn a_failure_reports_its_summary_and_the_first_items_once() {
-        let f = Failure::new("2 error(s)", vec!["a".into(), "b".into()]);
+        let f = Failure::new("2 error(s)", ["a", "b"]);
         assert_eq!(f.report(5), "2 error(s)\n  a\n  b");
         assert_eq!(f.report(1), "2 error(s)\n  a\n  ... and 1 more");
+        assert_eq!(f.to_string(), f.report(usize::MAX));
         assert_eq!(Failure::from("no cargo".to_string()).report(5), "no cargo");
+        // Usable behind `?` into a boxed error, as `anyhow` needs.
+        let boxed: Box<dyn std::error::Error> = Box::new(f);
+        assert!(boxed.to_string().starts_with("2 error(s)"));
     }
 
     #[test]
