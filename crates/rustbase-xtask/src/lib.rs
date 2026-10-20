@@ -265,21 +265,23 @@ pub(crate) mod test_repo {
         TempRepo(dir)
     }
 
-    /// An empty temp directory with no `Cargo.toml` in any directory
-    /// above it, so a cargo command run there finds no workspace and
-    /// fails fast instead of building one. Panics, naming the
-    /// manifest, when that does not hold.
+    /// An empty temp directory with no `Cargo.toml` or `.git` in any
+    /// directory above it, so a cargo command run there finds no
+    /// workspace and fails fast, and it lies in no git work tree.
+    /// Panics, naming the entry, when that does not hold.
     pub(crate) fn outside_any_workspace() -> TempRepo {
         let dir = empty_dir();
+        // A `.git` above would put the dir in a work tree, which the
+        // scripts gate reads instead of skipping.
         if let Some(m) = dir
             .0
             .ancestors()
-            .map(|a| a.join("Cargo.toml"))
-            .find(|m| m.is_file())
+            .flat_map(|a| [a.join("Cargo.toml"), a.join(".git")])
+            .find(|m| m.exists())
         {
             panic!(
-                "{} lies above the temp dir, so cargo would find a \
-                 workspace there; point TMPDIR elsewhere",
+                "{} lies above the temp dir, so cargo or git would find \
+                 a project there; point TMPDIR elsewhere",
                 m.display()
             );
         }

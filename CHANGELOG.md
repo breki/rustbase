@@ -113,9 +113,10 @@ and this project adheres to
   `todo list`/`add`/`done` refuse any `###` heading in `docs/todo.md` that is
   not an item.
 - `cargo xtask scripts-check`, also a `validate` step (Scripts, after Records):
-  fails when a file under `scripts/` that starts with `#!` is not committed
+  fails when a file under `scripts/` that starts with `#!` is not staged
   executable (mode `100755` in the git index), since canon runs those by bare
-  path and a `100644` one exits 126. Taken from hoard.
+  path (`/commit` runs `scripts/e2e.sh`) and the shell refuses a `100644` one
+  with "permission denied" (exit 126). Taken from the hoard downstream project.
 
 ### Changed
 

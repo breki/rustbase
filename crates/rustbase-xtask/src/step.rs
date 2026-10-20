@@ -35,7 +35,7 @@ pub mod names {
     pub const CANON: &str = "Canon";
     /// The record files.
     pub const RECORDS: &str = "Records";
-    /// Scripts committed executable.
+    /// Scripts staged executable.
     pub const SCRIPTS: &str = "Scripts";
     /// Code duplication.
     pub const DUPLICATION: &str = "Duplication";
@@ -333,7 +333,7 @@ mod tests {
                 }
                 names::SCRIPTS => {
                     let d = step.run().unwrap();
-                    assert_eq!(d, "skipped: not a git work tree");
+                    assert_eq!(d, "skipped: not in a git work tree");
                 }
                 names::CANON => {
                     let d = step.run().unwrap();

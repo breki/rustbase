@@ -91,7 +91,7 @@ cargo xtask clippy            # lint (+ xtask: all features off, each alone)
 cargo xtask doc               # rustdoc twice (public + private), links must resolve
 cargo xtask canon-check       # claims canon prose makes: paths, xrefs, grants, width
 cargo xtask records-check     # record files: ids unique and well-formed, refs resolve
-cargo xtask scripts-check     # scripts/ files with a shebang committed executable
+cargo xtask scripts-check     # scripts/ files with a shebang staged executable
 cargo xtask coverage          # coverage only (>=90%)
 cargo xtask fmt               # format code
 cargo xtask dupes             # code duplication check
@@ -653,10 +653,14 @@ just when the code compiles:
     named in the result
 15. **Executable scripts** (`cargo xtask scripts-check`) --
     every file under `scripts/` that starts with `#!` must be
-    committed as mode `100755` in the git index, since canon
-    runs them by bare path and a `100644` one exits 126. A
-    file with no shebang (a sourced library) is exempt; outside
-    a git work tree the gate reports itself skipped
+    staged as mode `100755` (the git index), since canon
+    runs them by bare path (`/commit` runs `scripts/e2e.sh`)
+    and the shell refuses a `100644` one with "permission
+    denied" (exit 126). A
+    file with no shebang (a sourced library) is exempt. With no
+    `.git` in the project folder or above it (a source tarball)
+    the gate reports itself skipped; inside a work tree any git
+    failure fails it
 16. **Doc links** (`cargo xtask doc`) -- rustdoc with
     `-D warnings`, twice: once public and once with
     `--document-private-items`, because each pass sees a
@@ -665,16 +669,14 @@ just when the code compiles:
 The frontend gates skip only when there is no frontend at
 all. Without xtask's `frontend` feature they are not compiled
 in, and `validate` refuses to run while `frontend/` exists.
-The dependency-cooldown gate runs **first** (it is a
-no-op on unchanged lockfiles, and fails fast on a within
--cooldown dependency before anything compiles it); after it
-the gates run cheapest-first (Fmt, Canon, Records, Scripts,
-Duplication, Clippy, Doc, Deny, then the frontend static gates)
-before the
-expensive dynamic gates
-(frontend + Rust tests, Coverage, then the network Audit), and
-a failed step prints the single command to re-run just that
-gate. On a fresh full-stack checkout, run
+The dependency-cooldown gate runs **first**: it is a no-op on
+unchanged lockfiles, and fails fast on a within-cooldown
+dependency before anything compiles it. The static gates follow,
+cheapest first: Fmt, Canon, Records, Scripts, Duplication,
+Clippy, Doc, Deny, then the frontend static gates. The dynamic
+gates come last: the frontend and Rust tests, Coverage, then
+Audit, which needs the network. A failed step prints the single
+command to re-run just that gate. On a fresh full-stack checkout, run
 `npm --prefix frontend install` before `validate` -- the
 frontend gates fail (rather than silently skipping) when
 `frontend/` exists but its `node_modules` is not

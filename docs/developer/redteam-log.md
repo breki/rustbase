@@ -15,6 +15,20 @@ red team review is warranted before continuing feature work.
 
 ---
 
+### rt-2026-10-20-scripts-check-one-git-per-file
+
+**Category:** cost / offline
+
+The scripts gate (`crates/rustbase-xtask/src/scripts.rs`) starts one
+`git cat-file blob <sha>` per regular file under `scripts/` and reads
+each blob whole to test its first two bytes. Negligible for a handful
+of scripts; slow on Windows with many files, and in a blobless partial
+clone whose sparse checkout leaves `scripts/` out each blob is fetched
+lazily, so offline the gate fails. The fix: one `git cat-file --batch`
+fed every sha, which needs stdin support in `process` and byte-level
+parsing of its output. Deferred by the operator: no realistic project
+here has more than a few scripts.
+
 ### rt-2026-10-20-wrap-fence-closing-not-commonmark
 
 **Category:** output (rendering)
