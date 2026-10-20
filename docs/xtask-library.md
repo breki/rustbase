@@ -141,12 +141,54 @@ hooks are #10.
 
 ### Distribution and versioning
 
-Published on crates.io, so the licence/sources gate (`deny.toml`
-rejects git sources) and the cooldown and audit tooling apply to it
-like any other dependency. It follows SemVer, released by its own
-`/release`. Upgrading it waits out the 14-day cooldown like any
-dependency; a project that wants a fix sooner allow-lists that one
-version with a stated reason.
+Prepared for crates.io as `rustbase-xtask` (#4); 0.1.0 exists there
+once the operator runs step 4 below. Through crates.io the
+licence/sources gate (`deny.toml` rejects git sources) and the
+cooldown and audit tooling apply to it like any other dependency. It
+follows SemVer with its own version, in
+`crates/rustbase-xtask/Cargo.toml`, separate from the template's.
+Upgrading it waits out the 14-day cooldown like any dependency; a
+project that wants a fix sooner allow-lists that one version with a
+stated reason.
+
+This template depends on it by path and version (`xtask/Cargo.toml`):
+inside this repository cargo builds the local source, so a library
+change and the template change using it land together. The
+`version` is the last release; `main` can hold library changes not
+published yet. A downstream keeps its copy of the source until #9,
+which moves clockdump to the published crate.
+
+Releasing the library is manual for now, and only the operator can
+run the publish, which needs their crates.io login. Run it on `main`
+after the library change has merged, so the published source and the
+tag sit on a commit `main` keeps. The step-1 commit is a direct
+bookkeeping commit, like `/release`'s, not one made through
+`/commit`:
+
+1. Bump `version` in `crates/rustbase-xtask/Cargo.toml` by SemVer.
+   The changes to weigh are the commits since the last
+   `rustbase-xtask-v*` tag that touch the library
+   (`git log rustbase-xtask-vX.Y.Z.. -- crates/rustbase-xtask`). A
+   bump that leaves the range of the requirement `xtask/Cargo.toml`
+   puts on the library (`version = "0.1"`) -- a minor bump while the
+   version is `0.x`, or a major one -- also raises that requirement
+   to the new `0.y` (or `x`); otherwise cargo stops every command
+   with "failed to select a version for the requirement". Run
+   `cargo check -p rustbase-xtask` so `Cargo.lock` takes the new
+   version, then commit the manifests and `Cargo.lock` together.
+2. `cargo publish -p rustbase-xtask --dry-run`. `git status` must
+   still be clean afterwards; if it is not, commit what changed
+   (normally `Cargo.lock`) and repeat this step.
+3. `git tag -a rustbase-xtask-vX.Y.Z -m "rustbase-xtask vX.Y.Z"`. The
+   prefix keeps the tag out of the deploy guard's and `release.yml`'s
+   `v*` patterns, which mean a template release.
+4. `cargo publish -p rustbase-xtask`. A published version can be
+   yanked, never deleted. If it fails, delete the tag (`git tag -d`;
+   it has not been pushed), fix the cause and repeat from step 2.
+5. Push the commit and the tag.
+
+Its own changelog and an automated release are a follow-up
+(`release-library` in `docs/todo.md`).
 
 ### What still needs agent-driven sync
 
@@ -194,7 +236,8 @@ is generic and can follow once a second project ships a unit.
 
 ## Migration plan (one downstream: clockdump)
 
-1. Publish the library with the cooldown module.
+1. Prepare the library for publishing (#4); the operator publishes
+   0.1.0.
 2. In clockdump: add the dependency, delete its vendored
    `xtask/src/dep_age.rs` and `xtask/src/dep_age/`, and call the
    library with `Config::for_project("clockdump",
@@ -209,7 +252,8 @@ is generic and can follow once a second project ships a unit.
 
 ## Proposed follow-up issues
 
-1. Settle the crate name and publish `0.1` with the cooldown module.
+1. Settle the crate name and prepare `0.1` for publishing (done: #4,
+   `rustbase-xtask`; the operator runs `cargo publish`).
 2. Decouple feature selection: registered `validate` steps, helpers
    grouped by user (done: #5).
 3. Extract `audit`, `deny`, `coverage`, `dupes`, `doc_cmd`, `canon`,

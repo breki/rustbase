@@ -8,6 +8,12 @@
 //!
 //! Each gate takes a [`Config`] carrying what differs between
 //! projects.
+//!
+//! The `markdown` and `text` modules are public only for the
+//! template's own commands; they are hidden from the docs, and
+//! semantic versioning does not cover them: they may change or go
+//! away in any release. Most public functions return errors as text
+//! (`Result<_, String>`); the gate entry points return `Failure`.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -27,6 +33,7 @@ pub mod doc;
 pub mod dupes;
 pub mod fmt;
 pub mod licenses;
+#[doc(hidden)]
 pub mod markdown;
 mod process;
 pub mod records;
@@ -34,6 +41,7 @@ pub mod scripts;
 pub mod step;
 pub mod tag_signature;
 pub mod tee;
+#[doc(hidden)]
 pub mod text;
 pub mod todo;
 pub mod version_sync;
@@ -144,6 +152,7 @@ impl std::error::Error for Failure {}
 /// network down), as opposed to finishing and finding a problem,
 /// which always fails.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Strictness {
     /// Fail: the caller wants to know the check never ran.
     Fail,
@@ -163,6 +172,7 @@ fn is_missing_subcommand(stderr: &str) -> bool {
 /// What differs between projects using this library. Its paths are
 /// relative to `root` (an absolute one is taken as it is).
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Config {
     /// The project's name, as the third-party licence file's header
     /// gives it.
@@ -233,6 +243,7 @@ impl Config {
 /// Percentages the coverage and duplication gates hold the
 /// workspace to.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Thresholds {
     /// Minimum line coverage of the workspace as a whole.
     pub coverage_overall: f64,

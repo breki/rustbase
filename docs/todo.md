@@ -108,3 +108,31 @@ tree, each fix exposing the next case (a refusal, an exit-0 unsigned tag,
 deleting an older tag of the same name). A `cargo xtask` command that creates
 the tag, verifies it and removes only the tag it made would put that logic under
 tests, leaving step 10 one command.
+
+### release-library
+
+**Summary:** Give rustbase-xtask its own CHANGELOG and an automated release
+
+The library is released by hand (docs/xtask-library.md, "Distribution and
+versioning"): bump crates/rustbase-xtask/Cargo.toml, tag rustbase-xtask-vX.Y.Z,
+and the operator runs cargo publish. Its notes share the root CHANGELOG.md with
+the template, and `cargo xtask changelog` writes only that file. A crate
+CHANGELOG, a way for /commit to file a library change there, and a release
+command that bumps, promotes, tags and dry-runs the publish would make it match
+the template's /release.
+
+Also decide when the version moves. Today a library change merges first and the
+bump comes at release, so `main` can hold API the published version lacks, and
+a downstream that runs /template-sync in between gets xtask code its locked
+crate cannot compile. Bumping in the same PR as the change would make the
+version always describe the source.
+
+### xtask-typed-errors
+
+**Summary:** Return a typed error from rustbase-xtask public functions (0.2)
+
+Most public functions return Result<_, String>, so a downstream cannot tell a
+missing tool from a failed gate, and String does not implement
+std::error::Error. Failure (lib.rs) already implements Error and From<String>.
+Switching the public signatures to Result<_, Failure> is a breaking change, so
+it waits for 0.2; the crate docs state the 0.x limitation.

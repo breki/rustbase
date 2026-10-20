@@ -51,6 +51,7 @@ impl Exempt {
 
 /// What differs between projects in the canon check.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Rules {
     /// Paths canon names that are correct to be absent. None by
     /// default; a project lists its own.
