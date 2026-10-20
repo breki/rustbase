@@ -19,7 +19,7 @@
 //!
 //! The gate checks four things and nothing about phrasing: an id
 //! used twice across the files, a field label outside
-//! [`KNOWN_LABELS`], a heading id that is not kebab-case, and a
+//! [`KNOWN_LABELS`], a heading id that is not kebab-case from a letter, and a
 //! `Depends on` / `Supersedes` id that names no entry. An id in
 //! prose is not checked: that is where a citation of a since-removed
 //! entry lives.
@@ -102,14 +102,16 @@ struct Finding {
 }
 
 /// True for a kebab-case id: lowercase letters and digits in
-/// dash-separated runs.
+/// dash-separated runs, starting with a letter. The letter is what
+/// refuses a bare date, the heading of a legacy feedback entry.
 pub(crate) fn is_slug(s: &str) -> bool {
-    s.split('-').all(|seg| {
-        !seg.is_empty()
-            && seg
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-    })
+    s.starts_with(|c: char| c.is_ascii_lowercase())
+        && s.split('-').all(|seg| {
+            !seg.is_empty()
+                && seg
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        })
 }
 
 /// Line `idx`, `line`, as a `**Label:** value` field, or `None`. The
@@ -197,7 +199,10 @@ fn findings_for(parsed: &[(&str, Vec<Entry>)]) -> Vec<Finding> {
     for (name, entries) in parsed {
         for e in entries {
             if !is_slug(&e.id) {
-                let msg = format!("heading id `{}` is not kebab-case", e.id);
+                let msg = format!(
+                    "heading id `{}` is not kebab-case starting with a letter",
+                    e.id
+                );
                 push(name, e.idx, "malformed-id", msg);
             }
             for f in &e.fields {
@@ -245,7 +250,10 @@ pub fn check_entry(text: &str) -> Result<(), String> {
         ));
     };
     if !is_slug(&entry.id) {
-        return Err(format!("heading id `{}` is not kebab-case", entry.id));
+        return Err(format!(
+            "heading id `{}` is not kebab-case starting with a letter",
+            entry.id
+        ));
     }
     // A fence left open would hide every later entry in the file.
     if text.lines().filter(|l| is_fence(l)).count() % 2 == 1 {
@@ -345,7 +353,17 @@ mod tests {
     #[test]
     fn is_slug_takes_kebab_case_only() {
         assert!(is_slug("rt-2026-10-20-a-b"));
-        for bad in ["", "RT-7", "a b", "a_b", "a--b", "-a", "a-"] {
+        for bad in [
+            "",
+            "RT-7",
+            "a b",
+            "a_b",
+            "a--b",
+            "-a",
+            "a-",
+            "2026-05-18",
+            "2fa",
+        ] {
             assert!(!is_slug(bad), "{bad}");
         }
     }

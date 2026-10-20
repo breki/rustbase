@@ -1,17 +1,16 @@
 ---
 description: Log feedback for the rustbase template, or sweep commits for it
-allowed-tools: Read, Write, Grep, AskUserQuestion, Bash(cargo xtask feedback-add:*), Bash(cargo -q xtask feedback-add:*), Bash(git log:*), Bash(git status:*), Bash(git diff:*), Bash(git show:*)
+allowed-tools: Read, Write, Edit, Grep, AskUserQuestion, Bash(cargo xtask feedback-add:*), Bash(cargo -q xtask feedback-add:*), Bash(git log:*), Bash(git status:*), Bash(git diff:*), Bash(git show:*)
 ---
 
 Log observations about the rustbase template in
 `docs/developer/template-feedback.md`.
 
 Entry placement, date stamping, ID minting, and dedup are
-owned by `cargo xtask feedback-add` -- do **not** hand-edit
-the file (one exception, under **Rules**). Your job is the
-judgement: which observations are about the *template*, the
-section, a short title, and the
-body prose.
+owned by `cargo xtask feedback-add`; whether the file may be
+edited by hand is under **Rules**. Your job is the judgement:
+which observations are about the *template*, the section, a
+short title, and the body prose.
 
 ## Usage
 
@@ -187,20 +186,17 @@ Delete the temp files afterwards.
 - Never hand-edit `docs/developer/template-feedback.md`.
   Placement, dating, ID minting and dedup belong to
   `feedback-add`; a hand edit puts an entry in the wrong
-  section or with a colliding ID. **One exception, once:**
-  rewrite every `###` entry heading that does not start with
-  `tf-` to `### tf-<date>-<slug> -- <title>`. `cargo xtask
-  records-check` flags a title alone (not kebab-case), but a
-  dated heading (`### 2026-05-18 -- title`) only when another
-  shares its date, since a bare date is itself valid
-  kebab-case; convert those whether flagged or not. The date
-  comes from the heading, else the day the entry first
-  appeared in git (`git log --reverse --format=%as -S
-  '<title>' -- docs/developer/template-feedback.md`, first
-  line). The slug is the one `feedback-add` mints for the
-  title (lowercase alphanumerics, other runs as one `-`, no
-  leading or trailing `-`, at most 48 characters). With no
-  `Edit` grant here, the rewrite is one `Write` of the file.
+  section or with a colliding ID. **One exception, once:** an
+  older file has entry headings without a `tf-` id (a title
+  alone, or `### 2026-05-18 -- title`), and `cargo xtask
+  records-check` flags each. `Edit` each to
+  `### tf-<date>-<slug> -- <title>`. The date comes from the
+  heading, else the day the entry first appeared in git
+  (`git log --reverse --format=%as -S '<title>' --
+  docs/developer/template-feedback.md`, first line). The slug
+  is the one `feedback-add` mints for the title (lowercase
+  alphanumerics, other runs as one `-`, no leading or trailing
+  `-`, at most 48 characters).
 - Do NOT commit. Entries ride along in the next `/commit`.
 - Report each ID the command minted, and say plainly which
   candidates you offered and the operator declined -- a

@@ -641,8 +641,9 @@ just when the code compiles:
     `xtask/src/helpers.rs`). Each entry opens with a `### <id>`
     heading; its fields are the `**Label:**` lines directly
     under it, and bold lines further down are prose. Fails on
-    an id used twice across the files, an id
-    that is not kebab-case, a field label outside the known
+    an id used twice across the files, an id that is not
+    kebab-case starting with a letter (so a bare date is
+    refused), a field label outside the known
     set (`Category`, `Summary`, `Source`, `Issue`, `Depends
     on`, `Supersedes`), and a `Depends on` or `Supersedes` id
     that names no entry. An id cited in prose is not checked,
@@ -787,8 +788,8 @@ the template**. `/template-improve` routes new entries
 into the appropriate section by calling
 `cargo xtask feedback-add`, which mints a stable
 `tf-<yyyy-mm-dd>-<slug>` ID, inserts at the section top,
-and dedups -- the file is never hand-edited (one exception, in
-`/template-improve`'s rules).
+and dedups. Whether the file may be edited by hand is
+`/template-improve`'s rule to state.
 
 `/template-backfeed` (template repo only) pulls a
 downstream's feedback back upstream. It uses a watermark in

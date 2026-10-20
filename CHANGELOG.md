@@ -98,8 +98,10 @@ and this project adheres to
 - `cargo xtask records-check`, also a `validate` step: checks the record files
   (`docs/todo.md`, the three reviewer logs and
   `docs/developer/template-feedback.md`) for an id used twice, an id that is not
-  kebab-case, an unknown field label, and a `Depends on` / `Supersedes` id that
-  names no entry; a configured file that does not exist is skipped and named.
+  kebab-case starting with a letter (so a bare date is refused; `todo` slugs
+  follow the same rule), an unknown field label, and a `Depends on` /
+  `Supersedes` id that names no entry; a configured file that does not exist is
+  skipped and named.
   The 37 template-feedback entries whose headings had no id now carry a
   `tf-<date>-<slug>` id, dated from the heading or, when it had none, from when
   the entry first appeared in git. A derived project whose feedback file still
