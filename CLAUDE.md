@@ -580,7 +580,7 @@ just when the code compiles:
    (duplicate lines over total lines) and <= 12% in any
    one crate (production code, tests excluded). Each
    crate is measured alone, so a copy between two crates
-   is not counted.
+   is not counted, by design (`docs/xtask-library.md`).
 
    Items 4 and 5 default to `Thresholds::default()` in
    `crates/rustbase-xtask/src/lib.rs`; a project

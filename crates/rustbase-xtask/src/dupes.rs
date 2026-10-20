@@ -7,7 +7,7 @@
 //! [`Thresholds::dupes_workspace`](crate::Thresholds), or in any
 //! one crate exceeds [`Thresholds::dupes_crate`](crate::Thresholds).
 //! Each run sees only its own crate, so code copied from one crate
-//! into another is not measured.
+//! into another is not measured, by design (`docs/xtask-library.md`).
 
 use std::ffi::OsStr;
 use std::fmt::Write as _;

@@ -46,8 +46,9 @@ tail. Also `text::stderr_tail` is used on stdout too; a neutral name
 The duplication gate's pooled figure is printed as `all crates 0.4%`,
 which reads as if every crate sits at 0.4%, and its limit is the
 field `Thresholds::dupes_workspace`, which suggests a whole-workspace
-scan that would catch copies between crates (#15). Label the output
-`pooled` and rename the field (e.g. `dupes_pooled`). Deferred because
+scan that would catch copies between crates (deliberately not done,
+#15). Label the output `pooled` and rename the field (e.g.
+`dupes_pooled`). Deferred because
 stage 3 changes neither output nor code.
 
 ### fr-2026-10-19-coverage-module-means-file
