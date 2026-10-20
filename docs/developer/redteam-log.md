@@ -15,6 +15,20 @@ red team review is warranted before continuing feature work.
 
 ---
 
+### rt-2026-10-20-wrap-fence-closing-not-commonmark
+
+**Category:** output (rendering)
+
+`split_blocks` in `crates/rustbase-xtask/src/markdown.rs` closes a fence
+on any fence line, and its synthetic closer for an unclosed fence is
+written at the entry's indent. CommonMark closes only on the same
+character with a run at least as long, and reads an opener indented four
+or more columns past the list content as indented code. Entry text such
+as "x:\n```\n~~~\nfoo\n```" therefore renders as code to the end of the
+file on GitHub, though the tooling reads the file correctly (sections
+are found by column-0 headings). Track the opener's character and run
+length. Found by the review of the changelog extraction (#7).
+
 ### rt-2026-10-20-check-counts-cargo-errors-as-compile-errors
 
 **Category:** output (misleading summary)

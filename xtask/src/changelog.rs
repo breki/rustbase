@@ -1,6 +1,5 @@
-//! `cargo xtask changelog`: the shared library's `CHANGELOG.md`
-//! writer. `/commit` calls `add`; `/release` calls `infer-bump` and
-//! `promote`.
+//! `cargo xtask changelog`: CLI over the shared library's
+//! `CHANGELOG.md` writer.
 
 use clap::Subcommand;
 use rustbase_xtask::changelog::{self, Kind};
@@ -24,9 +23,10 @@ pub enum ChangelogAction {
         text: String,
     },
     /// Print the `SemVer` bump (`major` / `minor` / `patch`) the
-    /// `[Unreleased]` bullets call for: a `**BREAKING:**` bullet or
-    /// a non-empty `### Removed` is major, a non-empty `### Added`
-    /// minor, else patch. Fails when there is nothing to release.
+    /// `[Unreleased]` bullets call for: a top-level `- **BREAKING:**`
+    /// entry or a non-empty `### Removed` is major, a non-empty
+    /// `### Added` minor, else patch. Fails when there is nothing to
+    /// release.
     InferBump,
     /// Rename `[Unreleased]` to `[<version>] - <date>` and open a
     /// fresh empty `[Unreleased]` above it.

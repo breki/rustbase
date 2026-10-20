@@ -183,11 +183,14 @@ and this project adheres to
   `frontend/`, the `validate` Audit step skipped `npm audit` with only a
   warning. Both now run from the workspace root, and npm runs inside
   `frontend/`.
-- `cargo xtask changelog add` and `cargo xtask todo` keep a file's line endings
-  (a one-line edit no longer rewrites a CRLF file wholesale on Windows), ignore
-  `## ` lines inside code fences, and wrap entry text without flattening lists
-  or fenced code (from hoard). `feedback-add` removes an empty section's `_None
-  yet._` placeholder when it adds the first entry (from bombyx).
+- `cargo xtask changelog add`, `cargo xtask todo` and `feedback-add` keep a
+  file's line endings (a one-line edit no longer rewrites a CRLF file wholesale
+  on Windows), and the first two wrap entry text without flattening lists or
+  fenced code (from hoard). In those two, sections are found by headings at the
+  start of a line only, so nothing inside an indented entry -- a heading-like
+  line, a code block, closed or not -- is mistaken for structure.
+  `feedback-add` removes an empty section's `_None yet._` placeholder when it
+  adds the first entry (from bombyx).
 
 ### Removed
 
