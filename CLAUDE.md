@@ -635,14 +635,19 @@ just when the code compiles:
     lines; `.claude/skills/` and the rest of `docs/`. A green
     gate says nothing about these
 14. **Record files** (`cargo xtask records-check`) -- reads
-    the work queue, the three reviewer logs and the template
-    feedback (`Config::record_files`), where each entry opens
-    with a `### <id>` heading and a block of `**Label:**`
-    fields. Fails on an id used twice across the files, an id
+    `docs/todo.md`, the three `docs/developer/*-log.md`
+    reviewer logs and `docs/developer/template-feedback.md`
+    (`Config::record_files`, overridden in `tasks_config()`,
+    `xtask/src/helpers.rs`). Each entry opens with a `### <id>`
+    heading; its fields are the `**Label:**` lines directly
+    under it, and bold lines further down are prose. Fails on
+    an id used twice across the files, an id
     that is not kebab-case, a field label outside the known
     set (`Category`, `Summary`, `Source`, `Issue`, `Depends
     on`, `Supersedes`), and a `Depends on` or `Supersedes` id
-    that names no entry. An id cited in prose is not checked
+    that names no entry. An id cited in prose is not checked,
+    and a configured file that does not exist is skipped and
+    named in the result
 15. **Doc links** (`cargo xtask doc`) -- rustdoc with
     `-D warnings`, twice: once public and once with
     `--document-private-items`, because each pass sees a
@@ -782,7 +787,8 @@ the template**. `/template-improve` routes new entries
 into the appropriate section by calling
 `cargo xtask feedback-add`, which mints a stable
 `tf-<yyyy-mm-dd>-<slug>` ID, inserts at the section top,
-and dedups -- the file is never hand-edited.
+and dedups -- the file is never hand-edited (one exception, in
+`/template-improve`'s rules).
 
 `/template-backfeed` (template repo only) pulls a
 downstream's feedback back upstream. It uses a watermark in

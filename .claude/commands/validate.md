@@ -15,12 +15,13 @@ in `CLAUDE.md`, in the order `xtask/src/validate.rs` defines
 One line per gate (abridged):
 
 ```
-[1/14] Dep-age....... OK (no dependency changes, 0.0s)
-[2/14] Fmt........... OK (0.2s)
-[3/14] Canon......... OK (28 files, 5 checks, 0.0s)
+[1/15] Dep-age....... OK (no dependency changes, 0.0s)
+[2/15] Fmt........... OK (0.2s)
+[3/15] Canon......... OK (28 files, 5 checks, 0.0s)
+[4/15] Records....... OK (5 files, 109 entries, 0.0s)
 ...
-[13/14] Coverage...... OK (100.0% >= 90%, 47.5s)
-[14/14] Audit......... OK
+[14/15] Coverage...... OK (100.0% >= 90%, 47.5s)
+[15/15] Audit......... OK
 Validate OK
 ```
 

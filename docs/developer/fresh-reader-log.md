@@ -18,6 +18,16 @@ work.
 
 ---
 
+### fr-2026-10-20-template-improve-no-edit-grant
+
+**Category:** tooling (allowed-tools)
+
+`/template-improve`'s one-time heading conversion rewrites dozens of
+headings in a file of over a thousand lines, but the command grants
+`Write` and not `Edit`, so the rewrite has to re-emit the whole file.
+Granting `Edit` would make it a series of exact replacements. Deferred
+because stage 3 does not change `allowed-tools`.
+
 ### fr-2026-10-20-feedback-keeps-its-own-is-fence
 
 **Category:** duplication

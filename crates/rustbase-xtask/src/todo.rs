@@ -12,8 +12,9 @@
 //! Prose body, as long as it needs to be.
 //! ```
 //!
-//! Other `**Label:** value` lines may follow the summary; they are
-//! kept and ignored. The file is an introduction, then items only.
+//! Other `**Label:** value` lines may follow the summary, using only
+//! the labels the records check knows (`records::KNOWN_LABELS`); it
+//! rejects any other. The file is an introduction, then items only.
 //! It holds live work only: completing an item removes it whole, and
 //! what shipped is recorded by the commit and git history.
 
@@ -53,8 +54,8 @@ impl fmt::Display for Item {
 /// # Errors
 ///
 /// When `docs/todo.md` cannot be read, or has a shape `check_shape`
-/// refuses (the old Pending/Done layout, or a non-item heading after
-/// the first item).
+/// refuses (the old Pending/Done layout, a non-item heading after the
+/// first item, or an `###` heading anywhere that is not an item).
 pub fn list(cfg: &Config) -> Result<Vec<Item>, String> {
     let content = read(cfg)?;
     check_shape(&content)?;
@@ -145,7 +146,7 @@ struct Record {
 
 /// The items of a queue file: each record entry whose heading is a
 /// kebab-case slug alone and which has a `**Summary:**` field. Any
-/// other `###` heading is prose (a `### notes` subsection).
+/// other `###` heading is skipped here, and `check_shape` refuses it.
 fn parse(content: &str) -> Vec<Record> {
     records::parse(content)
         .into_iter()
@@ -244,7 +245,9 @@ fn entry_end<S: AsRef<str>>(lines: &[S], idx: usize) -> usize {
 }
 
 /// Refuse a file whose shape the queue cannot edit safely: after the
-/// first item, every column-0 heading must be an item. The file is an
+/// first item, every column-0 heading must be an item, and anywhere
+/// an `###` heading must be one, since the records check reads every
+/// `###` heading as an entry. The file is an
 /// introduction, then items only; anything else there (a footer, a
 /// prose subsection) is named rather than guessed around.
 fn check_shape(content: &str) -> Result<(), String> {
@@ -263,10 +266,24 @@ fn check_shape(content: &str) -> Result<(), String> {
             .into());
     }
     let items = parse(content);
+    let item_lines: Vec<usize> = items.iter().map(|r| r.idx).collect();
+    // Every `###` heading is an entry to the records check, so in the
+    // introduction too only an item may use that level.
+    if let Some(stray) = records::parse(content)
+        .into_iter()
+        .find(|e| !item_lines.contains(&e.idx))
+    {
+        return Err(format!(
+            "docs/todo.md line {}: `### {}` is not an item, and the records \
+             check reads every `###` heading as one; an item is `### \
+             <kebab-slug>` with a `**Summary:**` line, else use `##`",
+            stray.idx + 1,
+            stray.id
+        ));
+    }
     let Some(first) = items.first() else {
         return Ok(());
     };
-    let item_lines: Vec<usize> = items.iter().map(|r| r.idx).collect();
     let mut fenced = false;
     for (i, line) in content.lines().enumerate().skip(first.idx + 1) {
         if is_fence(line) {
@@ -384,8 +401,6 @@ more about alpha
         // Only the field block counts: a later bold `Summary:` is prose.
         let two = parse("### a\n\n**Summary:** s\n\n**Summary:** prose\n");
         assert_eq!(two[0].summary, "s");
-        assert_eq!(records::parse_field("**Not a field**: x"), None);
-        assert_eq!(records::parse_field("**Bold `x`.**"), None);
     }
 
     #[test]
@@ -450,6 +465,13 @@ more about alpha
     }
 
     #[test]
+    fn a_body_with_an_unclosed_code_block_is_closed() {
+        // Left open, the next `add` would append its heading inside it.
+        let lines = entry_lines("g", "s", Some("See:\n```\nfoo")).unwrap();
+        assert_eq!(lines.last().map(String::as_str), Some("```"));
+    }
+
+    #[test]
     fn a_non_item_heading_after_the_first_item_is_refused() {
         // The file is an introduction, then items only: a footer or a
         // prose subsection among items is named, not guessed around.
@@ -467,6 +489,19 @@ more about alpha
         );
         assert_eq!(check_shape(&intro), Ok(()));
         assert_eq!(check_shape("# TODO\n\n## Notes\n"), Ok(()));
+    }
+
+    #[test]
+    fn a_level_3_heading_that_is_no_item_is_refused_anywhere() {
+        // records-check reads every `###` heading as an entry, so one in
+        // the introduction would be a malformed or stray entry there.
+        for doc in [
+            format!("# TODO\n\n### How to use\n\nprose\n\n{SAMPLE}"),
+            "# TODO\n\n### notes\n\nprose\n".to_owned(),
+        ] {
+            let e = check_shape(&doc).unwrap_err();
+            assert!(e.contains("line 3") && e.contains("not an item"), "{e}");
+        }
     }
 
     #[test]

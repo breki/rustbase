@@ -126,8 +126,8 @@ library can expose the same groups as its own optional features.
 ### Extension points
 
 Projects need to add, not only configure: extra subcommands (jutro's
-`worktree`, hoard's `cross`), extra `validate` steps (bombyx's
-records check, jutro's lint), and for deploy, extra config keys and
+`worktree`, hoard's `cross`), extra `validate` steps (jutro's
+architecture lint), and for deploy, extra config keys and
 hooks before install, before start and during setup. The library
 provides the step and subcommand types; projects implement them.
 

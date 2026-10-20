@@ -86,9 +86,13 @@ fn make_id(date: &str, title: &str) -> String {
 }
 
 /// Render an entry block: `### <id> -- <title>` header, a blank
-/// line, then the trimmed body.
-fn format_entry(id: &str, title: &str, body: &str) -> String {
-    format!("### {id} -- {title}\n\n{}", body.trim_end())
+/// line, then the trimmed body. Refused when `records-check` would
+/// reject it, e.g. a body opening with an unknown `**Label:**`.
+fn format_entry(id: &str, title: &str, body: &str) -> Result<String, String> {
+    let block = format!("### {id} -- {title}\n\n{}", body.trim_end());
+    rustbase_xtask::records::check_entry(&block)
+        .map_err(|e| format!("feedback-add: {e}"))?;
+    Ok(block)
 }
 
 /// True when `md` already contains an entry with exactly this
@@ -219,7 +223,7 @@ pub fn feedback_add(
         return Ok(());
     }
 
-    let block = format_entry(&id, title.trim(), &body);
+    let block = format_entry(&id, title.trim(), &body)?;
     let updated = insert_entry(&md, section.header_keyword(), &block)?;
     fs::write(&path, updated)
         .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
@@ -302,7 +306,18 @@ mod tests {
     #[test]
     fn format_entry_has_header_and_trimmed_body() {
         let e = format_entry("tf-x", "Title", "body text\n\n\n");
-        assert_eq!(e, "### tf-x -- Title\n\nbody text");
+        assert_eq!(e, Ok("### tf-x -- Title\n\nbody text".to_owned()));
+    }
+
+    #[test]
+    fn format_entry_refuses_a_body_the_records_check_would_reject() {
+        // The body's first line sits where an entry's fields go.
+        let e =
+            format_entry("tf-x", "Title", "**Fix:** pinned it").unwrap_err();
+        assert!(e.contains("`Fix`"), "{e}");
+        let e =
+            format_entry("tf-x", "Title", "text\n\n### tf-y\n").unwrap_err();
+        assert!(e.contains("one entry"), "{e}");
     }
 
     const DOC: &str = "\

@@ -1,5 +1,6 @@
-//! The record files -- the work queue and the backlogs -- and the
-//! `records-check` gate over them.
+//! The record files -- the work queue (`docs/todo.md`), the three
+//! reviewer logs (the backlogs) and the template-feedback file -- and
+//! the `records-check` gate over them.
 //!
 //! A record file holds a flat list of entries. Each opens with a
 //! column-0 `### <id>` heading (optionally `### <id> -- <title>`),
@@ -39,9 +40,12 @@ pub const DEFAULT_FILES: &[&str] = &[
     "docs/developer/template-feedback.md",
 ];
 
-/// The field labels an entry may carry. Any other is a typo or a
-/// body line read as a field, and either way the set should not grow
-/// unnoticed.
+/// The field labels an entry may carry: `Category` (a finding's
+/// kind), `Summary` (a queue item's one line), `Source` (where the
+/// entry came from, e.g. a downstream project), `Issue` (the GitHub
+/// issue, as `#21`), and `Depends on` / `Supersedes` (other entries'
+/// ids). Any other is a typo or a body line read as a field, and
+/// either way the set should not grow unnoticed.
 pub const KNOWN_LABELS: &[&str] = &[
     "Category",
     "Summary",
@@ -108,16 +112,20 @@ pub(crate) fn is_slug(s: &str) -> bool {
     })
 }
 
-/// One line as a `**Label:** value` field, or `None`. The label may
-/// hold spaces but not `*`, so a bold run closing before the colon is
-/// prose, not a field.
-pub(crate) fn parse_field(line: &str) -> Option<(String, String)> {
+/// Line `idx`, `line`, as a `**Label:** value` field, or `None`. The
+/// label may hold spaces but not `*`, so a bold run closing before
+/// the colon is prose, not a field.
+fn parse_field(line: &str, idx: usize) -> Option<Field> {
     let (label, after) = line.strip_prefix("**")?.split_once(":**")?;
     if label.contains('*') {
         return None;
     }
     let value = after.strip_prefix(' ').unwrap_or(after).trim();
-    Some((label.trim().to_owned(), value.to_owned()))
+    Some(Field {
+        label: label.trim().to_owned(),
+        value: value.to_owned(),
+        idx,
+    })
 }
 
 /// The entries of a record file: one per column-0 `### ` heading
@@ -145,14 +153,8 @@ pub(crate) fn parse(content: &str) -> Vec<Entry> {
             j += 1;
         }
         let mut fields = Vec::new();
-        while let Some((label, value)) =
-            lines.get(j).and_then(|l| parse_field(l))
-        {
-            fields.push(Field {
-                label,
-                value,
-                idx: j,
-            });
+        while let Some(field) = lines.get(j).and_then(|l| parse_field(l, j)) {
+            fields.push(field);
             j += 1;
         }
         out.push(Entry {
@@ -174,15 +176,11 @@ fn ref_ids(value: &str) -> impl Iterator<Item = &str> {
         .filter(|t| !t.is_empty() && *t != "-" && *t != "\u{2014}")
 }
 
-/// Every check over already-read `(file, content)` pairs, sorted.
-fn findings_for(files: &[(String, String)]) -> Vec<Finding> {
-    let parsed: Vec<(&str, Vec<Entry>)> = files
-        .iter()
-        .map(|(name, text)| (name.as_str(), parse(text)))
-        .collect();
+/// Every check over the parsed `(file, entries)` pairs, sorted.
+fn findings_for(parsed: &[(&str, Vec<Entry>)]) -> Vec<Finding> {
     // Where each id is declared, in file order.
     let mut sites: BTreeMap<&str, Vec<(&str, usize)>> = BTreeMap::new();
-    for (name, entries) in &parsed {
+    for (name, entries) in parsed {
         for e in entries {
             sites.entry(&e.id).or_default().push((name, e.idx));
         }
@@ -196,7 +194,7 @@ fn findings_for(files: &[(String, String)]) -> Vec<Finding> {
             message,
         });
     };
-    for (name, entries) in &parsed {
+    for (name, entries) in parsed {
         for e in entries {
             if !is_slug(&e.id) {
                 let msg = format!("heading id `{}` is not kebab-case", e.id);
@@ -229,24 +227,75 @@ fn findings_for(files: &[(String, String)]) -> Vec<Finding> {
     out
 }
 
-/// Runs the gate over `cfg.record_files`; on success, a one-line
-/// summary (`5 files, 109 entries`).
+/// Checks `text`, an entry about to be written to a record file:
+/// exactly one entry, a kebab-case id, no unclosed code block, known
+/// field labels. Its cross
+/// references are left to [`check`], which sees every entry.
 ///
 /// # Errors
 ///
-/// Every finding, one per line, or a record file that cannot be
-/// read.
-pub fn check(cfg: &Config) -> Result<String, String> {
-    let mut files = Vec::new();
-    for f in &cfg.record_files {
-        let text = std::fs::read_to_string(cfg.root.join(f))
-            .map_err(|e| format!("cannot read {f}: {e}"))?;
-        files.push((f.clone(), text));
+/// What would make the records check reject the entry.
+pub fn check_entry(text: &str) -> Result<(), String> {
+    let entries = parse(text);
+    let [entry] = entries.as_slice() else {
+        return Err(format!(
+            "an entry must be one entry, not {}: a body line starting \
+             `### ` would open another",
+            entries.len()
+        ));
+    };
+    if !is_slug(&entry.id) {
+        return Err(format!("heading id `{}` is not kebab-case", entry.id));
     }
-    let findings = findings_for(&files);
+    // A fence left open would hide every later entry in the file.
+    if text.lines().filter(|l| is_fence(l)).count() % 2 == 1 {
+        return Err("the entry ends inside an unclosed code block; close \
+                    it with a fence line"
+            .into());
+    }
+    if let Some(f) = entry
+        .fields
+        .iter()
+        .find(|f| !KNOWN_LABELS.contains(&f.label.as_str()))
+    {
+        return Err(format!(
+            "unknown field label `{}`: the first body line reads as a \
+             field; start it with plain text, or use one of {}",
+            f.label,
+            KNOWN_LABELS.join(", ")
+        ));
+    }
+    Ok(())
+}
+
+/// Runs the gate over `cfg.record_files`; on success, a one-line
+/// summary (`5 files, 109 entries`) naming any file that does not
+/// exist, which is skipped.
+///
+/// # Errors
+///
+/// Every finding, one per line, or a record file that exists but
+/// cannot be read.
+pub fn check(cfg: &Config) -> Result<String, String> {
+    let mut parsed = Vec::new();
+    let mut absent = Vec::new();
+    for f in &cfg.record_files {
+        match std::fs::read_to_string(cfg.root.join(f)) {
+            Ok(text) => parsed.push((f.as_str(), parse(&text))),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                absent.push(f.as_str());
+            }
+            Err(e) => return Err(format!("cannot read {f}: {e}")),
+        }
+    }
+    let findings = findings_for(&parsed);
     if findings.is_empty() {
-        let entries: usize = files.iter().map(|(_, t)| parse(t).len()).sum();
-        return Ok(format!("{} files, {entries} entries", files.len()));
+        let entries: usize = parsed.iter().map(|(_, e)| e.len()).sum();
+        let mut detail = format!("{} files, {entries} entries", parsed.len());
+        if !absent.is_empty() {
+            let _ = write!(detail, "; absent: {}", absent.join(", "));
+        }
+        return Ok(detail);
     }
     let mut msg = format!("{} record finding(s):", findings.len());
     for f in &findings {
@@ -277,12 +326,20 @@ mod tests {
 
     #[test]
     fn parse_field_reads_a_labelled_line() {
+        let f = parse_field("**Depends on:** a-slug, b-slug", 7).unwrap();
         assert_eq!(
-            parse_field("**Depends on:** a-slug, b-slug"),
-            Some(("Depends on".into(), "a-slug, b-slug".into()))
+            (f.label.as_str(), f.value.as_str(), f.idx),
+            ("Depends on", "a-slug, b-slug", 7)
         );
-        // A bold run closing before the colon is prose, not a field.
-        assert_eq!(parse_field("**Supersedes `tf-2026-08-10-old`.**"), None);
+        // A bold run closing before the colon is prose, not a field,
+        // and so is a colon outside the bold run.
+        for prose in [
+            "**Supersedes `tf-2026-08-10-old`.**",
+            "**Bold `x`.**",
+            "**Not a field**: x",
+        ] {
+            assert!(parse_field(prose, 0).is_none(), "{prose}");
+        }
     }
 
     #[test]
@@ -319,11 +376,8 @@ mod tests {
         assert_eq!(e[0].idx, 8);
     }
 
-    fn files(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
-        pairs
-            .iter()
-            .map(|(n, t)| ((*n).to_owned(), (*t).to_owned()))
-            .collect()
+    fn files<'a>(pairs: &[(&'a str, &str)]) -> Vec<(&'a str, Vec<Entry>)> {
+        pairs.iter().map(|(n, t)| (*n, parse(t))).collect()
     }
 
     fn kinds(found: &[Finding]) -> Vec<&str> {
@@ -343,7 +397,7 @@ mod tests {
     fn a_dangling_reference_is_reported_in_either_field() {
         let f = files(&[(
             "a.md",
-            "### one\n\n**Depends on:** one, gone\n\n\
+            "### one\n\n**Depends on:** two, gone\n\n\
              ### two\n\n**Supersedes:** \u{2014}\n\n\
              ### three\n\n**Supersedes:** -, lost\n",
         )]);
@@ -396,8 +450,42 @@ mod tests {
         let e = check(&cfg).unwrap_err();
         assert!(e.starts_with("1 record finding(s):"), "{e}");
         assert!(e.contains("\n  b.md:1 [duplicate-id] id `one`"), "{e}");
-        cfg.record_files.push("missing.md".into());
-        assert!(check(&cfg).unwrap_err().contains("cannot read missing.md"));
+    }
+
+    #[test]
+    fn check_entry_takes_one_well_formed_entry() {
+        let ok = "### tf-2026-10-20-a -- A\n\n**Source:** bombyx\n\nBody.";
+        assert_eq!(check_entry(ok), Ok(()));
+        let e = check_entry("### tf-a -- A\n\n**Fix:** x").unwrap_err();
+        assert!(e.contains("unknown field label `Fix`"), "{e}");
+        let e = check_entry("### tf-a\n\ntext\n\n### tf-b\n").unwrap_err();
+        assert!(e.contains("one entry, not 2"), "{e}");
+        let e = check_entry("no heading").unwrap_err();
+        assert!(e.contains("one entry, not 0"), "{e}");
+        let e = check_entry("### Bad Id\n").unwrap_err();
+        assert!(e.contains("not kebab-case"), "{e}");
+        // An unclosed code block would hide every later entry in the
+        // file from the check.
+        let e = check_entry("### tf-a\n\nSee:\n```\nfoo").unwrap_err();
+        assert!(e.contains("unclosed code block"), "{e}");
+        assert_eq!(check_entry("### tf-a\n\n```\n### tf-x\n```"), Ok(()));
+    }
+
+    #[test]
+    fn a_missing_record_file_is_skipped_and_named() {
+        // A derived project may never have received one of the files.
+        let dir = test_repo::empty_dir();
+        std::fs::write(dir.0.join("a.md"), "### one\n").unwrap();
+        let mut cfg = Config::for_project("p", dir.0.clone());
+        cfg.record_files = vec!["a.md".into(), "gone.md".into()];
+        assert_eq!(
+            check(&cfg),
+            Ok("1 files, 1 entries; absent: gone.md".into())
+        );
+        // A path that exists but cannot be read is still an error.
+        std::fs::create_dir(dir.0.join("dir.md")).unwrap();
+        cfg.record_files = vec!["dir.md".into()];
+        assert!(check(&cfg).unwrap_err().contains("cannot read dir.md"));
     }
 
     #[test]

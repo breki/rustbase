@@ -15,6 +15,19 @@ red team review is warranted before continuing feature work.
 
 ---
 
+### rt-2026-10-20-records-check-accepts-date-only-ids
+
+**Category:** correctness (record ids)
+
+`records::is_slug` accepts an id made only of digit runs, so a legacy
+feedback heading `### 2026-05-18 -- title` parses as id `2026-05-18`
+and passes `records-check` unless another heading shares its date;
+then the failure reads as a duplicate id, not as a missing `tf-` id.
+`/template-improve`'s one-time conversion therefore tells the operator
+to convert dated headings whether flagged or not. Refusing an id that
+does not start with a letter would let the gate name them. Deferred:
+found in the last review round of #21, and a new id rule.
+
 ### rt-2026-10-20-wrap-fence-closing-not-commonmark
 
 **Category:** output (rendering)

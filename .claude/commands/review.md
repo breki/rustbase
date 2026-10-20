@@ -221,8 +221,10 @@ eventual commit message. Only a deferred one is logged, in
 new entries right after the `---`. The ID is
 `<rt|aq|fr>-<YYYY-MM-DD>-<kebab-slug>`, so there is no counter
 to keep and the ID greps. Each entry is a `### <id>` heading
-(the level `canon-check` reads), a `**Category:**` line, and a
-short description.
+(the level `canon-check` and `records-check` read), a
+`**Category:**` line, and a short description. Any other field
+line under the heading must use a label `records-check` knows
+(`crates/rustbase-xtask/src/records.rs`, `KNOWN_LABELS`).
 
 **Closing one is the other half of the rule:**
 
