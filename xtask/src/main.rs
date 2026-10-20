@@ -198,7 +198,13 @@ fn main() {
     };
 
     if let Err(e) = result {
-        eprintln!("xtask error: {e}");
+        eprintln!("{}", error_line(&e));
         std::process::exit(1);
     }
+}
+
+/// The line a failed command ends with, which `validate` also writes
+/// to its log.
+fn error_line(e: &str) -> String {
+    format!("xtask error: {e}")
 }

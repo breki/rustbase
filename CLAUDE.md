@@ -995,11 +995,16 @@ For any script that runs more than ~30 seconds
   bash does not synchronize with `>(...)` process
   substitution on exit, so the trailing trap output (often
   the most important lines) is silently truncated without
-  the wait. A long-running `cargo xtask` command does the same
-  with the library's `tee::Tee`, as `validate` does into
+  the wait. A `cargo xtask` command needs no shell `tee`, and
+  so has no wait problem: `tee::Tee` in `crates/rustbase-xtask`
+  gives it the same copy in `target/<name>.log`. `validate`
+  uses it for
   `target/validate.log` (its step lines and the failure,
   rewritten each run; a gate's own warnings print to the
-  terminal only).
+  terminal only). A second `validate` in the same checkout is
+  refused while the first holds the log. One that cannot open
+  it for another reason warns and runs unlogged, and the file
+  then still holds an earlier run's output.
 - **Caller side** -- **never pipe a long-running command
   through `tail -N` under a tight timeout.** `tail -N` says
   "give me the end"; the timeout says "there will be no

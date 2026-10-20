@@ -14,7 +14,7 @@ gates `xtask/src/validate.rs` inserts after Deny
 
 ## Output
 
-One line per gate (abridged):
+One line per gate (rows 6 to 14 left out):
 
 ```
 [1/16] Dep-age....... OK (no dependency changes, 0.0s)
@@ -23,13 +23,19 @@ One line per gate (abridged):
 [4/16] Records....... OK (5 files, 109 entries, 0.0s)
 [5/16] Scripts....... OK (2 scripts executable, 0.0s)
 ...
-[15/16] Coverage...... OK (100.0% >= 90%, 47.5s)
-[16/16] Audit......... OK
-Validate OK
+[15/16] Coverage...... OK (96.5% >= 90%, 10.2s)
+[16/16] Audit......... OK (cargo: 0 vuln, 0 warn, npm: 0 vuln, 1.8s)
+Validate OK (28.8s)
 ```
 
 The same lines, and a failure's report, are also in
-`target/validate.log`, rewritten each run.
+`target/validate.log`, rewritten each run. Warnings a gate prints
+itself (Dep-age or Audit when the network is down, for example)
+appear on the terminal only. A second run while one is still
+going is refused; the `target/validate.log.lock` file left behind
+is harmless. A run that cannot open the log for another reason
+warns and is not logged, so the file then holds an earlier run's
+output.
 
 ## Implementation
 
