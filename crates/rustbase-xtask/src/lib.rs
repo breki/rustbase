@@ -17,6 +17,8 @@ pub mod canon;
 pub mod cargo_test;
 pub mod changelog;
 pub mod check;
+#[cfg(feature = "clap")]
+pub mod cli;
 pub mod clippy;
 pub mod coverage;
 pub mod deny;

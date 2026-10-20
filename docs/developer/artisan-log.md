@@ -16,17 +16,6 @@ Artisan review is warranted before continuing feature work.
 
 ---
 
-### aq-2026-10-19-todo-done-unchecked-arguments
-
-**Category:** API Design / Type Safety
-
-`move_to_done` in `xtask/src/todo.rs` takes two adjacent
-`Option<&str>` parameters (summary, doc) that swap silently, and
-the slug/date checks run only in `done_cmd`/`add`, so the pure
-helpers accept unchecked values. Pass a `DoneEntry` struct, or
-add `Slug` / `IsoDate` newtypes whose constructors are
-`check_slug` / `check_date`.
-
 ### aq-2026-10-19-canon-check-kinds-as-enum
 
 **Category:** Type Safety

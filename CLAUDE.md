@@ -827,11 +827,13 @@ pass. A group that needs another fails when it runs alone.
 
 A shared gate goes into the library's list,
 `step::standard` (`crates/rustbase-xtask/src/step.rs`), which
-also fixes the order. A project's own gate is a `step()`
+also fixes the order, and its subcommand into `cli::LibCommand`
+(`crates/rustbase-xtask/src/cli.rs`), which `xtask`'s
+`XCommand` flattens in. A project's own gate is a `step()`
 function in its own `xtask` module, inserted into that list in
-`xtask/src/validate.rs` (`step::position` finds the place). An
-optional gate also takes `#[cfg(feature = "<name>")]` in each
-place that names it:
+`xtask/src/validate.rs` (`step::position` finds the place), with
+its own `XCommand` variant. An optional gate also takes
+`#[cfg(feature = "<name>")]` in each place that names it:
 
 - the feature in `[features]` of `xtask/Cargo.toml`;
 - its `mod` line in `xtask/src/main.rs`;
