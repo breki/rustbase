@@ -161,6 +161,13 @@ jobs:
       - name: Licences, bans and sources
         run: cargo xtask deny
 
+      # The fetch above put the crate sources on disk, which is where
+      # the licence texts are read from. The file is thrown away;
+      # the step fails when a dependency ships no licence text, long
+      # before a project first ships a binary carrying it.
+      - name: Third-party licence file generates
+        run: cargo xtask licenses --out "$RUNNER_TEMP/THIRD-PARTY-LICENSES"
+
   # Frontend gates. This job assumes a `frontend/` directory; a
   # project pruned to CLI-only (see "Workspace Crates" in
   # CLAUDE.md) deletes this job along with the frontend itself.

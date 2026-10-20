@@ -26,6 +26,7 @@ pub mod dep_age;
 pub mod doc;
 pub mod dupes;
 pub mod fmt;
+pub mod licenses;
 pub mod markdown;
 mod process;
 pub mod records;
@@ -162,6 +163,9 @@ fn is_missing_subcommand(stderr: &str) -> bool {
 /// relative to `root` (an absolute one is taken as it is).
 #[derive(Clone, Debug)]
 pub struct Config {
+    /// The project's name, as written in generated files such as the
+    /// third-party licence file.
+    pub name: String,
     /// The workspace root: where `Cargo.lock` lives and where
     /// `git` and `cargo` run.
     pub root: PathBuf,
@@ -206,6 +210,7 @@ impl Config {
     pub fn for_project(project: &str, root: PathBuf) -> Self {
         let prefix = project.to_ascii_uppercase().replace('-', "_");
         Self {
+            name: project.to_owned(),
             root,
             dep_age_allow_env: format!("{prefix}_DEP_AGE_ALLOW"),
             dep_age_strict_env: format!("{prefix}_DEP_AGE_STRICT"),
@@ -351,6 +356,7 @@ mod tests {
         );
         assert_eq!(cfg.user_agent, "my-app-xtask-dep-age");
         assert_eq!(cfg.root, PathBuf::from("/w"));
+        assert_eq!(cfg.name, "my-app");
     }
 
     #[test]

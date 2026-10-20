@@ -132,6 +132,13 @@ and this project adheres to
   outside a fenced code block, opts a file in; each line keeps its own ending,
   and a failure to read any doc writes none. It lists every file with a
   sentinel, which `/release` stages. Taken from the bombyx downstream project.
+- `cargo xtask licenses` writes `THIRD-PARTY-LICENSES`: every crate that goes
+  into building the shipped binary, with its licence texts, read from the crate
+  sources already on disk. It fails when a crate ships no licence text
+  (`--max-missing` allows some, with a stated reason). CI runs it on every push
+  as an early warning, since this template deploys rather than ships binaries; a
+  project that ships them adds it to its release job. `Config` gains `name`, the
+  project name the file names. Taken from the bombyx downstream project.
 
 ### Changed
 

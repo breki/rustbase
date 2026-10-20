@@ -18,7 +18,7 @@ use clap::Subcommand;
 use crate::{
     Config, FMT_DIFF_LINES, STANDALONE_LINES, Strictness, audit, canon,
     cargo_test, changelog, check, clippy, coverage, deny, dep_age, doc, dupes,
-    fmt, records, scripts, todo, version_sync,
+    fmt, licenses, records, scripts, todo, version_sync,
 };
 
 /// The subcommands the library implements.
@@ -102,6 +102,22 @@ pub enum LibCommand {
     Changelog {
         #[command(subcommand)]
         action: ChangelogAction,
+    },
+    /// Write the third-party licence file for a distributed binary
+    /// (THIRD-PARTY-LICENSES): every crate that goes into building it,
+    /// with its licence texts; fails when a crate ships none
+    Licenses {
+        /// Where to write it (default: THIRD-PARTY-LICENSES at the
+        /// workspace root)
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+        /// Target triple the binary is built for (default: the host's)
+        #[arg(long)]
+        target: Option<String>,
+        /// How many crates may ship no licence text; raise it only
+        /// with a stated reason
+        #[arg(long, default_value_t = 0)]
+        max_missing: usize,
     },
     /// Rewrite `<!-- version: X -->` sentinels (and `VERSION=` lines
     /// in the same files) in README.md and docs/ from the crate's
@@ -264,6 +280,19 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
         LibCommand::DepAgeCheck { base } => dep_age::dep_age_check(cfg, &base)?,
         LibCommand::DepPreflight => dep_age::dep_preflight(cfg)?,
         LibCommand::Changelog { action } => run_changelog(action, cfg)?,
+        LibCommand::Licenses {
+            out,
+            target,
+            max_missing,
+        } => println!(
+            "{}",
+            licenses::write(
+                cfg,
+                out.as_deref(),
+                target.as_deref(),
+                max_missing
+            )?
+        ),
         LibCommand::VersionSync => println!("{}", version_sync::sync(cfg)?),
         LibCommand::Todo { action } => run_todo(action, cfg)?,
     }

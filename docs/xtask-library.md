@@ -178,7 +178,7 @@ only std and `serde_json` beyond its project's own helpers.
 
 | Module | Lines | Verdict | What ties it to its project |
 |-|-|-|-|
-| bombyx `licenses` (third-party licence file) | 1,073 | move | the product name in one header line |
+| bombyx `licenses` (third-party licence file) | 1,073 | moved (#31) as `licenses`, run in CI as a check | the product name, now `Config::name` |
 | bombyx `version_sync` (`<!-- version: X -->` sentinels) | 204 | moved (#30): `version_sync`, `version-sync`, run by `/release` | the manifest path, now `Config::version_manifest` |
 | hoard `repo_hygiene` (scripts staged executable) | 231 | moved (#28): `scripts`, the Scripts step | nothing: the `scripts/` convention |
 | jutro `tag_signature` (SSH-signed release tags) | 409 | move, opt-in | placeholder strings naming jutro |
