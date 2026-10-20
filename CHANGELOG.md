@@ -123,6 +123,13 @@ and this project adheres to
   same checkout is refused while the first runs. It uses the library's new
   `tee::Tee`, which any xtask command can use (`validate` is the only one so
   far); taken from the jutro downstream project.
+- `cargo xtask version-sync`, which `/release` now runs during the bump:
+  rewrites every `<!-- version: X -->` sentinel line in `README.md` and `docs/`,
+  and any `VERSION=` line in the same file, to the version in
+  `Config::version_manifest` (default `crates/<project>/Cargo.toml`). Only a
+  line that is a whole sentinel opts a file in, so a doc that quotes the
+  sentinel in a sentence is left alone. Taken from the bombyx downstream
+  project.
 
 ### Changed
 

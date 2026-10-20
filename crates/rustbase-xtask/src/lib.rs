@@ -34,6 +34,7 @@ pub mod step;
 pub mod tee;
 pub mod text;
 pub mod todo;
+pub mod version_sync;
 
 /// The project's `xtask` package, left out of the coverage and
 /// duplication measurements: a binary of glue around this library.
@@ -185,6 +186,9 @@ pub struct Config {
     /// it is not joined to `root`: set it absolute (`root.join(...)`),
     /// or a run from another directory skips it.
     pub audit_npm_dir: Option<PathBuf>,
+    /// The manifest whose `[package]` version is the project's, which
+    /// `version_sync` copies into the docs; relative to `root`.
+    pub version_manifest: PathBuf,
 }
 
 impl Config {
@@ -192,7 +196,8 @@ impl Config {
     /// `<PROJECT>_DEP_AGE_ALLOW` and `<PROJECT>_DEP_AGE_STRICT`,
     /// `<project>-xtask-dep-age`, the default [`Thresholds`], canon
     /// [`Rules`](canon::Rules) and [record files](records::DEFAULT_FILES),
-    /// and no npm project to audit.
+    /// no npm project to audit, and `crates/<project>/Cargo.toml` as
+    /// the version manifest.
     pub fn for_project(project: &str, root: PathBuf) -> Self {
         let prefix = project.to_ascii_uppercase().replace('-', "_");
         Self {
@@ -207,6 +212,9 @@ impl Config {
                 .map(|f| (*f).to_owned())
                 .collect(),
             audit_npm_dir: None,
+            version_manifest: PathBuf::from(format!(
+                "crates/{project}/Cargo.toml"
+            )),
         }
     }
 }
@@ -329,6 +337,10 @@ mod tests {
         assert_eq!(cfg.dep_age_allow_env, "MY_APP_DEP_AGE_ALLOW");
         assert_eq!(cfg.dep_age_strict_env, "MY_APP_DEP_AGE_STRICT");
         assert_eq!(cfg.audit_npm_dir, None);
+        assert_eq!(
+            cfg.version_manifest,
+            PathBuf::from("crates/my-app/Cargo.toml")
+        );
         assert_eq!(cfg.user_agent, "my-app-xtask-dep-age");
         assert_eq!(cfg.root, PathBuf::from("/w"));
     }

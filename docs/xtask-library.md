@@ -179,7 +179,7 @@ only std and `serde_json` beyond its project's own helpers.
 | Module | Lines | Verdict | What ties it to its project |
 |-|-|-|-|
 | bombyx `licenses` (third-party licence file) | 1,073 | move | the product name in one header line |
-| bombyx `version_sync` (`<!-- version: X -->` sentinels) | 204 | move | the manifest path |
+| bombyx `version_sync` (`<!-- version: X -->` sentinels) | 204 | moved (#30): `version_sync`, `version-sync`, run by `/release` | the manifest path, now `Config::version_manifest` |
 | hoard `repo_hygiene` (scripts staged executable) | 231 | moved (#28): `scripts`, the Scripts step | nothing: the `scripts/` convention |
 | jutro `tag_signature` (SSH-signed release tags) | 409 | move, opt-in | placeholder strings naming jutro |
 | jutro `xtask_log` (tee output to `target/<name>.log`) | 421 | moved (#29) as `tee`, used by `validate`; its cargo-streaming variants stay in jutro | nothing |

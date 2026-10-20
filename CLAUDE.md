@@ -110,6 +110,7 @@ cargo xtask sync-candidates <last-synced>  # categorized sync delta, filtered
 cargo xtask changelog add --kind <k> [--breaking] "text"  # insert [Unreleased] bullet
 cargo xtask changelog infer-bump       # SemVer level [Unreleased] calls for
 cargo xtask changelog promote --version <v> --date <d>  # date [Unreleased]
+cargo xtask version-sync      # rewrite <!-- version: X --> sentinels in docs
 cargo xtask todo <list|add|done> ...       # mechanical docs/todo.md edits
 ```
 
@@ -1077,8 +1078,10 @@ The project version lives in
 number in README body text or other markdown — those
 copies drift silently from `Cargo.toml`. If a version
 mention is unavoidable in user-facing prose, embed it
-as a sentinel comment (`<!-- version: 0.5.0 -->`) so a
-script can rewrite both on release, or pull the value
+as a sentinel comment (`<!-- version: 0.5.0 -->`) on a
+line of its own in `README.md` or under `docs/`:
+`cargo xtask version-sync`, which `/release` runs, rewrites
+it and any `VERSION=` line in the same file. Or pull the value
 from `Cargo.toml` via the build (Vite supports this
 for the frontend; CLI binaries can use `env!("CARGO_PKG_VERSION")`).
 
