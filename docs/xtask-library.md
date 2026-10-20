@@ -141,8 +141,8 @@ hooks are #10.
 
 ### Distribution and versioning
 
-Prepared for crates.io as `rustbase-xtask` (#4); 0.1.0 exists there
-once the operator runs step 4 below. Through crates.io the
+Published on crates.io as `rustbase-xtask` (#4); 0.1.0 went out on
+2026-10-20, tagged `rustbase-xtask-v0.1.0`. Through crates.io the
 licence/sources gate (`deny.toml` rejects git sources) and the
 cooldown and audit tooling apply to it like any other dependency. It
 follows SemVer with its own version, in
@@ -155,8 +155,8 @@ This template depends on it by path and version (`xtask/Cargo.toml`):
 inside this repository cargo builds the local source, so a library
 change and the template change using it land together. The
 `version` is the last release; `main` can hold library changes not
-published yet. A downstream keeps its copy of the source until #9,
-which moves clockdump to the published crate.
+published yet. A downstream moves to the published crate by the
+steps under "Migrating a downstream" below.
 
 Releasing the library is manual for now, and only the operator can
 run the publish, which needs their crates.io login. Run it on `main`
@@ -234,26 +234,86 @@ the last column, where there is one. The parser at the core of
 `systemd_unit` (sections, comments, continuations; about 100 lines)
 is generic and can follow once a second project ships a unit.
 
-## Migration plan (one downstream: clockdump)
+## Migrating a downstream
 
-1. Prepare the library for publishing (#4); the operator publishes
-   0.1.0.
-2. In clockdump: add the dependency, delete its vendored
-   `xtask/src/dep_age.rs` and `xtask/src/dep_age/`, and call the
-   library with `Config::for_project("clockdump",
-   workspace_root())` where the template does (`main.rs`, and the
-   library's standard steps in `validate.rs`). (The prototype run,
-   made before the step moved out of `validate.rs`, came to -1,773 /
-   +26 lines.)
-3. Run `cargo xtask validate` and its CI; record the result.
-4. Repeat per module as each is extracted; the other downstreams
-   follow once their copies are synced to a template version that
-   matches the library's.
+clockdump went first (#9, breki/clockdump#1), from a vendored copy of
+the template's `xtask` at v0.17.0 to `rustbase-xtask` 0.1.0. Its
+`validate` passes every gate it ran before, coverage at 96.9%, and
+`xtask` came to about -1,100 lines net -- less than the one-module
+prototype's -1,773, because step 1 copies in the template's deploy
+and frontend modules, compiled out but present.
+
+**Before step 1**, bring everything outside `xtask/` up to the
+template with `/template-sync`. Its rules still skip `xtask/`; step 9
+changes that. The steps, in the order clockdump took them:
+
+1. **Copy the template's `xtask/src`** from the commit tagged
+   `rustbase-xtask-vX.Y.Z` for the version you will pin, not from
+   `main`, which can call library code that version lacks. Its
+   `main.rs` flattens the library's `cli::LibCommand` into its own
+   `XCommand`, and `validate.rs` runs the library's
+   `step::standard` gate list, so the downstream's vendored gate
+   modules go and nothing replaces them. Take every file, the
+   deploy, frontend and backfeed modules included: `main.rs` and
+   `sync.rs` call into them, and `cargo xtask clippy` compiles each
+   feature group. A module of the project's own (hoard's deploy
+   pipeline, jutro's `worktree`, an architecture lint) stays: its
+   subcommand becomes an `XCommand` variant in `main.rs` beside the
+   flattened `LibCommand`, and its gate a step placed with
+   `step::insert_after` in `validate.rs` ("Optional xtask features"
+   in `CLAUDE.md`). `main.rs` is then merged too, like the two files
+   in step 9. clockdump had no such module, so this part has not
+   been run yet.
+2. **`xtask/Cargo.toml`**: take the template's, then leave the
+   feature groups the project does not use out of `default` and drop
+   the `path` from the library dependency, leaving
+   `rustbase-xtask = { version = "0.1", features = ["clap"] }` (the
+   downstream has no copy of the crate). The rest of the file is
+   needed: `clean-cache` names the optional `windows-sys`
+   dependency, and the Deny gate wants the `license` field.
+3. **`helpers.rs`**: `Config::for_project("<name>", ...)`, which keeps
+   the `<NAME>_DEP_AGE_ALLOW` variable. Drop the template's canon
+   exemptions, which name template paths, and the test that asserts
+   them; keep `audit_npm_dir` only with a frontend.
+4. **`validate.rs`**: the gates the old vendored `validate.rs` did
+   not run can be left out, so the migration keeps the gates the
+   project had. Compare its steps with `step::names` in
+   `crates/rustbase-xtask/src/step.rs`, write the difference as a
+   local list of `step::names::*` constants (clockdump's `DEFERRED`:
+   Canon, Records, Scripts, Doc, Deny), and remove them with
+   `steps.retain(|s| !DEFERRED.contains(&s.name()))` **after** any
+   `insert_after`: the template anchors the frontend gates on Deny,
+   so filtering first leaves no anchor and `validate` fails at
+   startup. Adopt the left-out gates later, one change each.
+5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
+   to `[workspace.metadata.coverage] ignore` in the root
+   `Cargo.toml`.
+6. **`clippy.toml`**: the first `cargo xtask clippy` names each
+   `doc-valid-idents` entry the template's `xtask` needs (clockdump
+   lacked `CommonMark`); add them.
+7. **The cooldown**: a library version inside the 14 days needs the
+   allow-list, with a stated reason, on each local run
+   (`<NAME>_DEP_AGE_ALLOW=rustbase-xtask@X.Y.Z cargo xtask validate`)
+   and, where the project has CI, in a repository variable of the
+   same `<NAME>_DEP_AGE_ALLOW` name read by its dep-age job. It can
+   go once the 14 days pass.
+8. **Run `validate`.** Failures in the project's own code from a
+   newer toolchain (clockdump: Clippy 1.99's `assert_is_empty`) are
+   their own commit.
+9. **Bring the project's canon in step**: docs naming the deleted
+   modules (`coverage.rs`'s regex), its `template-feedback.md` and
+   `/template-sync` rules where they say to skip `xtask` files (every
+   file is now synced: the template's verbatim, `helpers.rs`,
+   `validate.rs` and any file holding project modules merged), and
+   its `CLAUDE.md` gate list.
+
+The other downstreams (kozmotic, bombyx, hoard, jutro) follow the
+same steps.
 
 ## Proposed follow-up issues
 
-1. Settle the crate name and prepare `0.1` for publishing (done: #4,
-   `rustbase-xtask`; the operator runs `cargo publish`).
+1. Settle the crate name and publish `0.1` (done: #4, `rustbase-xtask`
+   0.1.0, 2026-10-20).
 2. Decouple feature selection: registered `validate` steps, helpers
    grouped by user (done: #5).
 3. Extract `audit`, `deny`, `coverage`, `dupes`, `doc_cmd`, `canon`,
@@ -263,5 +323,6 @@ is generic and can follow once a second project ships a unit.
    layout only).
 5. Extension points for project subcommands and steps (done: #8;
    deploy hooks are #10).
-6. Migrate clockdump, then the other downstreams.
+6. Migrate clockdump (done: #9, breki/clockdump#1), then the other
+   downstreams.
 7. Deploy: decide what, if anything, is shared.
