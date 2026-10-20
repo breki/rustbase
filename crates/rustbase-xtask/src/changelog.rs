@@ -77,14 +77,16 @@ impl Kind {
 
     /// The kind a `### <label>` heading line names, if any.
     fn from_heading(line: &str) -> Option<Self> {
-        Self::ORDER.into_iter().find(|k| k.heading() == line.trim())
+        Self::ORDER
+            .into_iter()
+            .find(|k| k.heading() == line.trim_end())
     }
 }
 
 /// A `SemVer` bump level. Displays as `major`, `minor` or `patch`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Bump {
-    /// A `**BREAKING:**` bullet or a non-empty `### Removed`.
+    /// A top-level `- **BREAKING:**` entry or a non-empty `### Removed`.
     Major,
     /// A non-empty `### Added`.
     Minor,
@@ -170,22 +172,50 @@ fn unreleased(lines: &[String]) -> Result<(usize, usize), String> {
         .ok_or_else(|| "CHANGELOG.md has no '## [Unreleased]' section".into())
 }
 
-/// Whether a line is a top-level markdown bullet (`- ...`).
+/// Whether a line is a markdown bullet (`- ...`) at any indent, so
+/// an entry's nested items count toward a subsection being
+/// non-empty.
 fn is_bullet(line: &str) -> bool {
     line.trim_start().starts_with("- ")
+}
+
+/// Refuse an `[Unreleased]` with no bullet: there is nothing to
+/// infer a bump for, or to release.
+fn require_releasable(
+    lines: &[String],
+    u_start: usize,
+    u_end: usize,
+) -> Result<(), String> {
+    if ((u_start + 1)..u_end).any(|i| is_bullet(&lines[i])) {
+        Ok(())
+    } else {
+        Err("nothing to release: [Unreleased] has no bullets".into())
+    }
+}
+
+/// True for a `MAJOR.MINOR.PATCH` version of plain digits without
+/// leading zeros (`SemVer` 2.0.0), and no prefix, pre-release or
+/// build suffix.
+fn is_semver_core(version: &str) -> bool {
+    let parts: Vec<&str> = version.split('.').collect();
+    parts.len() == 3
+        && parts.iter().all(|p| {
+            !p.is_empty()
+                && p.bytes().all(|b| b.is_ascii_digit())
+                && (p == &"0" || !p.starts_with('0'))
+        })
 }
 
 /// The bump `content`'s `[Unreleased]` bullets call for.
 fn bump_of(content: &str) -> Result<Bump, String> {
     let lines = to_owned_lines(content);
     let (u_start, u_end) = unreleased(&lines)?;
-    let body = (u_start + 1)..u_end;
-    if !body.clone().any(|i| is_bullet(&lines[i])) {
-        return Err("nothing to release: [Unreleased] has no bullets".into());
-    }
-    let breaking = body
-        .clone()
-        .any(|i| lines[i].trim_start().starts_with("- **BREAKING:**"));
+    require_releasable(&lines, u_start, u_end)?;
+    // Only an entry's own first line, at column 0: a marker quoted
+    // inside an entry (a nested item, a code sample) is not a
+    // breaking change.
+    let breaking =
+        ((u_start + 1)..u_end).any(|i| lines[i].starts_with("- **BREAKING:**"));
     let nonempty = |kind| subsection_nonempty(&lines, u_start, u_end, kind);
     Ok(if breaking || nonempty(Kind::Removed) {
         Bump::Major
@@ -204,7 +234,7 @@ fn subsection_nonempty(
     kind: Kind,
 ) -> bool {
     let Some(h) =
-        ((u_start + 1)..u_end).find(|&i| lines[i].trim() == kind.heading())
+        ((u_start + 1)..u_end).find(|&i| lines[i].trim_end() == kind.heading())
     else {
         return false;
     };
@@ -218,32 +248,28 @@ fn promoted(
     version: &str,
     date: &str,
 ) -> Result<String, String> {
-    let parts: Vec<&str> = version.split('.').collect();
-    let is_semver = parts.len() == 3
-        && parts
-            .iter()
-            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
-    if !is_semver {
+    if !is_semver_core(version) {
         return Err(format!("version {version:?} is not X.Y.Z"));
     }
     if !is_iso_date(date) {
         return Err(format!("date {date:?} is not YYYY-MM-DD"));
     }
-    bump_of(content)?;
     let mut lines = to_owned_lines(content);
-    let (u_start, _) = unreleased(&lines)?;
+    let (u_start, u_end) = unreleased(&lines)?;
+    require_releasable(&lines, u_start, u_end)?;
     lines[u_start] = format!("## [{version}] - {date}");
     let skeleton = UNRELEASED_SKELETON.iter().map(|&s| s.to_owned());
     lines.splice(u_start..u_start, skeleton);
     Ok(rejoin_like(&lines, content))
 }
 
-/// The end (exclusive) of a `### ` subsection whose body starts
-/// at `start`: the next `### ` heading within `(start..u_end)`,
-/// or `u_end`.
+/// The end (exclusive) of a `### ` subsection whose body starts at
+/// `start`: the next column-0 `### ` heading within `(start..u_end)`,
+/// or `u_end`. Column 0 only, so a `### ` line inside an indented
+/// entry is content, not a heading.
 fn subsection_block_end(lines: &[String], start: usize, u_end: usize) -> usize {
     (start..u_end)
-        .find(|&i| lines[i].trim_start().starts_with("### "))
+        .find(|&i| lines[i].starts_with("### "))
         .unwrap_or(u_end)
 }
 
@@ -262,7 +288,7 @@ fn insert_bullet(
     let bullet = wrap_markdown(text, "- ", "  ", MARKDOWN_WIDTH);
 
     if let Some(h) =
-        ((u_start + 1)..u_end).find(|&i| lines[i].trim() == kind.heading())
+        ((u_start + 1)..u_end).find(|&i| lines[i].trim_end() == kind.heading())
     {
         append_to_existing_block(&mut lines, h, u_end, bullet);
     } else {
@@ -514,6 +540,35 @@ mod tests {
     }
 
     #[test]
+    fn code_in_an_entry_never_reads_as_changelog_structure() {
+        // A fence-first Removed entry still counts (major), and a
+        // `### ` line inside an entry does not end its subsection.
+        let removed =
+            with(Kind::Removed, "```toml\n[legacy]\n```\nThe table is gone.");
+        let both = insert_bullet(&removed, Kind::Fixed, "a fix").unwrap();
+        assert_eq!(bump_of(&both), Ok(Bump::Major));
+        let first = with(Kind::Added, "Example:\n```md\n### Notes\n```");
+        let out = insert_bullet(&first, Kind::Added, "second").unwrap();
+        let notes = out.find("### Notes").unwrap();
+        let second = out.find("- second").unwrap();
+        assert!(second > out[notes..].find("```").unwrap() + notes, "{out}");
+    }
+
+    #[test]
+    fn a_breaking_marker_inside_an_entry_is_not_a_breaking_change() {
+        for text in [
+            "Parse markers in sub-items:\n- **BREAKING:** inside one",
+            "Example:\n```md\n- **BREAKING:** x\n```",
+        ] {
+            assert_eq!(
+                bump_of(&with(Kind::Fixed, text)),
+                Ok(Bump::Patch),
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
     fn there_is_no_bump_and_no_release_without_a_bullet() {
         assert!(
             bump_of(SKELETON)
@@ -540,7 +595,7 @@ mod tests {
     #[test]
     fn promote_rejects_a_malformed_version_or_date() {
         let before = with(Kind::Fixed, "a fix");
-        for v in ["0.2", "v0.2.0", "0.2.x", "0..1"] {
+        for v in ["0.2", "v0.2.0", "0.2.x", "0..1", "01.2.3", "1.02.3"] {
             assert!(promoted(&before, v, "2026-10-20").is_err(), "{v}");
         }
         assert!(promoted(&before, "0.2.0", "2026/10/20").is_err());

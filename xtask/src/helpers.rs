@@ -1,10 +1,6 @@
 use std::path::PathBuf;
 
 use rustbase_xtask::canon::Exempt;
-pub use rustbase_xtask::markdown::{
-    MARKDOWN_WIDTH, rejoin_like, require_nonempty, section_bounds,
-    to_owned_lines, wrap_markdown,
-};
 pub use rustbase_xtask::text::is_iso_date;
 
 /// Resolve the workspace root (the parent of the xtask

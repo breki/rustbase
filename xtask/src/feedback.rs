@@ -1,10 +1,9 @@
 //! `cargo xtask feedback-add` -- the deterministic appender for
 //! `docs/developer/template-feedback.md`.
 //!
-//! `/template-improve` used to hand-edit the feedback file,
-//! which meant the LLM owned entry placement, date stamping,
-//! and dedup -- all mechanical work that drifts. This command
-//! owns that: it mints a stable `tf-<yyyy-mm-dd>-<slug>` ID
+//! Entry placement, date stamping and dedup are mechanical, so
+//! this command owns them rather than `/template-improve`'s
+//! prose: it mints a stable `tf-<yyyy-mm-dd>-<slug>` ID
 //! (mirroring the `rt-`/`aq-` log convention in
 //! `docs/developer/`), inserts the entry at the top of the
 //! chosen section, and skips a re-add of an ID already present.
@@ -17,6 +16,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::ValueEnum;
+use rustbase_xtask::markdown::rejoin_like;
 
 use crate::helpers::workspace_root;
 
@@ -96,7 +96,7 @@ fn format_entry(id: &str, title: &str, body: &str) -> String {
 /// `### <id> -- ...`), not a bare substring, so an ID that is a
 /// prefix of a different same-day ID -- or that appears inside
 /// some entry's body prose -- does not spuriously suppress the
-/// add (RT-3).
+/// add.
 fn has_entry(md: &str, id: &str) -> bool {
     md.lines().any(|l| {
         l.strip_prefix("### ").is_some_and(|rest| {
@@ -113,7 +113,7 @@ fn is_target_section(line: &str, kw: &str) -> bool {
 
 /// Index of the first section header matching `kw`, skipping
 /// any `## `-looking line inside a fenced code block so a code
-/// sample cannot be chosen as the insertion point (RT-4).
+/// sample cannot be chosen as the insertion point.
 fn find_section(lines: &[&str], kw: &str) -> Option<usize> {
     let mut in_fence = false;
     for (idx, l) in lines.iter().enumerate() {
@@ -129,21 +129,20 @@ fn find_section(lines: &[&str], kw: &str) -> Option<usize> {
 /// The line an empty section carries in place of entries.
 const PLACEHOLDER: &str = "_None yet._";
 
-/// Remove the `_None yet._` line from the section whose header is
-/// at `sec`, with the blank line under it. Searched to the next
-/// `## ` header: earlier inserts push it down the section.
+/// Remove the `_None yet._` line from the section whose header is at
+/// `sec`, with the blank line under it -- only when it is the first
+/// non-blank line under the header. Anywhere else the same text is
+/// content (an entry quoting the empty-section format), not the
+/// placeholder.
 fn drop_placeholder(lines: &mut Vec<&str>, sec: usize) {
-    let end = lines[sec + 1..]
-        .iter()
-        .position(|l| l.starts_with("## "))
-        .map_or(lines.len(), |off| sec + 1 + off);
-    let Some(off) = lines[sec + 1..end]
-        .iter()
-        .position(|l| l.trim() == PLACEHOLDER)
+    let Some(at) =
+        (sec + 1..lines.len()).find(|&i| !lines[i].trim().is_empty())
     else {
         return;
     };
-    let at = sec + 1 + off;
+    if lines[at].trim() != PLACEHOLDER {
+        return;
+    }
     if lines.get(at + 1).is_some_and(|l| l.trim().is_empty()) {
         lines.remove(at + 1);
     }
@@ -171,7 +170,7 @@ fn insert_entry(md: &str, kw: &str, block: &str) -> Result<String, String> {
     out.extend(&block_lines);
     out.push("");
     out.extend(&lines[ins..]);
-    Ok(out.join("\n") + "\n")
+    Ok(rejoin_like(&out, md))
 }
 
 /// Absolute path of this template's feedback file.
@@ -260,9 +259,13 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 }
 
 /// True when `line` opens or closes a fenced code block (its
-/// first non-whitespace run is ```` ``` ```` or `~~~`). Callers
-/// toggle fence state on each such line so markdown headers
-/// *inside* a code fence are not mistaken for structure.
+/// first non-whitespace run is ```` ``` ```` or `~~~`).
+///
+/// Unlike `CHANGELOG.md` and `docs/todo.md`, whose entries are
+/// indented under a bullet, feedback entries are written at column 0
+/// (`### <id> -- <title>`, body unindented). The library's
+/// column-0-only section rule does not hold here, so `find_section`
+/// tracks fences to skip a `## ` line inside a code sample.
 pub fn is_fence(line: &str) -> bool {
     let t = line.trim_start();
     t.starts_with("```") || t.starts_with("~~~")
@@ -337,6 +340,41 @@ Nothing yet.
     }
 
     #[test]
+    fn a_header_with_trailing_spaces_keeps_other_sections_placeholders() {
+        let doc = "## Open divergences \n\n### tf-x -- X\n\n## Resolved\n\n_None yet._\n";
+        let out = insert_entry(doc, "open", "### tf-a -- A").unwrap();
+        assert!(out.contains("_None yet._"), "{out}");
+    }
+
+    #[test]
+    fn an_unclosed_fence_in_an_entry_keeps_later_placeholders() {
+        let doc = "## Open divergences\n\n### tf-1 -- one\n\nRun:\n```sh\ncargo x\n\n\
+                   ## Resolved\n\n_None yet._\n";
+        let out = insert_entry(doc, "open", "### tf-a -- A").unwrap();
+        assert!(out.contains("_None yet._"), "{out}");
+    }
+
+    #[test]
+    fn a_placeholder_quoted_in_an_entry_or_a_fenced_header_copy_is_left_alone()
+    {
+        // A fenced copy of a header before the real one must not
+        // crash, and a placeholder quoted inside an entry is content.
+        let doc = "## Open divergences\n\n### tf-1 -- one\n\n```md\n## Resolved\n\n\
+                   _None yet._\n```\n\n## Resolved\n\n### tf-2 -- two\n\n```md\n\
+                   _None yet._\n```\n";
+        let out = insert_entry(doc, "resolved", "### tf-a -- A").unwrap();
+        assert_eq!(out.matches("_None yet._").count(), 2, "{out}");
+    }
+
+    #[test]
+    fn insert_entry_keeps_crlf_line_endings() {
+        let doc = "# F\r\n\r\n## Open divergences\r\n\r\n## Resolved\r\n";
+        let out = insert_entry(doc, "open", "### tf-a -- A").unwrap();
+        assert!(out.contains("### tf-a -- A\r\n"), "{out:?}");
+        assert!(!out.replace("\r\n", "").contains('\n'), "{out:?}");
+    }
+
+    #[test]
     fn insert_entry_drops_the_empty_section_placeholder() {
         // A section with no entries carries `_None yet._`; the first
         // entry replaces it, and other sections keep theirs.
@@ -364,7 +402,7 @@ Nothing yet.
     #[test]
     fn find_section_skips_headers_in_code_fences() {
         // A `## Resolved` line inside a code fence must not be
-        // chosen as the section (RT-4).
+        // chosen as the section.
         let md = "\
 ## Open divergences
 
@@ -432,7 +470,7 @@ Nothing yet.
     #[test]
     fn today_iso_is_well_formed() {
         // `dddd-dd-dd` shape, without depending on the
-        // ISO-date validator (which lives in `helpers`).
+        // ISO-date validator (`rustbase_xtask::text::is_iso_date`).
         let s = today_iso();
         let b = s.as_bytes();
         assert_eq!(b.len(), 10);

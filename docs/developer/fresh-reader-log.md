@@ -18,6 +18,15 @@ work.
 
 ---
 
+### fr-2026-10-20-feedback-keeps-its-own-is-fence
+
+**Category:** duplication
+
+`xtask/src/feedback.rs` keeps its own `is_fence`, identical to
+`rustbase_xtask::markdown::is_fence`. Import the library's and delete
+the copy; keep the comment explaining why feedback, unlike changelog
+and todo, tracks fences. Deferred because stage 3 does not change code.
+
 ### fr-2026-10-20-report-line-caps-owned-twice
 
 **Category:** naming (ownership)

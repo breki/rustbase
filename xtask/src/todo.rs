@@ -17,11 +17,12 @@
 use std::fs;
 
 use clap::Subcommand;
-
-use crate::helpers::{
-    MARKDOWN_WIDTH, is_iso_date, rejoin_like, require_nonempty, section_bounds,
-    to_owned_lines, workspace_root, wrap_markdown,
+use rustbase_xtask::markdown::{
+    MARKDOWN_WIDTH, rejoin_like, require_nonempty, section_bounds,
+    to_owned_lines, wrap_markdown,
 };
+
+use crate::helpers::{is_iso_date, workspace_root};
 
 /// `todo` subcommands.
 #[derive(Subcommand)]

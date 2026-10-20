@@ -30,10 +30,10 @@ the deploy task refuses to ship a `HEAD` that is not on a
    bookkeeping; mixing it with substantive code makes
    the tag dishonest about what was reviewed.
 
-2. **Check `[Unreleased]` has content** -- Read
-   `CHANGELOG.md`. If the `[Unreleased]` section is empty
-   or contains only empty subheadings, abort with
-   "nothing to release". Reason: a release with no
+2. **Check `[Unreleased]` has content** -- run
+   `cargo -q xtask changelog infer-bump`, even when a level was
+   passed: it fails with "nothing to release" when
+   `[Unreleased]` holds no bullet, and then abort. Reason: a release with no
    user-visible changes is a deploy in disguise; if the
    user wants to ship the same version with no changes,
    they should just `cargo xtask deploy` (which will pass
@@ -44,15 +44,15 @@ the deploy task refuses to ship a `HEAD` that is not on a
      that. Skip to step 4.
    - Otherwise run `cargo -q xtask changelog infer-bump`, which
      prints the level the `[Unreleased]` bullets call for:
-     - Any bullet starting with `**BREAKING:**` -> **major**
+     - Any top-level entry starting `- **BREAKING:**` (at
+       column 0; a marker quoted inside an entry does not
+       count) -> **major**
      - Any non-empty `### Removed` section -> **major**
      - Any non-empty `### Added` section -> **minor**
      - Otherwise -> **patch**
-
-     It fails when `[Unreleased]` has no bullet, which is step
-     2's "nothing to release".
-   - Show the user the inference (with the bullets that
-     drove it) and ask via `AskUserQuestion` whether to
+   - Show the user the inference with the bullets that drove
+     it -- the command prints only the level, so find them by
+     reading `[Unreleased]` against the rules above -- and ask via `AskUserQuestion` whether to
      accept the inferred bump or override it. Options:
      the inferred bump (recommended), the other two
      levels, and "Abort".
@@ -62,8 +62,9 @@ the deploy task refuses to ship a `HEAD` that is not on a
      `crates/rustbase/Cargo.toml`.
    - Apply the bump (major: `X+1.0.0`; minor: `X.Y+1.0`;
      patch: `X.Y.Z+1`).
-   - Today's date in ISO format (`YYYY-MM-DD`) -- use
-     the date the system provides; do not hardcode.
+   - Today's date in ISO format (`YYYY-MM-DD`) -- the date in
+     your session context; ask the operator if there is none.
+     Do not hardcode it.
 
 5. **Edit `crates/rustbase/Cargo.toml`** -- update the
    `version = "X.Y.Z"` line.
@@ -78,10 +79,10 @@ the deploy task refuses to ship a `HEAD` that is not on a
 
 7. **Rewrite `CHANGELOG.md`** with
    `cargo -q xtask changelog promote --version X.Y.Z --date
-   YYYY-MM-DD`. It renames the existing `## [Unreleased]`
-   heading to `## [X.Y.Z] - YYYY-MM-DD` and inserts a fresh
-   empty `[Unreleased]` skeleton above it, refusing a
-   malformed version or date:
+   YYYY-MM-DD`. It refuses a malformed version or date. It
+   renames the existing `## [Unreleased]` heading to
+   `## [X.Y.Z] - YYYY-MM-DD` and inserts this skeleton above
+   it:
      ```
      ## [Unreleased]
 
@@ -95,8 +96,6 @@ the deploy task refuses to ship a `HEAD` that is not on a
 
      ## [X.Y.Z] - YYYY-MM-DD
      ```
-     (Subheadings with no bullets can be left in place;
-     they signal the categories for future entries.)
 
 8. **Run the release gates** -- three checks, all before
    the tag, because the tag is what `cargo xtask deploy`
