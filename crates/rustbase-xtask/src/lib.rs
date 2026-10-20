@@ -26,6 +26,7 @@ pub mod dupes;
 pub mod fmt;
 pub mod markdown;
 mod process;
+pub mod records;
 pub mod text;
 pub mod todo;
 
@@ -156,12 +157,16 @@ pub struct Config {
     pub thresholds: Thresholds,
     /// The canon check's exemptions and limits.
     pub canon: canon::Rules,
+    /// The record files the records check reads, relative to
+    /// `root`.
+    pub record_files: Vec<String>,
 }
 
 impl Config {
     /// The defaults for a project called `project`:
     /// `<PROJECT>_DEP_AGE_ALLOW`, `<project>-xtask-dep-age` and
-    /// the default [`Thresholds`] and canon [`Rules`](canon::Rules).
+    /// the default [`Thresholds`], canon [`Rules`](canon::Rules) and
+    /// [record files](records::DEFAULT_FILES).
     pub fn for_project(project: &str, root: PathBuf) -> Self {
         let prefix = project.to_ascii_uppercase().replace('-', "_");
         Self {
@@ -170,6 +175,10 @@ impl Config {
             user_agent: format!("{project}-xtask-dep-age"),
             thresholds: Thresholds::default(),
             canon: canon::Rules::default(),
+            record_files: records::DEFAULT_FILES
+                .iter()
+                .map(|f| (*f).to_owned())
+                .collect(),
         }
     }
 }

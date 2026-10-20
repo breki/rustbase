@@ -38,6 +38,7 @@ mod frontend_fmt;
 #[cfg(feature = "frontend")]
 mod frontend_test;
 mod helpers;
+mod records;
 mod step;
 #[cfg(feature = "template-tools")]
 mod sync;
@@ -64,6 +65,9 @@ enum XCommand {
     /// Check the claims canon prose makes (paths, cross-refs,
     /// git grants, width, backlog IDs)
     CanonCheck,
+    /// Check the record files: duplicate ids, unknown field labels,
+    /// malformed ids, dangling Depends on / Supersedes
+    RecordsCheck,
     /// Run clippy (deny warnings)
     Clippy,
     /// Check doc comments build and doc links resolve
@@ -240,6 +244,7 @@ fn main() {
     let result = match cli.command {
         XCommand::Check => check::check(),
         XCommand::CanonCheck => canon::canon_check(),
+        XCommand::RecordsCheck => records::records_check(),
         XCommand::Clippy => clippy_cmd::clippy(),
         XCommand::Test {
             filter,

@@ -30,7 +30,7 @@ section they belong to.
 
 ## Open divergences
 
-### `build.ps1 build` command double-validates
+### tf-2026-05-17-build-ps1-build-command-double-validates -- `build.ps1 build` command double-validates
 
 `Invoke-Build` (line 36) calls `Invoke-Validate`, which
 runs `cargo xtask validate` (fmt + clippy + test +
@@ -54,7 +54,7 @@ users understand the cost. Alternatively, consider a
 against the release profile directly, avoiding the
 redundant debug build.
 
-### Playwright fixture-isolation pattern not shipped
+### tf-2026-05-17-playwright-fixture-isolation-pattern-not-shipped -- Playwright fixture-isolation pattern not shipped
 
 `rustbase-web` has no persistent data -- `/api/status`
 and `/api/greeting` return static values -- so a
@@ -565,7 +565,7 @@ and deleting the template-repo-only `backfeed` module hit dead
 code under `warnings = deny`. Moved both into `backfeed.rs` so the
 sync/feedback half is adoptable without carrying `backfeed.rs`.
 
-### 2026-07-16 -- no `/release` SemVer workflow; `/commit` bundled version bumping
+### tf-2026-07-16-no-release-semver-workflow-commit-bundled-versio -- no `/release` SemVer workflow; `/commit` bundled version bumping
 
 Surfaced from jutro's template feedback (2026-07-14 /
 2026-05-21). `/commit` bumped the version, synced
@@ -592,7 +592,7 @@ a `[section]`-tracking TOML version parser so a dependency's
 `dep-age-check`). Updated CLAUDE.md "Commits and releases",
 "Semantic Versioning", "Release Notes", and the Skills table.
 
-### 2026-07-16 -- no local HTML-report command (only the cloud Artifact path)
+### tf-2026-07-16-no-local-html-report-command-only-the-cloud-arti -- no local HTML-report command (only the cloud Artifact path)
 
 Surfaced from jutro's template feedback (2026-07-14). The
 template's only visual-document path was the cloud `Artifact`
@@ -608,7 +608,7 @@ as data and HTML-escaped; a `[a-z0-9-]+` slug guard; one
 project-specific examples ("journal contents", "malina host")
 to generic "personal data / deploy hostnames and paths".
 
-### 2026-07-16 -- stub integration tests were unmarked replace-me scaffolding
+### tf-2026-07-16-stub-integration-tests-were-unmarked-replace-me -- stub integration tests were unmarked replace-me scaffolding
 
 Surfaced from jutro's template feedback (2026-06-07). The
 `Hello from`/`verbose mode` assertions in
@@ -620,7 +620,7 @@ scaffolding and pointing to `cli_version_flag` /
 `cli_help_flag` (which assert only version/help and survive
 the first real command) as the model for new tests.
 
-### 2026-07-15 -- dependency cooldown was post-resolution only (no build-host protection)
+### tf-2026-07-15-dependency-cooldown-was-post-resolution-only-no -- dependency cooldown was post-resolution only (no build-host protection)
 
 Surfaced from clockdump's template feedback (2026-07-15).
 `dep-age-check` runs *after* cargo has resolved, fetched, and
@@ -641,7 +641,7 @@ and the `-Zmin-publish-age` migration trigger in CLAUDE.md's
 Supply-chain hygiene section. The pure loop logic is
 unit-tested via injected I/O; the shell-outs are thin.
 
-### 2026-05-18 -- `clean_cache` Windows junctions bypassed the symlink guard
+### tf-2026-05-18-clean-cache-windows-junctions-bypassed-the-symli -- `clean_cache` Windows junctions bypassed the symlink guard
 
 Surfaced from hoard's template feedback (2026-05-18).
 `delete_entry` in `xtask/src/clean_cache.rs` dispatched
@@ -658,7 +658,7 @@ points unlink via `remove_dir` with a `remove_file`
 fallback. Added a `cmd /c mklink /J`-based regression
 test (no elevation required, unlike `symlink_dir`).
 
-### 2026-05-18 -- `[profile.release]` overrides shipped slow deployed binaries
+### tf-2026-05-18-profile-release-overrides-shipped-slow-deployed -- `[profile.release]` overrides shipped slow deployed binaries
 
 Surfaced from hoard's template feedback (2026-05-18).
 Root `Cargo.toml` set `[profile.release] incremental =
@@ -674,7 +674,7 @@ cargo defaults so deployed binaries are fully
 optimised. Local fast iteration uses
 `cargo build --profile release-fast`.
 
-### 2026-05-18 -- `stop-check.sh` `&&` chain dropped earlier-stage output
+### tf-2026-05-18-stop-check-sh-chain-dropped-earlier-stage-output -- `stop-check.sh` `&&` chain dropped earlier-stage output
 
 Surfaced from hoard's template feedback (2026-05-18).
 The hook ran `output=$(cargo fmt --check && cargo
@@ -690,7 +690,7 @@ and prefixes failing output with `=== <stage> failed
 ===`, so Claude sees both the stage label and the
 full failure body on the first hook run.
 
-### 2026-05-18 -- `dir_size` was a library helper that printed to stderr and undercounted silently
+### tf-2026-05-18-dir-size-was-a-library-helper-that-printed-to-st -- `dir_size` was a library helper that printed to stderr and undercounted silently
 
 Surfaced from hoard's template feedback (2026-05-18).
 `dir_size` in `xtask/src/helpers.rs` returned
@@ -708,7 +708,7 @@ list, so warnings now surface alongside deletion
 failures in the final report instead of being dumped
 to stderr mid-loop.
 
-### 2026-05-18 -- `temp_scratch` used fragile `ThreadId` debug parsing and bare `unwrap`
+### tf-2026-05-18-temp-scratch-used-fragile-threadid-debug-parsing -- `temp_scratch` used fragile `ThreadId` debug parsing and bare `unwrap`
 
 Surfaced from hoard's template feedback (2026-05-18).
 `temp_scratch` in `xtask/src/helpers.rs` formatted
@@ -725,7 +725,7 @@ gave a generic panic that misled CI diagnostics.
 `unwrap_or_else` carrying a descriptive panic that
 names the failing path.
 
-### 2026-05-18 -- `/template-sync` didn't document the Windows `git show <rev>:<path>` failure
+### tf-2026-05-18-template-sync-didn-t-document-the-windows-git-sh -- `/template-sync` didn't document the Windows `git show <rev>:<path>` failure
 
 Surfaced from hoard's template feedback (2026-05-18).
 On Windows shells the `:` separator in `git show
@@ -741,7 +741,7 @@ path as a separate argument and sidesteps the colon
 mangling. The note also covers any step-7 site that
 reads upstream files via `revspec:path`.
 
-### 2026-05-17 -- `xtask check` "aborting" filter dropped legitimate user errors
+### tf-2026-05-17-xtask-check-aborting-filter-dropped-legitimate-u -- `xtask check` "aborting" filter dropped legitimate user errors
 
 Surfaced from rustwerk's template feedback (2026-04-19,
 fixed there locally). `extract_error_lines` in
@@ -756,7 +756,7 @@ the filter to the exact summary prefix
 (`!l.starts_with("error: aborting due to")`) and added
 a regression test (`keeps_user_errors_mentioning_aborting`).
 
-### 2026-05-17 -- `xtask check` reported "0 compilation error(s)" for non-rustc failures
+### tf-2026-05-17-xtask-check-reported-0-compilation-error-s-for-n -- `xtask check` reported "0 compilation error(s)" for non-rustc failures
 
 Surfaced from rustwerk's template feedback (2026-04-19).
 When cargo exited non-zero for reasons other than
@@ -771,7 +771,7 @@ the last ~20 non-empty stderr lines verbatim under a
 `FAILED: cargo exited non-zero with no matched error
 lines` banner so the user sees an actionable signal.
 
-### 2026-05-17 -- `clippy::pedantic` `doc_markdown` flagged common infra identifiers
+### tf-2026-05-17-clippy-pedantic-doc-markdown-flagged-common-infr -- `clippy::pedantic` `doc_markdown` flagged common infra identifiers
 
 Surfaced from rustwerk's template feedback (2026-04-21).
 Writing doc comments that mention `PowerShell`, `FFI`,
@@ -786,7 +786,7 @@ in CLAUDE.md under "Lints: `doc_markdown` allowlist
 via `clippy.toml`" with a note that derived projects
 should append, not redefine.
 
-### 2026-05-17 -- `/template-sync` granted `Bash(git checkout:*)` it never used
+### tf-2026-05-17-template-sync-granted-bash-git-checkout-it-never -- `/template-sync` granted `Bash(git checkout:*)` it never used
 
 Surfaced from rustwerk's template feedback (2026-04-19).
 The slash command's `allowed-tools` front-matter
@@ -804,7 +804,7 @@ an escape vector. **Fix:** removed
 `Bash(git checkout:*)` from the allowed-tools list
 in `.claude/commands/template-sync.md`.
 
-### 2026-05-17 -- `/template-sync` trusted upstream URL from `.template-sync.toml`
+### tf-2026-05-17-template-sync-trusted-upstream-url-from-template -- `/template-sync` trusted upstream URL from `.template-sync.toml`
 
 Surfaced from rustwerk's template feedback (2026-04-19).
 Step 3 of the workflow read `repo` from
@@ -824,7 +824,7 @@ pre-existing `template` remote URL also matches.
 Bootstrap flow updated to use the same hard-coded
 URL.
 
-### 2026-05-17 -- `/template-sync` "all" option bypassed per-file review
+### tf-2026-05-17-template-sync-all-option-bypassed-per-file-revie -- `/template-sync` "all" option bypassed per-file review
 
 Surfaced from rustwerk's template feedback (2026-04-19).
 Step 6 accepted "all" to apply every recommended
@@ -836,7 +836,7 @@ honour. **Fix:** removed "all" as an accepted answer.
 Users must opt in by category name or specific file
 path; "none" still works as a no-op marker update.
 
-### 2026-05-17 -- No pwsh-twin convention for `.sh` scripts
+### tf-2026-05-17-no-pwsh-twin-convention-for-sh-scripts -- No pwsh-twin convention for `.sh` scripts
 
 Surfaced from rustwerk's template feedback (2026-04-21).
 The template targeted Windows as a first-class
@@ -850,7 +850,7 @@ with canonical bash and pwsh wrapper shapes and an
 explicit carve-out for cases that can't live in Rust
 (process cleanup, pre-cargo bootstrap).
 
-### 2026-05-17 -- CLI-only downstream had no documented "safe to delete" list
+### tf-2026-05-17-cli-only-downstream-had-no-documented-safe-to-de -- CLI-only downstream had no documented "safe to delete" list
 
 Surfaced from rustwerk's template feedback (2026-04-19,
 `N/A for rustwerk` note). The template's full-stack
@@ -865,7 +865,7 @@ full set safe to delete for a CLI-only project
 pruning steps, and notes that `/template-sync` will
 auto-skip those paths once they no longer exist.
 
-### 2026-05-17 -- `.gitignore` only hid root-anchored `/target/`
+### tf-2026-05-17-gitignore-only-hid-root-anchored-target -- `.gitignore` only hid root-anchored `/target/`
 
 Surfaced from trmnl-bellwether's template feedback
 (2026-04-19). The template's `.gitignore` had
@@ -877,7 +877,7 @@ and was easy to accidentally `git add .` into a commit.
 `**/target/` for belt-and-braces, so any `target/`
 directory at any depth is ignored.
 
-### 2026-05-17 -- `cargo xtask test` had no `--ignored` forwarding
+### tf-2026-05-17-cargo-xtask-test-had-no-ignored-forwarding -- `cargo xtask test` had no `--ignored` forwarding
 
 Surfaced from trmnl-bellwether's template feedback
 (2026-04-19). CLAUDE.md forbids raw `cargo test`, but
@@ -895,7 +895,7 @@ covering ignored-alone and ignored-plus-filter.
 CLAUDE.md's Build Commands table updated to advertise
 `cargo xtask test --ignored`.
 
-### 2026-05-17 -- `/commit` skill ambiguous about how to hand the diff to review subagents
+### tf-2026-05-17-commit-skill-ambiguous-about-how-to-hand-the-dif -- `/commit` skill ambiguous about how to hand the diff to review subagents
 
 Surfaced from trmnl-bellwether's template feedback
 (2026-04-17). The previous wording ("Pass the full
@@ -916,7 +916,7 @@ mechanism is also reusable: any future
 skill should prefer subagent-runs-the-command or
 `target/`-local files.
 
-### 2026-05-17 -- `/commit` resolved-log entry format was unspecified
+### tf-2026-05-17-commit-resolved-log-entry-format-was-unspecified -- `/commit` resolved-log entry format was unspecified
 
 Surfaced from trmnl-bellwether's template feedback
 (2026-04-17). The skill said "remove from the open
@@ -933,7 +933,7 @@ inconsistency in the same project's resolved log.
 sentence note) and explicitly says not to preserve
 the original body in the resolved entry.
 
-### 2026-05-17 -- `/commit` CHANGELOG rule keyed on commit type, not observable effect
+### tf-2026-05-17-commit-changelog-rule-keyed-on-commit-type-not-o -- `/commit` CHANGELOG rule keyed on commit type, not observable effect
 
 Surfaced from trmnl-bellwether's template feedback
 (2026-04-17). The skill said "Skip [CHANGELOG] for:
@@ -951,7 +951,7 @@ commits with no user-observable effect (pure
 refactors, internal tooling, test-only changes,
 docs-only edits, CI/lint tweaks invisible to users).
 
-### 2026-05-17 -- Stop hook ran full `cargo xtask validate`, including ~15s coverage step
+### tf-2026-05-17-stop-hook-ran-full-cargo-xtask-validate-includin -- Stop hook ran full `cargo xtask validate`, including ~15s coverage step
 
 Surfaced from kozmotic's template feedback (2026-05-04).
 The Stop hook ran `cargo xtask validate` -- fmt +
@@ -968,7 +968,7 @@ duplication signal is preserved at the commit gate;
 the Stop hook is positioned purely as a fast
 interactive safety net for lint + test regressions.
 
-### 2026-05-17 -- `scripts/` shipped 5 trivial one-line cargo wrappers redundant with xtask
+### tf-2026-05-17-scripts-shipped-5-trivial-one-line-cargo-wrapper -- `scripts/` shipped 5 trivial one-line cargo wrappers redundant with xtask
 
 Surfaced from kozmotic's template feedback (2026-05-04).
 The template shipped `scripts/build.sh`, `clippy.sh`,
@@ -983,7 +983,7 @@ process-cleanup logic (PowerShell `Get-CimInstance`
 filtering, pkill patterns) that doesn't fit naturally
 as an xtask subcommand.
 
-### 2026-05-17 -- No documented pattern for hardware-bound code under the 90% coverage gate
+### tf-2026-05-17-no-documented-pattern-for-hardware-bound-code-un -- No documented pattern for hardware-bound code under the 90% coverage gate
 
 Surfaced from kozmotic's template feedback (2026-05-04).
 The 90% coverage gate assumes everything is testable,
@@ -999,7 +999,7 @@ to `CLAUDE.md` next to the existing workspace-lints
 override recipe, describing the three-step pattern and
 the explicit "use a fake trait if you can" caveat.
 
-### 2026-04-16 -- `@eslint/js` pin in `frontend/package.json` was unresolvable
+### tf-2026-04-16-eslint-js-pin-in-frontend-package-json-was-unres -- `@eslint/js` pin in `frontend/package.json` was unresolvable
 
 The template shipped `"@eslint/js": "^10.2.0"`, but
 10.0.1 is the latest published version on npm, so
@@ -1010,7 +1010,7 @@ lock. **Fix:** changed the pin to `^10.0.0`. Template
 should pin to a version that actually exists and
 ideally be kept in sync by a bot like Renovate.
 
-### 2026-04-16 -- Deploy logic belongs in xtask, not bash scripts
+### tf-2026-04-16-deploy-logic-belongs-in-xtask-not-bash-scripts -- Deploy logic belongs in xtask, not bash scripts
 
 Initially deferred for a dedicated design discussion
 because hoard's deploy was specific to a Raspberry Pi
@@ -1018,7 +1018,7 @@ because hoard's deploy was specific to a Raspberry Pi
 porting hoard's deploy-as-xtask pattern (generalized
 for any Linux+systemd target) into the template.
 
-### `vite.config.js` uses CommonJS `__dirname` in ESM context
+### tf-2026-05-17-vite-config-js-uses-commonjs-dirname-in-esm-cont -- `vite.config.js` uses CommonJS `__dirname` in ESM context
 
 `frontend/package.json` declares `"type": "module"`,
 which means all `.js` files are ES modules. However,
@@ -1030,7 +1030,7 @@ idiomatic and would break if copy-pasted elsewhere.
 **Fix:** Replaced with `import.meta.dirname`
 (available since Node 21.2 / 22+).
 
-### Tokio used `features = ["full"]` unnecessarily
+### tf-2026-05-17-tokio-used-features-full-unnecessarily -- Tokio used `features = ["full"]` unnecessarily
 
 `crates/rustbase-web/Cargo.toml` depended on
 `tokio = { version = "1", features = ["full"] }`. The
@@ -1041,7 +1041,7 @@ binary size.
 **Fix:** Replaced with explicit feature list
 (`["macros", "rt-multi-thread", "net", "signal"]`).
 
-### `/health` endpoint returned plain text, not JSON
+### tf-2026-05-17-health-endpoint-returned-plain-text-not-json -- `/health` endpoint returned plain text, not JSON
 
 The `/health` endpoint returned `"OK"` as plain text,
 while `/api/status` and `/api/greeting` both returned
@@ -1051,7 +1051,7 @@ that expect JSON.
 **Fix:** `/health` now returns `{ "status": "ok" }`
 with `Content-Type: application/json`.
 
-### Release workflow assumed `7z` is available on Windows
+### tf-2026-05-17-release-workflow-assumed-7z-is-available-on-wind -- Release workflow assumed `7z` is available on Windows
 
 `.github/workflows/release.yml` used `7z a "${STAGING}.zip" ...`.
 GitHub-hosted Windows runners include 7-Zip, but
@@ -1060,7 +1060,7 @@ self-hosted runners may not.
 **Fix:** Replaced with PowerShell's built-in
 `Compress-Archive`, requiring no external tools.
 
-### Release notes extraction from CHANGELOG was fragile
+### tf-2026-05-17-release-notes-extraction-from-changelog-was-frag -- Release notes extraction from CHANGELOG was fragile
 
 The release workflow used an `awk` script to extract
 notes by heading match. Format deviations would
@@ -1071,7 +1071,7 @@ when CHANGELOG extraction produces empty release notes;
 extraction uses exact version match instead of
 substring.
 
-### No frontend linting or formatting tools
+### tf-2026-05-17-no-frontend-linting-or-formatting-tools -- No frontend linting or formatting tools
 
 The Rust side had strict quality gates; the frontend
 had nothing comparable. No ESLint config, no Prettier
@@ -1084,7 +1084,7 @@ Prettier with `prettier-plugin-svelte`. `lint`,
 `frontend/package.json`. `svelte-check` step added to
 `cargo xtask validate`.
 
-### No frontend unit test infrastructure
+### tf-2026-05-17-no-frontend-unit-test-infrastructure -- No frontend unit test infrastructure
 
 The template included Playwright for E2E but had no
 setup for unit/component tests in isolation.

@@ -26,6 +26,7 @@ use crate::markdown::{
     MARKDOWN_WIDTH, is_fence, rejoin_like, require_nonempty, to_owned_lines,
     wrap_markdown,
 };
+use crate::records::{self, is_slug};
 
 /// A queued item. Displays as `slug -- summary`, or the slug alone
 /// when the summary is empty: the one-line form `list` prints.
@@ -60,7 +61,7 @@ pub fn list(cfg: &Config) -> Result<Vec<Item>, String> {
     Ok(parse(&content)
         .into_iter()
         .map(|r| Item {
-            summary: r.summary.unwrap_or_default(),
+            summary: r.summary,
             slug: r.id,
         })
         .collect())
@@ -125,17 +126,6 @@ fn write(cfg: &Config, content: &str) -> Result<(), String> {
     fs::write(&p, content).map_err(|e| format!("write {}: {e}", p.display()))
 }
 
-/// True for a kebab-case slug: the one shape an item heading has,
-/// and the only one `remove_entry` can match.
-fn is_slug(s: &str) -> bool {
-    s.split('-').all(|seg| {
-        !seg.is_empty()
-            && seg
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-    })
-}
-
 /// True for a markdown heading: one to six `#`, then a space or the
 /// end of the line. `#7` and `#hashtag` are not headings.
 fn reads_as_heading(line: &str) -> bool {
@@ -143,67 +133,32 @@ fn reads_as_heading(line: &str) -> bool {
     (1..=6).contains(&n) && matches!(line.as_bytes().get(n), None | Some(b' '))
 }
 
-/// One parsed entry.
+/// One queued item as parsed.
 struct Record {
     /// The slug its heading carries.
     id: String,
     /// Index of the `### ` heading in `content.lines()`.
     idx: usize,
-    /// The `**Summary:**` field value, if the entry has one.
-    summary: Option<String>,
+    /// The `**Summary:**` field value.
+    summary: String,
 }
 
-/// The entries of a queue file: each column-0 `### <slug>` heading
-/// with a `**Summary:**` field (any other `###` heading is prose).
-/// The field block is the run of `**Label:** value` lines directly
-/// under the heading (after an optional blank line), ending at the
-/// first blank or non-field line.
+/// The items of a queue file: each record entry whose heading is a
+/// kebab-case slug alone and which has a `**Summary:**` field. Any
+/// other `###` heading is prose (a `### notes` subsection).
 fn parse(content: &str) -> Vec<Record> {
-    let lines: Vec<&str> = content.lines().collect();
-    let mut out = Vec::new();
-    for (i, line) in lines.iter().enumerate() {
-        let Some(id) = line.strip_prefix("### ").map(str::trim) else {
-            continue;
-        };
-        if !is_slug(id) {
-            continue;
-        }
-        let mut record = Record {
-            id: id.to_owned(),
-            idx: i,
-            summary: None,
-        };
-        let mut j = i + 1;
-        if lines.get(j).is_some_and(|l| l.trim().is_empty()) {
-            j += 1;
-        }
-        while let Some((label, value)) =
-            lines.get(j).and_then(|l| parse_field(l))
-        {
-            if label == "Summary" && record.summary.is_none() {
-                record.summary = Some(value);
-            }
-            j += 1;
-        }
-        // A heading without a Summary is prose (a `### notes`
-        // subsection), not an item.
-        if record.summary.is_some() {
-            out.push(record);
-        }
-    }
-    out
-}
-
-/// One line as a `**Label:** value` field, or `None`. The label may
-/// hold spaces but not `*`, so a bold run closing before the colon is
-/// prose, not a field.
-fn parse_field(line: &str) -> Option<(String, String)> {
-    let (label, after) = line.strip_prefix("**")?.split_once(":**")?;
-    if label.contains('*') {
-        return None;
-    }
-    let value = after.strip_prefix(' ').unwrap_or(after).trim();
-    Some((label.trim().to_owned(), value.to_owned()))
+    records::parse(content)
+        .into_iter()
+        .filter(|e| !e.titled && is_slug(&e.id))
+        .filter_map(|e| {
+            let summary = e.field("Summary")?.to_owned();
+            Some(Record {
+                id: e.id,
+                idx: e.idx,
+                summary,
+            })
+        })
+        .collect()
 }
 
 /// A slug proven to be kebab-case on the way in, so a newline or a
@@ -415,22 +370,22 @@ more about alpha
 
     #[test]
     fn parse_reads_slugs_summaries_and_skips_body_bold_text() {
-        let got: Vec<(String, Option<String>)> = parse(SAMPLE)
+        let got: Vec<(String, String)> = parse(SAMPLE)
             .into_iter()
             .map(|r| (r.id, r.summary))
             .collect();
         assert_eq!(
             got,
             [
-                ("alpha-task".to_owned(), Some("do alpha".to_owned())),
-                ("beta-task".to_owned(), Some("do beta".to_owned())),
+                ("alpha-task".to_owned(), "do alpha".to_owned()),
+                ("beta-task".to_owned(), "do beta".to_owned()),
             ]
         );
         // Only the field block counts: a later bold `Summary:` is prose.
         let two = parse("### a\n\n**Summary:** s\n\n**Summary:** prose\n");
-        assert_eq!(two[0].summary.as_deref(), Some("s"));
-        assert_eq!(parse_field("**Not a field**: x"), None);
-        assert_eq!(parse_field("**Bold `x`.**"), None);
+        assert_eq!(two[0].summary, "s");
+        assert_eq!(records::parse_field("**Not a field**: x"), None);
+        assert_eq!(records::parse_field("**Bold `x`.**"), None);
     }
 
     #[test]
