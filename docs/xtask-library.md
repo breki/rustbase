@@ -141,12 +141,34 @@ hooks are #10.
 
 ### Distribution and versioning
 
-Published on crates.io, so the licence/sources gate (`deny.toml`
-rejects git sources) and the cooldown and audit tooling apply to it
-like any other dependency. It follows SemVer, released by its own
-`/release`. Upgrading it waits out the 14-day cooldown like any
-dependency; a project that wants a fix sooner allow-lists that one
-version with a stated reason.
+Distributed through crates.io as `rustbase-xtask` (#4), so the
+licence/sources gate (`deny.toml` rejects git sources) and the
+cooldown and audit tooling apply to it like any other dependency. It
+follows SemVer with its own version, in
+`crates/rustbase-xtask/Cargo.toml`, separate from the template's.
+Upgrading it waits out the 14-day cooldown like any dependency; a
+project that wants a fix sooner allow-lists that one version with a
+stated reason.
+
+This template depends on it by path and version (`xtask/Cargo.toml`):
+inside this repository cargo builds the local source, so a library
+change and the template change using it land together, while the
+published crate records the version. A downstream drops the copied
+source and keeps the version.
+
+Releasing the library is manual for now, and only the operator can
+run the last step, which needs their crates.io login:
+
+1. Bump `version` in `crates/rustbase-xtask/Cargo.toml` by SemVer,
+   judged from the library's entries in the root `CHANGELOG.md`.
+2. Commit, then tag it `rustbase-xtask-vX.Y.Z` (annotated). The prefix
+   keeps the tag out of the deploy guard's and `release.yml`'s `v*`
+   patterns, which mean a template release.
+3. `cargo publish -p rustbase-xtask --dry-run`, then without
+   `--dry-run`. A published version can be yanked, never deleted.
+
+Its own changelog and an automated release are a follow-up
+(`release-library` in `docs/todo.md`).
 
 ### What still needs agent-driven sync
 
@@ -194,7 +216,7 @@ is generic and can follow once a second project ships a unit.
 
 ## Migration plan (one downstream: clockdump)
 
-1. Publish the library with the cooldown module.
+1. Publish the library (#4).
 2. In clockdump: add the dependency, delete its vendored
    `xtask/src/dep_age.rs` and `xtask/src/dep_age/`, and call the
    library with `Config::for_project("clockdump",
@@ -209,7 +231,8 @@ is generic and can follow once a second project ships a unit.
 
 ## Proposed follow-up issues
 
-1. Settle the crate name and publish `0.1` with the cooldown module.
+1. Settle the crate name and prepare `0.1` for publishing (done: #4,
+   `rustbase-xtask`; the operator runs `cargo publish`).
 2. Decouple feature selection: registered `validate` steps, helpers
    grouped by user (done: #5).
 3. Extract `audit`, `deny`, `coverage`, `dupes`, `doc_cmd`, `canon`,

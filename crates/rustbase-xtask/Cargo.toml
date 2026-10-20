@@ -2,12 +2,12 @@
 name = "rustbase-xtask"
 version = "0.1.0"
 edition = "2024"
-# Working name; a prototype of the shared tooling library
-# investigated in breki/rustbase#2. Not published until that
-# investigation settles the name and API.
-publish = false
 license = "MIT"
 description = "Shared cargo-xtask tooling for rustbase-derived projects"
+repository = "https://github.com/breki/rustbase"
+readme = "README.md"
+keywords = ["xtask", "cargo", "ci", "lint", "tooling"]
+categories = ["development-tools", "development-tools::build-utils"]
 
 [lints]
 workspace = true
