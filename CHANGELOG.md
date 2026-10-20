@@ -123,15 +123,20 @@ and this project adheres to
   same checkout is refused while the first runs. It uses the library's new
   `tee::Tee`, which any xtask command can use (`validate` is the only one so
   far); taken from the jutro downstream project.
-- `cargo xtask version-sync`, which `/release` now runs during the bump:
-  rewrites every `<!-- version: X -->` sentinel line in `README.md` and `docs/`,
-  and any `VERSION=` line in the same file, to the version in
-  `Config::version_manifest` (default `crates/<project>/Cargo.toml`). Only a
-  line that is a whole sentinel opts a file in, so a doc that quotes the
-  sentinel in a sentence is left alone. Taken from the bombyx downstream
-  project.
+- `cargo xtask version-sync`, which `/release` now runs during the bump: sets
+  every `<!-- version: X -->` sentinel line in `README.md` and `docs/`, and the
+  number in any `VERSION=<number>` line in the same file (the rest of that line
+  kept; `export VERSION=` and `VERSION=v1.0` are not touched), to the version
+  `cargo metadata` reports for `Config::version_manifest` (default
+  `crates/<project>/Cargo.toml`). Only a line holding the sentinel alone,
+  outside a fenced code block, opts a file in; each line keeps its own ending,
+  and a failure to read any doc writes none. It lists every file with a
+  sentinel, which `/release` stages. Taken from the bombyx downstream project.
 
 ### Changed
+
+- `Config::audit_npm_dir` is now relative to the root, like the other paths in
+  `Config`; an absolute path still works.
 
 - Code reviewers (Red Team, Artisan) are now first-class read-only agents under
   `.claude/agents/`, spawned by `subagent_type`; `/retrospect` findings gained

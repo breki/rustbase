@@ -158,7 +158,8 @@ fn is_missing_subcommand(stderr: &str) -> bool {
     stderr.contains("no such command") || stderr.contains("no such subcommand")
 }
 
-/// What differs between projects using this library.
+/// What differs between projects using this library. Its paths are
+/// relative to `root` (an absolute one is taken as it is).
 #[derive(Clone, Debug)]
 pub struct Config {
     /// The workspace root: where `Cargo.lock` lives and where
@@ -182,16 +183,20 @@ pub struct Config {
     /// `root`.
     pub record_files: Vec<String>,
     /// The npm project the audit step also audits, when it holds a
-    /// `package.json`; `None` audits Rust only. Unlike `record_files`
-    /// it is not joined to `root`: set it absolute (`root.join(...)`),
-    /// or a run from another directory skips it.
+    /// `package.json`; `None` audits Rust only.
     pub audit_npm_dir: Option<PathBuf>,
-    /// The manifest whose `[package]` version is the project's, which
-    /// `version_sync` copies into the docs; relative to `root`.
+    /// The manifest of the package whose version, as cargo resolves it
+    /// (inherited from the workspace or not), is the project's; the
+    /// one `version_sync` copies into the docs.
     pub version_manifest: PathBuf,
 }
 
 impl Config {
+    /// `audit_npm_dir` resolved against `root`.
+    pub(crate) fn npm_dir(&self) -> Option<PathBuf> {
+        self.audit_npm_dir.as_ref().map(|d| self.root.join(d))
+    }
+
     /// The defaults for a project called `project`:
     /// `<PROJECT>_DEP_AGE_ALLOW` and `<PROJECT>_DEP_AGE_STRICT`,
     /// `<project>-xtask-dep-age`, the default [`Thresholds`], canon
@@ -337,6 +342,9 @@ mod tests {
         assert_eq!(cfg.dep_age_allow_env, "MY_APP_DEP_AGE_ALLOW");
         assert_eq!(cfg.dep_age_strict_env, "MY_APP_DEP_AGE_STRICT");
         assert_eq!(cfg.audit_npm_dir, None);
+        let mut npm = Config::for_project("p", PathBuf::from("/w"));
+        npm.audit_npm_dir = Some("frontend".into());
+        assert_eq!(npm.npm_dir(), Some(PathBuf::from("/w/frontend")));
         assert_eq!(
             cfg.version_manifest,
             PathBuf::from("crates/my-app/Cargo.toml")

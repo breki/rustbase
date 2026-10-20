@@ -24,9 +24,8 @@ pub fn workspace_root() -> PathBuf {
 pub fn tasks_config() -> rustbase_xtask::Config {
     let mut cfg =
         rustbase_xtask::Config::for_project("rustbase", workspace_root());
-    // Absolute, so the audit does not depend on the shell's working
-    // directory; the library skips it when it holds no `package.json`.
-    cfg.audit_npm_dir = Some(cfg.root.join("frontend"));
+    // The library skips it when it holds no `package.json`.
+    cfg.audit_npm_dir = Some("frontend".into());
     cfg.canon.absent_on_purpose = vec![
         Exempt::new(
             "scripts/e2e.sh",

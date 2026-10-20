@@ -161,7 +161,7 @@ pub fn standard(cfg: &Config, check: bool) -> Vec<Step> {
         Ok(coverage::check(c)?.to_string())
     }));
     steps.push(gate(cfg, names::AUDIT, "audit", |c| {
-        audit::check(c, c.audit_npm_dir.as_deref(), Strictness::Warn)
+        audit::check(c, c.npm_dir().as_deref(), Strictness::Warn)
     }));
     steps
 }
