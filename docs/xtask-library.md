@@ -155,8 +155,8 @@ This template depends on it by path and version (`xtask/Cargo.toml`):
 inside this repository cargo builds the local source, so a library
 change and the template change using it land together. The
 `version` is the last release; `main` can hold library changes not
-published yet. A downstream keeps its copy of the source until #9,
-which moves clockdump to the published crate.
+published yet. A downstream moves to the published crate by the
+steps under "Migrating a downstream" below.
 
 Releasing the library is manual for now, and only the operator can
 run the publish, which needs their crates.io login. Run it on `main`
@@ -234,21 +234,53 @@ the last column, where there is one. The parser at the core of
 `systemd_unit` (sections, comments, continuations; about 100 lines)
 is generic and can follow once a second project ships a unit.
 
-## Migration plan (one downstream: clockdump)
+## Migrating a downstream
 
-1. Prepare the library for publishing (#4); the operator publishes
-   0.1.0.
-2. In clockdump: add the dependency, delete its vendored
-   `xtask/src/dep_age.rs` and `xtask/src/dep_age/`, and call the
-   library with `Config::for_project("clockdump",
-   workspace_root())` where the template does (`main.rs`, and the
-   library's standard steps in `validate.rs`). (The prototype run,
-   made before the step moved out of `validate.rs`, came to -1,773 /
-   +26 lines.)
-3. Run `cargo xtask validate` and its CI; record the result.
-4. Repeat per module as each is extracted; the other downstreams
-   follow once their copies are synced to a template version that
-   matches the library's.
+clockdump went first (#9, breki/clockdump#1), from a vendored copy of
+the template's `xtask` at v0.17.0 to `rustbase-xtask` 0.1.0. Its
+`validate` passes every gate it ran before, coverage at 96.9%, and
+`xtask` came to about -1,100 lines net: the template's compiled-out
+deploy and frontend modules are the difference from the prototype's
+-1,773. The steps, in the order they were done there:
+
+1. **Take the template's `xtask/src` whole.** Its `main.rs` flattens
+   `cli::LibCommand` and `validate.rs` runs `step::standard`, so the
+   downstream's vendored gate modules go and nothing replaces them.
+   Copy every file, the deploy, frontend and backfeed modules
+   included: `main.rs` and `sync.rs` call into them and
+   `cargo xtask clippy` compiles each feature group.
+2. **`xtask/Cargo.toml`**: the template's `[features]`, with the
+   groups the project does not use left out of `default`; the
+   library by version only, `rustbase-xtask = { version = "0.1",
+   features = ["clap"] }` (no `path`: the downstream has no copy of
+   the crate).
+3. **`helpers.rs`**: `Config::for_project("<name>", ...)`, which keeps
+   the `<NAME>_DEP_AGE_ALLOW` variable; drop the template's canon
+   exemptions, which name template paths.
+4. **`validate.rs`**: gates the project has never run can be left
+   out with a `DEFERRED` list filtered from `step::standard` (after
+   any `insert_after` anchored on one of them), so the migration
+   keeps the gates the project had. Adopt them later, one change
+   each.
+5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
+   to `[workspace.metadata.coverage] ignore` in the root
+   `Cargo.toml`.
+6. **`clippy.toml`**: add any `doc-valid-idents` entry the template's
+   `xtask` needs (clockdump lacked `CommonMark`).
+7. **The cooldown**: a library version inside the 14 days needs the
+   project's allow-list (`<NAME>_DEP_AGE_ALLOW=rustbase-xtask@X.Y.Z`)
+   with a stated reason.
+8. **Run `validate`.** Failures in the project's own code from a
+   newer toolchain (clockdump: Clippy 1.99's `assert_is_empty`) are
+   their own commit.
+9. **Bring the project's canon in step**: docs naming the deleted
+   modules (`coverage.rs`'s regex), its `template-feedback.md` and
+   `/template-sync` rules where they say to skip `xtask` files (every
+   file is now synced: all but `helpers.rs` and `validate.rs`
+   verbatim, those two merged), and its `CLAUDE.md` gate list.
+
+The other downstreams (kozmotic, bombyx, hoard, jutro) follow the
+same steps, each after syncing the rest of its template divergence.
 
 ## Proposed follow-up issues
 
@@ -263,5 +295,6 @@ is generic and can follow once a second project ships a unit.
    layout only).
 5. Extension points for project subcommands and steps (done: #8;
    deploy hooks are #10).
-6. Migrate clockdump, then the other downstreams.
+6. Migrate clockdump (done: #9, breki/clockdump#1), then the other
+   downstreams.
 7. Deploy: decide what, if anything, is shared.

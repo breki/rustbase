@@ -28,7 +28,9 @@ deploy = []
 # `backfeed-diff`, `backfeed-record`. A derived project keeps it
 # to go on syncing and logging feedback.
 template-tools = []
-# `clean-cache`.
+# `clean-cache`: empties `target/{debug,release}/incremental/`
+# (never following a symlink or, on Windows, a reparse point), a
+# manual tool for a target dir grown large.
 clean-cache = ["dep:windows-sys"]
 
 [dependencies]
