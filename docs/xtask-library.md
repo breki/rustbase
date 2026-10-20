@@ -171,10 +171,23 @@ the library is a possible later step, not part of this plan.
 | `deploy*` | last; generic pieces (remote run, tag guard, staging, crash check) only, with hooks |
 | `backfeed`, `feedback`, `sync` | template-maintenance tools; stay in the template |
 
-Downstream-only modules worth adding to the library: bombyx's
-third-party licence generator and version-sentinel sync, hoard's
-systemd unit parser and script-executable check, and jutro's tag
-signature check, `.ports` reader, worktree setup and log tee.
+Downstream-only modules, evaluated for the library (#8). Each uses
+only std and `serde_json` beyond its project's own helpers.
+
+| Module | Lines | Verdict | What ties it to its project |
+|-|-|-|-|
+| bombyx `licenses` (third-party licence file) | 1,073 | move | the product name in one header line |
+| bombyx `version_sync` (`<!-- version: X -->` sentinels) | 204 | move | the manifest path |
+| hoard `repo_hygiene` (scripts committed executable) | 231 | move, as a step | nothing: the `scripts/` convention |
+| jutro `tag_signature` (SSH-signed release tags) | 409 | move, opt-in | placeholder strings naming jutro |
+| jutro `xtask_log` (tee output to `target/<name>.log`) | 421 | move, beside `process` | nothing |
+| jutro `ports` (`.ports` reader) | 312 | move, frontend projects only | the web stack's default ports |
+| jutro `worktree` (a worktree with free ports) | 573 | keep | the `jutro-` prefix, `ports`, `vite`, npm |
+| hoard `systemd_unit` (unit-file parser) | 435 | keep; too niche | its embedded unit file and paths |
+
+"Move" takes the tie as a parameter. The parser at the core of
+`systemd_unit` (sections, comments, continuations; about 100 lines)
+is generic and can follow once a second project ships a unit.
 
 ## Migration plan (one downstream: clockdump)
 
