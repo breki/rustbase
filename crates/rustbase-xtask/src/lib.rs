@@ -15,6 +15,7 @@ use std::path::PathBuf;
 pub mod audit;
 pub mod canon;
 pub mod cargo_test;
+pub mod changelog;
 pub mod check;
 pub mod clippy;
 pub mod coverage;
@@ -23,6 +24,7 @@ pub mod dep_age;
 pub mod doc;
 pub mod dupes;
 pub mod fmt;
+pub mod markdown;
 mod process;
 pub mod text;
 
