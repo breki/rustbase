@@ -8,7 +8,9 @@ Run the full validation pipeline with concise output.
 ## Usage
 
 `/validate` -- run every gate listed under **Definition of Done**
-in `CLAUDE.md`, in the order `xtask/src/validate.rs` defines
+in `CLAUDE.md`, in the order `step::standard`
+(`crates/rustbase-xtask/src/step.rs`) gives, with the frontend
+gates `xtask/src/validate.rs` inserts after Deny
 
 ## Output
 

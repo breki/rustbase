@@ -46,8 +46,10 @@ Three conclusions follow:
 The cooldown gate (`dep-age`, `dep-age-check`, `dep-preflight`) moved
 into `crates/rustbase-xtask` with the template's `xtask` calling it.
 
-- **Configuration is small.** Three values: the workspace root, the
-  allow-list env-var name and the registry user agent.
+- **Configuration is small.** The cooldown prototype needed three
+  values: the workspace root, the allow-list env-var name and the
+  registry user agent. (`Config` in `crates/rustbase-xtask/src/lib.rs`
+  now holds every gate's settings.)
   `Config::for_project("hoard", root)` derives `HOARD_DEP_AGE_ALLOW`
   and `hoard-xtask-dep-age`, the renames downstreams made by hand.
 - **The coverage gate starts to apply.** `xtask` is exempt from the
@@ -214,6 +216,7 @@ is generic and can follow once a second project ships a unit.
 4. Extract the output parsers (`check`, `clippy_cmd`, `test_cmd`,
    `fmt_cmd`) and `changelog`/`todo` (done: #7; `todo` uses bombyx's
    layout only).
-5. Extension points for project subcommands and steps.
+5. Extension points for project subcommands and steps (done: #8;
+   deploy hooks are #10).
 6. Migrate clockdump, then the other downstreams.
 7. Deploy: decide what, if anything, is shared.

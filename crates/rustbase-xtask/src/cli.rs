@@ -16,21 +16,13 @@
 use clap::Subcommand;
 
 use crate::{
-    Config, Strictness, audit, canon, cargo_test, changelog, check, clippy,
-    coverage, deny, dep_age, doc, dupes, fmt, records, todo,
+    Config, FMT_DIFF_LINES, STANDALONE_LINES, Strictness, audit, canon,
+    cargo_test, changelog, check, clippy, coverage, deny, dep_age, doc, dupes,
+    fmt, records, todo,
 };
 
-/// Error lines `check` shows.
-const MAX_ERROR_LINES: usize = 10;
-
-/// Diagnostic lines `clippy` and `doc` show.
-const MAX_DIAGNOSTIC_LINES: usize = 10;
-
-/// Diff lines `fmt` shows.
-const MAX_DIFF_LINES: usize = 20;
-
 /// The subcommands the library implements.
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum LibCommand {
     /// Type-check all targets (compiles tests, runs none)
     Check,
@@ -117,7 +109,7 @@ pub enum LibCommand {
 }
 
 /// `changelog` subcommands.
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum ChangelogAction {
     /// Add a bullet under the `[Unreleased]` section.
     Add {
@@ -151,7 +143,7 @@ pub enum ChangelogAction {
 }
 
 /// `todo` subcommands.
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum TodoAction {
     /// List queued items as `slug -- summary`, one per line.
     List,
@@ -184,7 +176,7 @@ pub enum TodoAction {
 pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
     match cmd {
         LibCommand::Check => {
-            check::check(cfg).map_err(|f| f.report(MAX_ERROR_LINES))?;
+            check::check(cfg).map_err(|f| f.report(STANDALONE_LINES))?;
             println!("Check OK");
         }
         LibCommand::CanonCheck => {
@@ -194,11 +186,11 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
             println!("Records OK ({})", records::check(cfg)?);
         }
         LibCommand::Clippy => {
-            clippy::check(cfg).map_err(|f| f.report(MAX_DIAGNOSTIC_LINES))?;
+            clippy::check(cfg).map_err(|f| f.report(STANDALONE_LINES))?;
             println!("Clippy OK");
         }
         LibCommand::Doc => {
-            doc::check(cfg).map_err(|f| f.report(MAX_DIAGNOSTIC_LINES))?;
+            doc::check(cfg).map_err(|f| f.report(STANDALONE_LINES))?;
             println!("Doc OK");
         }
         LibCommand::Test {
@@ -220,7 +212,7 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
         // Its output streams to the terminal, so a failure's error is
         // only that it failed.
         LibCommand::Fmt => {
-            fmt::fix(cfg).map_err(|f| f.report(MAX_DIFF_LINES))?;
+            fmt::fix(cfg).map_err(|f| f.report(FMT_DIFF_LINES))?;
         }
         LibCommand::Coverage => {
             let r = coverage::check(cfg)?;
@@ -375,15 +367,15 @@ mod tests {
 
     #[test]
     fn every_command_parses_and_runs_against_its_config() {
-        // In an empty directory the tools fail fast (no Cargo.toml
-        // above a temp dir) and nothing is written but `fmt`'s no-op.
-        let dir = test_repo::empty_dir();
+        // With no workspace and no repository each command fails fast,
+        // and nothing is written.
+        let dir = test_repo::outside_any_workspace();
         let cfg = Config::for_project("p", dir.0.clone());
         let ok = |args: &[&str]| run(parse(args), &cfg).is_ok();
         assert!(ok(&["records-check"]), "absent files are skipped");
+        assert!(ok(&["canon-check"]), "no canon files to read");
         for args in [
             &["check"][..],
-            &["canon-check"],
             &["clippy"],
             &["doc"],
             &["test", "x", "--verbose", "--ignored"],
@@ -391,15 +383,33 @@ mod tests {
             &["fmt"],
             &["coverage"],
             &["dupes"],
-            &["audit"],
             &["deny"],
             &["dep-age-check", "--base", "HEAD"],
             &["dep-preflight"],
         ] {
-            let _ = ok(args);
+            assert!(!ok(args), "{args:?} passed with no workspace");
         }
-        // Parsing only: these would reach a package registry.
+        // Parsing only: these would reach a registry or the advisory
+        // database.
+        parse(&["audit"]);
         parse(&["dep-age", "cargo", "serde", "1.0.0"]);
         parse(&["dep-age", "npm", "x", "--latest-aged", "--within", "3"]);
+    }
+
+    #[test]
+    fn every_standard_step_hint_names_a_library_command() {
+        // A failed step prints `cargo xtask <cmd>`; the command must
+        // exist for whatever project flattens this enum in.
+        use clap::CommandFactory;
+        let cli = Cli::command();
+        let cfg = Config::for_project("p", "/w".into());
+        for step in crate::step::standard(&cfg, false) {
+            assert!(
+                cli.find_subcommand(step.cmd()).is_some(),
+                "step {:?} hints `{}`, which is no library command",
+                step.name(),
+                step.cmd()
+            );
+        }
     }
 }

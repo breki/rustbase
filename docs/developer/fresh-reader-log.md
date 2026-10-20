@@ -18,6 +18,17 @@ work.
 
 ---
 
+### fr-2026-10-20-validate-help-names-five-gates
+
+**Category:** help text (clap)
+
+`cargo xtask validate`'s help in `xtask/src/main.rs` reads "Run fmt +
+clippy + tests + coverage + duplication", five of eleven to fifteen
+gates; it leaves out the ones that need the network (Audit) or an
+extra tool (Deny). "Run every gate (the Definition of Done in
+CLAUDE.md)" would cover them. Deferred because stage 3 does not edit
+clap help.
+
 ### fr-2026-10-20-feedback-keeps-its-own-is-fence
 
 **Category:** duplication
