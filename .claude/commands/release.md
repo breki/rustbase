@@ -23,9 +23,18 @@ the deploy task refuses to ship a `HEAD` that is not on a
 ## Instructions
 
 1. **Check working tree is clean** -- Run `git status`.
-   Refuse if there are unstaged or uncommitted changes
-   other than ones this skill is about to introduce
-   (`Cargo.toml`, `Cargo.lock`, `CHANGELOG.md`). Reason:
+   Refuse if there are any unstaged, uncommitted or
+   untracked changes: the later steps dirty
+   `crates/rustbase/Cargo.toml`, `Cargo.lock`,
+   `CHANGELOG.md` and the docs `version-sync` rewrites, and
+   nothing else may ride along. A retry after a failed
+   release starts from a clean tree too: ask the operator to
+   restore those files, then begin again here. To tell which
+   dirty docs are `version-sync`'s leftovers, run
+   `cargo -q xtask version-sync` before anything is
+   restored: with the bumped `Cargo.toml` still in place it
+   changes nothing and prints its "Files with a sentinel:"
+   line. Reason:
    a release commit should contain only the release
    bookkeeping; mixing it with substantive code makes
    the tag dishonest about what was reviewed.
@@ -69,17 +78,23 @@ the deploy task refuses to ship a `HEAD` that is not on a
 5. **Edit `crates/rustbase/Cargo.toml`** -- update the
    `version = "X.Y.Z"` line.
 
-6. **Sync `Cargo.lock`** -- run `cargo update -p rustbase`
+6. **Sync `Cargo.lock` and the docs' version** -- run
+   `cargo update -p rustbase`
    (updates only that package's entry). Do **not** use
    `cargo generate-lockfile` -- it refreshes every
    transitive dependency, folding an unrelated
    workspace-wide bump into the release commit and
    tripping the `dep-age-check` cooldown gate on freshly
    published transitive versions. Then run
-   `cargo -q xtask version-sync`, which rewrites every
-   `<!-- version: X -->` sentinel in `README.md` and `docs/`
-   (and `VERSION=` lines in the same files) to the new
-   version, and note the files it names.
+   `cargo -q xtask version-sync`, which sets every
+   `<!-- version: X -->` sentinel line in `README.md` and
+   `docs/` (and the number in a `VERSION=<number>` line in
+   the same files) to the new version. When any file has a
+   sentinel it ends with a "Files with a sentinel:" line;
+   note those files, changed this run or not. A read failure
+   writes nothing; a write failure names the file and leaves
+   the files before it rewritten. Fix the cause and run it
+   again.
 
 7. **Rewrite `CHANGELOG.md`** with
    `cargo -q xtask changelog promote --version X.Y.Z --date
@@ -147,8 +162,11 @@ the deploy task refuses to ship a `HEAD` that is not on a
 
 9. **Stage and commit:**
    - Stage `crates/rustbase/Cargo.toml`, `Cargo.lock`,
-     `CHANGELOG.md` and the files `version-sync` named (and
-     nothing else).
+     `CHANGELOG.md` and the files `version-sync` listed as
+     having a sentinel (and nothing else). If `git status`
+     shows one of those as untracked, stop and ask the
+     operator: an untracked draft is not release
+     bookkeeping.
    - Commit directly with `git commit` (do **not** route
      through `/commit` -- a release commit is a
      single-purpose bookkeeping commit; this

@@ -234,10 +234,10 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
         }
         // Run by hand, so an audit that could not finish fails.
         LibCommand::Audit => {
-            let npm = cfg.audit_npm_dir.as_deref();
+            let npm = cfg.npm_dir();
             println!(
                 "Audit OK ({})",
-                audit::check(cfg, npm, Strictness::Fail)?
+                audit::check(cfg, npm.as_deref(), Strictness::Fail)?
             );
         }
         LibCommand::Deny => {
@@ -346,12 +346,13 @@ mod tests {
         let cfg = Config::for_project("p", dir.0.clone());
         std::fs::create_dir_all(dir.0.join("docs")).unwrap();
         std::fs::write(dir.0.join("docs/todo.md"), "# TODO\n").unwrap();
-        std::fs::create_dir_all(dir.0.join("crates/p")).unwrap();
+        std::fs::create_dir_all(dir.0.join("crates/p/src")).unwrap();
         std::fs::write(
             dir.0.join("crates/p/Cargo.toml"),
-            "[package]\nversion = \"1.0.0\"\n",
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\nedition = \"2024\"\n",
         )
         .unwrap();
+        std::fs::write(dir.0.join("crates/p/src/lib.rs"), "").unwrap();
         std::fs::write(dir.0.join("README.md"), "<!-- version: 0.1.0 -->\n")
             .unwrap();
         std::fs::write(

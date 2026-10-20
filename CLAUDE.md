@@ -1077,13 +1077,27 @@ The project version lives in
 `crates/<name>/Cargo.toml`. Avoid putting the version
 number in README body text or other markdown — those
 copies drift silently from `Cargo.toml`. If a version
-mention is unavoidable in user-facing prose, embed it
-as a sentinel comment (`<!-- version: 0.5.0 -->`) on a
-line of its own in `README.md` or under `docs/`:
-`cargo xtask version-sync`, which `/release` runs, rewrites
-it and any `VERSION=` line in the same file. Or pull the value
-from `Cargo.toml` via the build (Vite supports this
-for the frontend; CLI binaries can use `env!("CARGO_PKG_VERSION")`).
+mention is unavoidable, either pull the value from
+`Cargo.toml` via the build (Vite supports this for the
+frontend; CLI binaries can use `env!("CARGO_PKG_VERSION")`),
+or let `cargo xtask version-sync`, which `/release` runs,
+rewrite it in `README.md` or a doc under `docs/`.
+
+For the second, the file needs a sentinel comment on a line
+of its own, outside any code block: that line opts the file
+in. The command then rewrites the sentinel and the number
+in every `VERSION=<number>` line in the file:
+
+````md
+<!-- version: 0.5.0 -->
+
+```bash
+VERSION=0.5.0
+```
+````
+
+It touches nothing else, so a version in a sentence still
+drifts.
 
 ## Supply-chain hygiene
 
