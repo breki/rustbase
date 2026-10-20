@@ -18,7 +18,7 @@ use std::time::Instant;
 
 use crate::{
     Config, FMT_DIFF_LINES, STEP_LINES, Strictness, audit, canon, cargo_test,
-    clippy, coverage, deny, dep_age, doc, dupes, fmt, records,
+    clippy, coverage, deny, dep_age, doc, dupes, fmt, records, scripts,
 };
 
 /// Width of the step name column, dots included.
@@ -35,6 +35,8 @@ pub mod names {
     pub const CANON: &str = "Canon";
     /// The record files.
     pub const RECORDS: &str = "Records";
+    /// Scripts committed executable.
+    pub const SCRIPTS: &str = "Scripts";
     /// Code duplication.
     pub const DUPLICATION: &str = "Duplication";
     /// Lints.
@@ -133,6 +135,7 @@ pub fn standard(cfg: &Config, check: bool) -> Vec<Step> {
     }));
     steps.push(gate(cfg, names::CANON, "canon-check", canon::check));
     steps.push(gate(cfg, names::RECORDS, "records-check", records::check));
+    steps.push(gate(cfg, names::SCRIPTS, "scripts-check", scripts::check));
     steps.push(gate(cfg, names::DUPLICATION, "dupes", dupes::check));
     steps.push(gate(cfg, names::CLIPPY, "clippy", |c| {
         clippy::check(c).map_err(|f| f.report(STEP_LINES))?;
@@ -296,6 +299,7 @@ mod tests {
                 "Fmt",
                 "Canon",
                 "Records",
+                "Scripts",
                 "Duplication",
                 "Clippy",
                 "Doc",
@@ -326,6 +330,10 @@ mod tests {
                         d.starts_with("0 files, 0 entries; absent:"),
                         "{d}"
                     );
+                }
+                names::SCRIPTS => {
+                    let d = step.run().unwrap();
+                    assert_eq!(d, "skipped: not a git work tree");
                 }
                 names::CANON => {
                     let d = step.run().unwrap();

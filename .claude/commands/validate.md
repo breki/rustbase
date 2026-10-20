@@ -17,13 +17,14 @@ gates `xtask/src/validate.rs` inserts after Deny
 One line per gate (abridged):
 
 ```
-[1/15] Dep-age....... OK (no dependency changes, 0.0s)
-[2/15] Fmt........... OK (0.2s)
-[3/15] Canon......... OK (28 files, 5 checks, 0.0s)
-[4/15] Records....... OK (5 files, 109 entries, 0.0s)
+[1/16] Dep-age....... OK (no dependency changes, 0.0s)
+[2/16] Fmt........... OK (0.2s)
+[3/16] Canon......... OK (28 files, 5 checks, 0.0s)
+[4/16] Records....... OK (5 files, 109 entries, 0.0s)
+[5/16] Scripts....... OK (2 scripts executable, 0.0s)
 ...
-[14/15] Coverage...... OK (100.0% >= 90%, 47.5s)
-[15/15] Audit......... OK
+[15/16] Coverage...... OK (100.0% >= 90%, 47.5s)
+[16/16] Audit......... OK
 Validate OK
 ```
 

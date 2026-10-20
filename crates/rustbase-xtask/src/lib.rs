@@ -29,6 +29,7 @@ pub mod fmt;
 pub mod markdown;
 mod process;
 pub mod records;
+pub mod scripts;
 pub mod step;
 pub mod text;
 pub mod todo;
@@ -291,7 +292,7 @@ pub(crate) mod test_repo {
         }
     }
 
-    fn git(dir: &Path, args: &[&str]) {
+    pub(crate) fn git(dir: &Path, args: &[&str]) {
         let ok = Command::new("git")
             .current_dir(dir)
             .args(["-c", "user.name=t", "-c", "user.email=t@t"])
