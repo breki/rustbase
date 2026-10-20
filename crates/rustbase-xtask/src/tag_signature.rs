@@ -4,14 +4,23 @@
 //!
 //! Opt-in: a project signs its release tags by committing that
 //! file, and `/release` then creates the tag with `git tag -s` and
-//! runs this check on it. Without the file nothing calls it.
+//! runs this check on it. Without the file nothing calls it. Each
+//! signer also sets git's `gpg.format` to `ssh` and
+//! `user.signingkey` to their key. A line of the file, built from the
+//! signer's `.pub` file:
 //!
-//! Limit: the file comes from the commit being checked, so the check
-//! catches mistakes (an unsigned tag, the wrong key), not a commit
-//! that adds its own key. A trust boundary needs a copy of the keys
-//! kept outside the repository.
+//! ```text
+//! release@example.com namespaces="git" ssh-ed25519 AAAAC3Nza...
+//! ```
+//!
+//! The first field (ssh-keygen's "principal") is a free label,
+//! usually the signer's email.
+//!
+//! Limit: the file is read from the working tree, so anyone who can
+//! commit to the repository can add their own key. The check catches
+//! mistakes (an unsigned tag, the wrong key), not tampering.
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use crate::{Config, process};
@@ -45,25 +54,31 @@ fn verify(repo: &Path, tag: &str, signers: &Path) -> Result<(), String> {
             signers.display()
         ));
     }
-    // `refs/tags/...` in full: a bare name could resolve to a branch.
+    // `show-ref --verify` accepts only this exact ref. A plain lookup
+    // of `refs/tags/<tag>` falls back to other ref folders when the
+    // tag is missing, finding `refs/remotes/refs/tags/<tag>`, say.
+    // The later calls take the object id, so all read one object.
     let reference = format!("refs/tags/{tag}");
-    if git(repo, &["cat-file", "-t", &reference])?.trim() != "tag" {
+    let oid = git_stdout(repo, &["show-ref", "--verify", "--hash", &reference])
+        .map_err(|e| format!("tag {tag} not found: {e}"))?;
+    let oid = oid.trim();
+    if git_stdout(repo, &["cat-file", "-t", oid])?.trim() != "tag" {
         return Err(format!(
             "{reference} is not an annotated tag; create it with \
              `git tag -s`"
         ));
     }
-    check_tag_object(tag, &git(repo, &["cat-file", "tag", &reference])?)?;
+    check_tag_object(tag, &git_stdout(repo, &["cat-file", "tag", oid])?)?;
 
-    let allowed = format!("gpg.ssh.allowedSignersFile={}", signers.display());
+    // An `OsString`, so a non-UTF-8 path reaches git unchanged.
+    let mut allowed = OsString::from("gpg.ssh.allowedSignersFile=");
+    allowed.push(signers);
     // The SSH verifier is pinned and the OpenPGP and X.509 verifiers
     // point at programs that do not exist, so neither the developer's
     // GPG keyring nor their git config can change the result.
-    git(
-        repo,
-        &[
-            "-c",
-            &allowed,
+    let mut args: Vec<&OsStr> = vec![OsStr::new("-c"), &allowed];
+    args.extend(
+        [
             "-c",
             "gpg.ssh.program=ssh-keygen",
             "-c",
@@ -71,31 +86,43 @@ fn verify(repo: &Path, tag: &str, signers: &Path) -> Result<(), String> {
             "-c",
             "gpg.x509.program=rustbase-xtask-x509-disabled",
             "verify-tag",
-            &reference,
-        ],
-    )
-    .map(|_| ())
-    .map_err(|e| {
-        format!(
-            "tag {tag} signature is not trusted by {}: {e}",
-            signers.display()
-        )
-    })
+            oid,
+        ]
+        .map(OsStr::new),
+    );
+    // A git that does not start is not a trust verdict: `?` passes it on.
+    let out = process::tool(repo, "git", &args)?;
+    if out.ok {
+        Ok(())
+    } else {
+        Err(format!(
+            "tag {tag} signature is not trusted by {}: {}",
+            signers.display(),
+            failure_text(&out)
+        ))
+    }
 }
 
-/// The first line of an SSH signature. git picks the verifier from
-/// the first signature line it finds in the tag.
+/// The first line of an SSH signature.
 const SSH_SIGNATURE: &str = "-----BEGIN SSH SIGNATURE-----";
 
-/// The first lines of the `OpenPGP` and X.509 signatures.
-const OTHER_SIGNATURES: [&str; 2] = [
+/// The first line of every signature git knows, SSH included. git
+/// verifies the block opened by the last line starting with one of
+/// these.
+const SIGNATURE_STARTS: [&str; 4] = [
+    SSH_SIGNATURE,
     "-----BEGIN PGP SIGNATURE-----",
+    "-----BEGIN PGP MESSAGE-----",
     "-----BEGIN SIGNED MESSAGE-----",
 ];
 
 /// Checks the raw tag object (`git cat-file tag` output): its `tag`
-/// header must name `tag`, and it must carry an SSH signature and no
-/// other kind.
+/// header must name `tag`, and the signature git will verify must be
+/// an SSH one.
+///
+/// The signature half only makes the refusal precise ("not
+/// SSH-signed", "carries no signature"); the disabled verifier
+/// programs in `verify` are what stop a non-SSH tag passing.
 fn check_tag_object(tag: &str, object: &str) -> Result<(), String> {
     // Header lines come first and end at the first empty line.
     let named = object
@@ -109,32 +136,48 @@ fn check_tag_object(tag: &str, object: &str) -> Result<(), String> {
             named.unwrap_or("(none)")
         ));
     }
-    if object
+    let last = object
         .lines()
-        .any(|line| OTHER_SIGNATURES.contains(&line.trim_end()))
-    {
-        return Err(format!(
+        .rev()
+        .find(|line| SIGNATURE_STARTS.iter().any(|s| line.starts_with(s)));
+    match last {
+        Some(line) if line.starts_with(SSH_SIGNATURE) => Ok(()),
+        Some(_) => Err(format!(
             "tag {tag} is not SSH-signed; only SSH signatures are \
              checked against the allowed-signers file"
-        ));
+        )),
+        None => Err(format!(
+            "tag {tag} carries no signature; if `git tag -s` made it, \
+             the signing step failed (check its output: a \
+             passphrase-protected key needs ssh-agent)"
+        )),
     }
-    if !object.lines().any(|line| line.trim_end() == SSH_SIGNATURE) {
-        return Err(format!(
-            "tag {tag} is not signed; create it with `git tag -s`"
-        ));
-    }
-    Ok(())
 }
 
-/// Runs git in `repo`: its standard output, or its error output as
-/// the message when it fails.
-fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
-    let args: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
-    let out = process::tool(repo, "git", &args)?;
+/// Runs `git <args>` in `repo`: its standard output, or a message
+/// naming the subcommand and its exit status when it fails.
+fn git_stdout(repo: &Path, args: &[&str]) -> Result<String, String> {
+    let os: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
+    let out = process::tool(repo, "git", &os)?;
     if out.ok {
         Ok(out.stdout)
     } else {
-        Err(out.stderr.trim().to_owned())
+        Err(format!(
+            "git {} failed: {}",
+            args.first().copied().unwrap_or_default(),
+            failure_text(&out)
+        ))
+    }
+}
+
+/// A failed run's error output, or its exit status when it printed
+/// none.
+fn failure_text(out: &process::Captured) -> String {
+    let stderr = out.stderr.trim();
+    if stderr.is_empty() {
+        out.status.clone()
+    } else {
+        format!("{stderr} ({})", out.status)
     }
 }
 
@@ -143,18 +186,28 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    use super::{RELEASE_SIGNERS, verify, verify_release_tag};
+    use super::{
+        RELEASE_SIGNERS, check_tag_object, failure_text, verify,
+        verify_release_tag,
+    };
     use crate::Config;
+    use crate::process::Captured;
     use crate::test_repo::{TempRepo, empty_dir};
 
-    /// Runs git in `dir` with an empty global config and no system
-    /// config, so the developer's own signing settings (`tag.gpgsign`,
-    /// say) cannot leak into the fixture.
-    fn git(dir: &Path, args: &[&str]) {
-        let out = Command::new("git")
-            .current_dir(dir)
-            .env("GIT_CONFIG_GLOBAL", dir.join("empty.gitconfig"))
-            .env("GIT_CONFIG_NOSYSTEM", "1")
+    /// git in the fixture repository `repo`, with the empty global
+    /// config beside it and no system config, so the developer's own
+    /// signing settings (`tag.gpgsign`, say) cannot leak in.
+    fn isolated_git(repo: &Path) -> Command {
+        let mut cmd = Command::new("git");
+        cmd.current_dir(repo)
+            .env("GIT_CONFIG_GLOBAL", repo.with_file_name("empty.gitconfig"))
+            .env("GIT_CONFIG_NOSYSTEM", "1");
+        cmd
+    }
+
+    /// Runs `git <args>` in the fixture repository, asserting success.
+    fn run_git(repo: &Path, args: &[&str]) {
+        let out = isolated_git(repo)
             .args(args)
             .output()
             .expect("git not found on PATH");
@@ -201,17 +254,17 @@ mod tests {
     fn repo(dir: &TempRepo) -> PathBuf {
         let repo = dir.0.join("repo");
         std::fs::create_dir(&repo).unwrap();
-        std::fs::write(repo.join("empty.gitconfig"), "").unwrap();
-        git(&repo, &["init", "-q"]);
-        git(&repo, &["config", "user.name", "Test"]);
-        git(&repo, &["config", "user.email", "release@example.com"]);
-        git(&repo, &["commit", "-q", "--allow-empty", "-m", "init"]);
+        std::fs::write(dir.0.join("empty.gitconfig"), "").unwrap();
+        run_git(&repo, &["init", "-q"]);
+        run_git(&repo, &["config", "user.name", "Test"]);
+        run_git(&repo, &["config", "user.email", "release@example.com"]);
+        run_git(&repo, &["commit", "-q", "--allow-empty", "-m", "init"]);
         repo
     }
 
     fn signed_tag(repo: &Path, tag: &str, key: &Path) {
         let key = key.to_str().unwrap();
-        git(
+        run_git(
             repo,
             &[
                 "-c",
@@ -258,10 +311,13 @@ mod tests {
         let dir = empty_dir();
         let key = keygen(&dir.0, "trusted");
         let repo = repo(&dir);
-        git(&repo, &["tag", "-a", "v1.0.0", "-m", "v1.0.0"]);
+        run_git(&repo, &["tag", "-a", "v1.0.0", "-m", "v1.0.0"]);
         let signers = signers_for(&dir, &key);
         let err = verify(&repo, "v1.0.0", &signers).unwrap_err();
-        assert!(err.contains("not signed"), "{err}");
+        assert!(
+            err.contains("carries no signature") && err.contains("ssh-agent"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -292,7 +348,7 @@ mod tests {
         let dir = empty_dir();
         let key = keygen(&dir.0, "trusted");
         let repo = repo(&dir);
-        git(&repo, &["tag", "v1.0.0"]);
+        run_git(&repo, &["tag", "v1.0.0"]);
         let signers = signers_for(&dir, &key);
         let err = verify(&repo, "v1.0.0", &signers).unwrap_err();
         assert!(err.contains("not an annotated tag"), "{err}");
@@ -304,7 +360,91 @@ mod tests {
         let key = keygen(&dir.0, "trusted");
         let repo = repo(&dir);
         let signers = signers_for(&dir, &key);
-        assert!(verify(&repo, "v9.9.9", &signers).is_err());
+        let err = verify(&repo, "v9.9.9", &signers).unwrap_err();
+        assert!(
+            err.starts_with("tag v9.9.9 not found: git show-ref"),
+            "{err}"
+        );
+    }
+
+    /// With the tag deleted, a plain lookup of `refs/tags/v1.0.0`
+    /// would find the same object under
+    /// `refs/remotes/refs/tags/v1.0.0`; that is not the tag.
+    #[test]
+    fn tag_object_outside_refs_tags_is_refused() {
+        let dir = empty_dir();
+        let key = keygen(&dir.0, "trusted");
+        let repo = repo(&dir);
+        signed_tag(&repo, "v1.0.0", &key);
+        let oid = isolated_git(&repo)
+            .args(["rev-parse", "refs/tags/v1.0.0"])
+            .output()
+            .unwrap();
+        let oid = String::from_utf8(oid.stdout).unwrap();
+        run_git(&repo, &["tag", "-d", "v1.0.0"]);
+        run_git(
+            &repo,
+            &["update-ref", "refs/remotes/refs/tags/v1.0.0", oid.trim()],
+        );
+        let signers = signers_for(&dir, &key);
+        let err = verify(&repo, "v1.0.0", &signers).unwrap_err();
+        assert!(err.starts_with("tag v1.0.0 not found"), "{err}");
+    }
+
+    /// A tag object as `git cat-file tag` prints it: headers naming
+    /// `name`, a blank line, then `body`.
+    fn tag_object(name: &str, body: &str) -> String {
+        format!(
+            "object 0123\ntype commit\ntag {name}\ntagger T <t@t> 0 +0000\n\n\
+             Release\n{body}"
+        )
+    }
+
+    #[test]
+    fn tag_object_must_name_the_tag_and_carry_only_an_ssh_signature() {
+        let ssh = "-----BEGIN SSH SIGNATURE-----\nAAAA\n\
+                   -----END SSH SIGNATURE-----\n";
+        let pgp = "-----BEGIN PGP SIGNATURE-----\nAAAA\n";
+        let x509 = "-----BEGIN SIGNED MESSAGE-----\nAAAA\n";
+        assert_eq!(check_tag_object("v1", &tag_object("v1", ssh)), Ok(()));
+        let cases = [
+            (tag_object("v0", ssh), "named v0"),
+            ("object 0123\n\nRelease\n".to_owned(), "named (none)"),
+            // git verifies the last signature block, matched by prefix.
+            (tag_object("v1", &format!("{ssh}{pgp}")), "not SSH-signed"),
+            (
+                tag_object(
+                    "v1",
+                    &format!("{ssh}-----BEGIN PGP MESSAGE-----\n"),
+                ),
+                "not SSH-signed",
+            ),
+            (
+                tag_object(
+                    "v1",
+                    &format!("{ssh}{}", pgp.replace("-\n", "-x\n")),
+                ),
+                "not SSH-signed",
+            ),
+            (tag_object("v1", x509), "not SSH-signed"),
+            (tag_object("v1", ""), "carries no signature"),
+        ];
+        for (object, expected) in cases {
+            let err = check_tag_object("v1", &object).unwrap_err();
+            assert!(err.contains(expected), "{expected}: {err}");
+        }
+    }
+
+    #[test]
+    fn a_failure_with_no_error_output_reports_its_status() {
+        let out = |stderr: &str| Captured {
+            ok: false,
+            status: "exit status: 1".to_owned(),
+            stdout: String::new(),
+            stderr: stderr.to_owned(),
+        };
+        assert_eq!(failure_text(&out(" \n")), "exit status: 1");
+        assert_eq!(failure_text(&out("bad\n")), "bad (exit status: 1)");
     }
 
     /// An old signed tag object placed under a newer ref name must not
@@ -315,7 +455,7 @@ mod tests {
         let key = keygen(&dir.0, "trusted");
         let repo = repo(&dir);
         signed_tag(&repo, "v1.0.0", &key);
-        git(
+        run_git(
             &repo,
             &["update-ref", "refs/tags/v2.0.0", "refs/tags/v1.0.0"],
         );
@@ -382,10 +522,7 @@ mod tests {
             "gpg: {}",
             String::from_utf8_lossy(&generated.stderr)
         );
-        let out = Command::new("git")
-            .current_dir(repo)
-            .env("GIT_CONFIG_GLOBAL", repo.join("empty.gitconfig"))
-            .env("GIT_CONFIG_NOSYSTEM", "1")
+        let out = isolated_git(repo)
             .env("GNUPGHOME", &home)
             .args([
                 "-c",

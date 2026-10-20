@@ -125,8 +125,8 @@ pub enum LibCommand {
         max_missing: usize,
     },
     /// Check that a release tag carries an SSH signature from a key
-    /// in `.github/release-signers` (used by `/release` when that file
-    /// exists)
+    /// in `.github/release-signers` (used by `/release` when the
+    /// project tracks that file)
     VerifyReleaseTag {
         /// The tag to check, for example `v1.2.0`
         tag: String,

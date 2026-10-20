@@ -95,3 +95,16 @@ path, so a revised entry is indistinguishable from a fresh one; the reader
 already tolerates a multi-paragraph body, and the writer must preserve that.
 Failing that, soften the rule in `.claude/commands/todo.md` to name the edit the
 tooling cannot make. Sourced from bombyx template feedback (2026-08-30).
+
+### release-tag-command
+
+**Summary:** Move /release signing and verification into a tested xtask command
+
+/release step 10 decides in prose how to tag (signed when
+.github/release-signers is tracked, annotated otherwise), always runs
+verify-release-tag, and deletes a tag only when `git tag -s` exited 0 and the
+check refused it. The #32 review needed three red-team rounds on that decision
+tree, each fix exposing the next case (a refusal, an exit-0 unsigned tag,
+deleting an older tag of the same name). A `cargo xtask` command that creates
+the tag, verifies it and removes only the tag it made would put that logic under
+tests, leaving step 10 one command.

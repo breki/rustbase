@@ -112,7 +112,7 @@ cargo xtask changelog add --kind <k> [--breaking] "text"  # insert [Unreleased] 
 cargo xtask changelog infer-bump       # SemVer level [Unreleased] calls for
 cargo xtask changelog promote --version <v> --date <d>  # date [Unreleased]
 cargo xtask version-sync      # rewrite <!-- version: X --> sentinels in docs
-cargo xtask verify-release-tag <tag>  # SSH-signed by .github/release-signers?
+cargo xtask verify-release-tag <tag>  # signed by a key in .github/release-signers?
 cargo xtask todo <list|add|done> ...       # mechanical docs/todo.md edits
 ```
 
@@ -522,7 +522,8 @@ Committing and releasing are separate:
   tag is invisible to the deploy guard's `git
   describe --exact-match`). When the project tracks
   `.github/release-signers`, the tag is signed (`git tag -s`)
-  and checked with `cargo xtask verify-release-tag`.
+  and checked with `cargo xtask verify-release-tag` -- only
+  there: the deploy guard below does not re-check it.
 - **`cargo xtask deploy`** refuses to ship unless `HEAD`
   is on a `vX.Y.Z` annotated tag matching
   `crates/rustbase/Cargo.toml` and the working tree is
