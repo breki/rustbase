@@ -106,6 +106,8 @@ cargo xtask backfeed-record <ds-path> --watermark <date>  # advance watermark
 cargo xtask feedback-add --section <s> --title <t>  # append feedback entry
 cargo xtask sync-candidates <last-synced>  # categorized sync delta, filtered
 cargo xtask changelog add --kind <k> [--breaking] "text"  # insert [Unreleased] bullet
+cargo xtask changelog infer-bump       # SemVer level [Unreleased] calls for
+cargo xtask changelog promote --version <v> --date <d>  # date [Unreleased]
 cargo xtask todo <list|add|done> ...       # mechanical docs/todo.md edits
 ```
 

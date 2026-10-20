@@ -1,6 +1,6 @@
 ---
 description: Cut a SemVer release from accumulated [Unreleased] CHANGELOG entries
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask audit*), Bash(cargo -q xtask audit*), Bash(cargo clippy:*), Bash(rustc -vV), Bash(rustup target list:*), Bash(rustup target add:*), Bash(cargo update:*), Read, Edit, AskUserQuestion
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask audit*), Bash(cargo -q xtask audit*), Bash(cargo clippy:*), Bash(rustc -vV), Bash(rustup target list:*), Bash(rustup target add:*), Bash(cargo update:*), Bash(cargo xtask changelog*), Bash(cargo -q xtask changelog*), Read, Edit, AskUserQuestion
 ---
 
 Cut a SemVer release: bump the version, promote the
@@ -42,11 +42,15 @@ the deploy task refuses to ship a `HEAD` that is not on a
 3. **Determine the bump:**
    - If the user passed `major` / `minor` / `patch`, use
      that. Skip to step 4.
-   - Otherwise infer from the `[Unreleased]` headings:
+   - Otherwise run `cargo -q xtask changelog infer-bump`, which
+     prints the level the `[Unreleased]` bullets call for:
      - Any bullet starting with `**BREAKING:**` -> **major**
      - Any non-empty `### Removed` section -> **major**
      - Any non-empty `### Added` section -> **minor**
      - Otherwise -> **patch**
+
+     It fails when `[Unreleased]` has no bullet, which is step
+     2's "nothing to release".
    - Show the user the inference (with the bullets that
      drove it) and ask via `AskUserQuestion` whether to
      accept the inferred bump or override it. Options:
@@ -72,11 +76,12 @@ the deploy task refuses to ship a `HEAD` that is not on a
    tripping the `dep-age-check` cooldown gate on freshly
    published transitive versions.
 
-7. **Rewrite `CHANGELOG.md`:**
-   - Rename the existing `## [Unreleased]` heading to
-     `## [X.Y.Z] - YYYY-MM-DD`.
-   - Insert a fresh empty `[Unreleased]` skeleton above
-     it:
+7. **Rewrite `CHANGELOG.md`** with
+   `cargo -q xtask changelog promote --version X.Y.Z --date
+   YYYY-MM-DD`. It renames the existing `## [Unreleased]`
+   heading to `## [X.Y.Z] - YYYY-MM-DD` and inserts a fresh
+   empty `[Unreleased]` skeleton above it, refusing a
+   malformed version or date:
      ```
      ## [Unreleased]
 

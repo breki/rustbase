@@ -19,7 +19,7 @@ use std::fs;
 use clap::Subcommand;
 
 use crate::helpers::{
-    MARKDOWN_WIDTH, is_iso_date, rejoin, require_nonempty, section_bounds,
+    MARKDOWN_WIDTH, is_iso_date, rejoin_like, require_nonempty, section_bounds,
     to_owned_lines, workspace_root, wrap_markdown,
 };
 
@@ -311,7 +311,6 @@ fn slug_exists(content: &str, slug: &str) -> bool {
 
 /// Append `bullet` to the end of the `## Pending` section.
 fn add_pending(content: &str, bullet: Vec<String>) -> Result<String, String> {
-    let ends_with_newline = content.ends_with('\n');
     let mut lines = to_owned_lines(content);
     let (start, end) = section_body(&lines, "## Pending")
         .ok_or("docs/todo.md has no '## Pending' section")?;
@@ -321,7 +320,7 @@ fn add_pending(content: &str, bullet: Vec<String>) -> Result<String, String> {
     let mut ins = vec![String::new()];
     ins.extend(bullet);
     lines.splice(at..at, ins);
-    Ok(rejoin(&lines, ends_with_newline))
+    Ok(rejoin_like(&lines, content))
 }
 
 /// Move the pending bullet for `slug` to the top of `## Done`,
@@ -336,7 +335,6 @@ fn move_to_done(
     summary: Option<&str>,
     doc: Option<&str>,
 ) -> Result<String, String> {
-    let ends_with_newline = content.ends_with('\n');
     let mut lines = to_owned_lines(content);
 
     let (p_start, p_end) = section_body(&lines, "## Pending")
@@ -397,7 +395,7 @@ fn move_to_done(
     ins.push(String::new());
     lines.splice(at..at, ins);
 
-    Ok(rejoin(&lines, ends_with_newline))
+    Ok(rejoin_like(&lines, content))
 }
 
 #[cfg(test)]

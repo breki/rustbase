@@ -82,6 +82,12 @@ and this project adheres to
   diagnostic lines). One cargo-diagnostic filter,
   `rustbase_xtask::text::is_cargo_diagnostic`, serves clippy, doc and the test
   gate's compile errors.
+- `cargo xtask changelog infer-bump` prints the SemVer level the `[Unreleased]`
+  bullets call for, and `cargo xtask changelog promote --version X.Y.Z --date
+  YYYY-MM-DD` dates `[Unreleased]` and opens a fresh one (from jutro);
+  `/release` now calls both instead of doing the work in prose. The
+  `rustbase-xtask` library holds `changelog` and a public `markdown` module
+  (part of #7).
 
 ### Changed
 
@@ -177,6 +183,11 @@ and this project adheres to
   `frontend/`, the `validate` Audit step skipped `npm audit` with only a
   warning. Both now run from the workspace root, and npm runs inside
   `frontend/`.
+- `cargo xtask changelog add` and `cargo xtask todo` keep a file's line endings
+  (a one-line edit no longer rewrites a CRLF file wholesale on Windows), ignore
+  `## ` lines inside code fences, and wrap entry text without flattening lists
+  or fenced code (from hoard). `feedback-add` removes an empty section's `_None
+  yet._` placeholder when it adds the first entry (from bombyx).
 
 ### Removed
 

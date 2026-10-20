@@ -126,15 +126,40 @@ fn find_section(lines: &[&str], kw: &str) -> Option<usize> {
     None
 }
 
+/// The line an empty section carries in place of entries.
+const PLACEHOLDER: &str = "_None yet._";
+
+/// Remove the `_None yet._` line from the section whose header is
+/// at `sec`, with the blank line under it. Searched to the next
+/// `## ` header: earlier inserts push it down the section.
+fn drop_placeholder(lines: &mut Vec<&str>, sec: usize) {
+    let end = lines[sec + 1..]
+        .iter()
+        .position(|l| l.starts_with("## "))
+        .map_or(lines.len(), |off| sec + 1 + off);
+    let Some(off) = lines[sec + 1..end]
+        .iter()
+        .position(|l| l.trim() == PLACEHOLDER)
+    else {
+        return;
+    };
+    let at = sec + 1 + off;
+    if lines.get(at + 1).is_some_and(|l| l.trim().is_empty()) {
+        lines.remove(at + 1);
+    }
+    lines.remove(at);
+}
+
 /// Insert `block` at the top of the section identified by `kw`,
 /// just below its header (past a single blank line if present)
 /// and above the section's existing entries. Pure. Errors when
 /// no matching section header is found.
 fn insert_entry(md: &str, kw: &str, block: &str) -> Result<String, String> {
-    let lines: Vec<&str> = md.lines().collect();
+    let mut lines: Vec<&str> = md.lines().collect();
     let sec = find_section(&lines, kw).ok_or_else(|| {
         format!("no `## ` section header matching {kw:?} found")
     })?;
+    drop_placeholder(&mut lines, sec);
 
     let mut ins = sec + 1;
     if lines.get(ins).is_some_and(|l| l.trim().is_empty()) {
@@ -309,6 +334,21 @@ Nothing yet.
         assert!(new_pos < old_pos);
         // ...but comes after the (untouched) Open section.
         assert!(open_pos < new_pos);
+    }
+
+    #[test]
+    fn insert_entry_drops_the_empty_section_placeholder() {
+        // A section with no entries carries `_None yet._`; the first
+        // entry replaces it, and other sections keep theirs.
+        let doc = "# F\n\n## Open divergences\n\n_None yet._\n\n\
+                   ## Suggestions\n\n_None yet._\n";
+        let out = insert_entry(doc, "open", "### tf-a -- A\n\nBody.").unwrap();
+        let open = &out[..out.find("## Suggestions").unwrap()];
+        assert!(!open.contains("_None yet._"), "{out}");
+        assert!(open.contains("tf-a"), "{out}");
+        assert!(
+            out[out.find("## Suggestions").unwrap()..].contains("_None yet._")
+        );
     }
 
     #[test]
