@@ -825,8 +825,11 @@ feature off and with each feature alone. A helper that only
 one group uses but that sits outside it fails the all-off
 pass. A group that needs another fails when it runs alone.
 
-A new `validate` gate is a `step()` function in its own
-module, added to the list in `xtask/src/validate.rs`. An
+A shared gate goes into the library's list,
+`step::standard` (`crates/rustbase-xtask/src/step.rs`), which
+also fixes the order. A project's own gate is a `step()`
+function in its own `xtask` module, inserted into that list in
+`xtask/src/validate.rs` (`step::position` finds the place). An
 optional gate also takes `#[cfg(feature = "<name>")]` in each
 place that names it:
 

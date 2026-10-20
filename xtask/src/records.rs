@@ -6,18 +6,10 @@
 use rustbase_xtask::records;
 
 use crate::helpers::tasks_config;
-use crate::step::Step;
 
 /// Standalone `cargo xtask records-check`.
 pub fn records_check() -> Result<(), String> {
     let detail = records::check(&tasks_config())?;
     println!("Records OK ({detail})");
     Ok(())
-}
-
-/// The `validate` step.
-pub fn step() -> Step {
-    Step::new("Records", "records-check", || {
-        records::check(&tasks_config())
-    })
 }
