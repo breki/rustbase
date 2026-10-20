@@ -14,6 +14,10 @@ const MAX_DETAIL_LINES: usize = 5;
 const MAX_COMPILE_LINES: usize = 10;
 
 /// What a test run covers and how it reports.
+///
+/// Not `#[non_exhaustive]`, unlike `Config`, so callers
+/// can write `Options { x, ..Options::default() }`. The cost: adding a
+/// field is a breaking change.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Options<'a> {
     /// Run only tests whose name contains this. In the condensed

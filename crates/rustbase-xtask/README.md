@@ -36,7 +36,10 @@ let cfg = Config::for_project("my-app", workspace_root);
 let steps = step::standard(&cfg, check_only);
 ```
 
-The template's `xtask/` is the reference wiring.
+The `clap` feature enables `cli`; leave it out if you write your own
+CLI. The template's
+[`xtask/`](https://github.com/breki/rustbase/tree/main/xtask) is the
+reference wiring.
 
 ## Licence
 

@@ -50,7 +50,7 @@ and this project adheres to
 - `cargo xtask dep-age <eco> <pkg> --latest-aged --within <line>` keeps the pin
   target on one release line (`3`, `3.x`, `0.4`), so it can no longer suggest a
   major the tree cannot use (#1).
-- A `crates/rustbase-xtask` library crate (prototype, unpublished) now holds the
+- A `crates/rustbase-xtask` library crate now holds the
   dependency-cooldown gate; the template's `xtask` calls it with a per-project
   `Config` (`Config::for_project` derives the `<NAME>_DEP_AGE_ALLOW` variable
   and registry user agent). `docs/xtask-library.md` records the investigation
@@ -153,7 +153,10 @@ and this project adheres to
   0.1.0: publishing metadata, its own README and LICENSE, and a release
   procedure in `docs/xtask-library.md`. The template depends on it by path and
   version, so library and template changes land together here and downstream
-  projects pin the version.
+  projects pin the version. Its growing types (`Config`, `Thresholds`,
+  `Strictness`, `canon::Rules`, `cli::LibCommand`) are `#[non_exhaustive]`, and
+  the `text` and `markdown` modules are hidden from the docs and not covered by
+  SemVer.
 
 ### Changed
 

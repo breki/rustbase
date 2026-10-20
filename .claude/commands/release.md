@@ -179,7 +179,7 @@ the deploy task refuses to ship a `HEAD` that is not on a
    - Commit directly with `git commit` (do **not** route
      through `/commit` -- a release commit is a
      single-purpose bookkeeping commit; this
-     is the documented exception to the "all commits go
+     is a documented exception to the "all commits go
      through `/commit`" rule).
    - Use this message format (HEREDOC):
      ```bash

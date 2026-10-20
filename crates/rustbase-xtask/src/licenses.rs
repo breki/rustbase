@@ -397,6 +397,10 @@ fn render(scope: &Scope, crates: &[Attribution]) -> String {
 }
 
 /// What [`write()`] builds the file for and where it puts it.
+///
+/// Not `#[non_exhaustive]`, unlike `Config`, so callers
+/// can write `Options { x, ..Options::default() }`. The cost: adding a
+/// field is a breaking change.
 #[derive(Debug, Default)]
 pub struct Options<'a> {
     /// The file to write, or a directory to write `THIRD-PARTY-LICENSES`
@@ -989,6 +993,11 @@ mod tests {
         // Shape only: the zero-missing policy is CI's step, so a new
         // crate without a licence text fails there, not here.
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        // The published crate unpacks with no workspace around it.
+        if !root.join("Cargo.lock").is_file() {
+            eprintln!("not inside the rustbase workspace; skipping");
+            return;
+        }
         let cfg = Config::for_project("demo", root.clone());
         let opts = Options {
             max_missing: usize::MAX,

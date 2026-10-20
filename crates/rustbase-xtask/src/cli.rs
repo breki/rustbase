@@ -23,6 +23,7 @@ use crate::{
 
 /// The subcommands the library implements.
 #[derive(Debug, Subcommand)]
+#[non_exhaustive]
 pub enum LibCommand {
     /// Type-check all targets (compiles tests, runs none)
     Check,

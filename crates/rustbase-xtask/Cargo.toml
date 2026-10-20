@@ -2,6 +2,9 @@
 name = "rustbase-xtask"
 version = "0.1.0"
 edition = "2024"
+# Measured: 1.88 lacks `File::try_lock` (used by `tee`); 1.89 builds
+# every feature and target. No gate checks it.
+rust-version = "1.89"
 license = "MIT"
 description = "Shared cargo-xtask tooling for rustbase-derived projects"
 repository = "https://github.com/breki/rustbase"
@@ -20,3 +23,12 @@ clap = ["dep:clap"]
 [dependencies]
 clap = { version = "4", features = ["derive"], optional = true }
 serde_json = "1"
+
+# docs.rs builds default features only; `cli` needs `clap`. It builds
+# on nightly, and `cargo publish` writes the workspace lints,
+# `warnings = "deny"` included, into the packaged manifest, so its
+# lints are capped there; the local gates keep `-D warnings`.
+[package.metadata.docs.rs]
+all-features = true
+rustc-args = ["--cap-lints", "warn"]
+rustdoc-args = ["--cap-lints", "warn"]

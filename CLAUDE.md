@@ -22,7 +22,7 @@ they require manual approval every time.**
 |-------|---------|
 | `crates/rustbase` | Core library and CLI binary |
 | `crates/rustbase-web` | Axum web server (optional) |
-| `crates/rustbase-xtask` | Shared xtask gates, as a library, crates.io name `rustbase-xtask` (`docs/xtask-library.md`) |
+| `crates/rustbase-xtask` | Shared xtask gates, as a library prepared for crates.io (`docs/xtask-library.md`) |
 | `xtask` | Build automation (calls `rustbase-xtask`) |
 
 The web crate is optional. For a CLI-only project,
@@ -485,8 +485,10 @@ passed) is high.
 
 **All commits must go through the `/commit` skill.**
 Never use `git commit` directly. No "Co-Authored-By",
-no emoji. (The sole exception is `/release`, which makes
-one direct bookkeeping commit for the version bump.)
+no emoji. (The exceptions are `/release`, which makes one
+direct bookkeeping commit for the version bump, and the
+library's release procedure in `docs/xtask-library.md`, which
+does the same for `rustbase-xtask`.)
 
 **When git has no author identity, ask for it.** Do not
 offer one inferred from earlier commits as the default: past
