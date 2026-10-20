@@ -1,6 +1,6 @@
 ---
 description: Cut a SemVer release from accumulated [Unreleased] CHANGELOG entries
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask audit*), Bash(cargo -q xtask audit*), Bash(cargo clippy:*), Bash(rustc -vV), Bash(rustup target list:*), Bash(rustup target add:*), Bash(cargo update:*), Bash(cargo xtask changelog*), Bash(cargo -q xtask changelog*), Bash(cargo xtask version-sync*), Bash(cargo -q xtask version-sync*), Read, Edit, AskUserQuestion
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask audit*), Bash(cargo -q xtask audit*), Bash(cargo clippy:*), Bash(rustc -vV), Bash(rustup target list:*), Bash(rustup target add:*), Bash(cargo update:*), Bash(cargo xtask changelog*), Bash(cargo -q xtask changelog*), Bash(cargo xtask version-sync*), Bash(cargo -q xtask version-sync*), Bash(cargo xtask verify-release-tag*), Bash(cargo -q xtask verify-release-tag*), Bash(git ls-files:*), Read, Edit, AskUserQuestion
 ---
 
 Cut a SemVer release: bump the version, promote the
@@ -185,15 +185,32 @@ the deploy task refuses to ship a `HEAD` that is not on a
      )"
      ```
 
-10. **Tag** -- create an **annotated** tag:
-    `git tag -a vX.Y.Z -m "Release vX.Y.Z"`. Do **not**
-    use a lightweight tag (`git tag vX.Y.Z`) -- the
-    deploy guard runs `git describe --exact-match
-    --match 'v*' HEAD`, which only sees annotated tags
-    by default. Do not push; the user pushes when ready.
+10. **Tag** -- the tag must be **annotated**, never
+    lightweight (`git tag vX.Y.Z`): the deploy guard runs
+    `git describe --exact-match --match 'v*' HEAD`, which
+    only sees annotated tags by default. Whether it is also
+    signed depends on one file. `git ls-files
+    .github/release-signers` prints that path when the
+    project tracks a list of keys allowed to sign releases,
+    and nothing when it does not.
+    - **No key list:** `git tag -a vX.Y.Z -m "Release
+      vX.Y.Z"`.
+    - **Key list:** `git tag -s vX.Y.Z -m "Release vX.Y.Z"`
+      (a signed tag is annotated too), then
+      `cargo -q xtask verify-release-tag vX.Y.Z`, which
+      refuses a tag not signed by a key in the list. If
+      `git tag -s` fails because git has no signing key,
+      stop and ask the operator to set `gpg.format` to `ssh`
+      and `user.signingkey` to their key; this command has
+      no `git config` grant. If the check fails, remove the
+      tag with `git tag -d vX.Y.Z`, keep the release commit,
+      and report the reason.
+
+    Do not push; the user pushes when ready.
 
 11. **Tell the user what to do next** -- print:
-    - The new version and tag name
+    - The new version and tag name, and whether the tag is
+      signed and verified or only annotated
     - The CHANGELOG bullets that were released
     - The targets the cross-platform clippy linted, so a
       platform that was never checked is visible

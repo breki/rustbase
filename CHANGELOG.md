@@ -142,6 +142,12 @@ and this project adheres to
   rather than ships binaries; a project that ships them adds it to its release
   job. `Config` gains `name`, the project name the file names. Taken from the
   bombyx downstream project.
+- `cargo xtask verify-release-tag <tag>` checks that a release tag carries an
+  SSH signature from a key listed in `.github/release-signers`, and refuses an
+  unsigned, lightweight, renamed or GPG-signed tag. It is opt-in: when a project
+  tracks that file, `/release` creates the tag with `git tag -s` and runs the
+  check; without it `/release` tags as before. Taken from the jutro downstream
+  project.
 
 ### Changed
 
