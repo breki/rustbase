@@ -11,7 +11,12 @@
 //! let lint = Step::new("Lint", "lint", || Ok(String::new()));
 //! step::insert_after(&mut steps, step::names::DENY, [lint])?;
 //! let tee = rustbase_xtask::tee::Tee::open(&cfg.root, "validate")?;
-//! step::run_all(steps, &tee)?;
+//! let result = step::run_all(steps, &tee);
+//! if let Err(e) = &result {
+//!     // The caller prints the error, so it logs it too.
+//!     tee.record(&format!("error: {e}"));
+//! }
+//! result?;
 //! # Ok::<(), String>(())
 //! ```
 
@@ -196,9 +201,11 @@ pub fn insert_after(
 
 /// Run `steps` in order, printing a `[N/M]` line for each and then
 /// `Validate OK`, stopping at the first failure. A failed step
-/// prints the subcommand that re-runs it alone. Every line, and the
-/// failure the caller prints, also goes to `tee`'s log. Output a
-/// gate prints itself, such as a warning, is not in the log.
+/// prints the subcommand that re-runs it alone. Every line also goes
+/// to `tee`'s log, but the returned error does not: the caller prints
+/// it, so the caller writes it to the log too (`tee.record`) in the
+/// words it prints, as the module example does. Output a gate prints
+/// itself, such as a warning, is not in the log.
 ///
 /// # Errors
 ///
@@ -222,7 +229,6 @@ pub fn run_all(steps: Vec<Step>, tee: &Tee) -> Result<(), String> {
             Err(e) => {
                 tee.println(&format_step(i + 1, total, name, "FAILED", ""));
                 tee.eprintln(&format!("  -> iterate with: cargo xtask {cmd}"));
-                tee.record(&e);
                 return Err(e);
             }
         }
@@ -409,18 +415,22 @@ mod tests {
         let ok = log();
         assert!(ok.starts_with("[1/2] S"), "{ok}");
         assert!(ok.contains("\nValidate OK ("), "{ok}");
+        drop(tee);
         let tee = Tee::open(&dir.0, "validate").unwrap();
         assert_eq!(
             run_all(vec![step(true), step(false), step(true)], &tee),
             Err("boom".into())
         );
         assert_eq!(ran.get(), 4, "the step after the failure ran");
-        // The log holds the failure too, which the caller prints.
+        // The error itself is left to the caller, which prints it.
         let failed = log();
         assert!(failed.contains("[2/3] S............. FAILED"), "{failed}");
-        assert!(failed.contains("iterate with: cargo xtask s"), "{failed}");
-        assert!(failed.ends_with("boom\n"), "{failed}");
+        assert!(
+            failed.ends_with("iterate with: cargo xtask s\n"),
+            "{failed}"
+        );
         assert!(!failed.contains("[3/3]"), "{failed}");
+        assert!(run_all(vec![step(true)], &Tee::terminal()).is_ok());
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use rustbase_xtask::step::{self, Step};
-use rustbase_xtask::tee::Tee;
+use rustbase_xtask::tee::{OpenError, Tee};
 
 use crate::helpers::tasks_config;
 #[cfg(feature = "frontend")]
@@ -36,12 +36,44 @@ fn steps(check: bool) -> Result<Vec<Step>, String> {
 /// before partial staging, where a rewrite would sweep unrelated
 /// drift into the working tree.
 pub fn validate(check: bool) -> Result<(), String> {
-    frontend_feature_check(
-        cfg!(feature = "frontend"),
-        Path::new("frontend/package.json").exists(),
-    )?;
-    let tee = Tee::open(&tasks_config().root, "validate")?;
-    step::run_all(steps(check)?, &tee)
+    // Opened first, so a failure at any later point reaches the log.
+    let tee = open_log(&tasks_config().root)?;
+    let result = (|| {
+        frontend_feature_check(
+            cfg!(feature = "frontend"),
+            Path::new("frontend/package.json").exists(),
+        )?;
+        step::run_all(steps(check)?, &tee)
+    })();
+    record_failure(&tee, &result);
+    result
+}
+
+/// `target/validate.log`. While a first run holds it, a second run is
+/// refused: it could not write the log, which would keep the first
+/// run's output, and a reader would take that as the second run's
+/// result. Any other failure to open it warns and falls back to
+/// terminal-only output, since the log is a side record.
+fn open_log(root: &Path) -> Result<Tee, String> {
+    match Tee::open(root, "validate") {
+        Ok(tee) => Ok(tee),
+        Err(OpenError::Held(path)) => Err(format!(
+            "another validate is running in this checkout ({} is held); \
+             wait for it to finish",
+            path.display()
+        )),
+        Err(e) => {
+            eprintln!("warning: {e}; this run is not logged");
+            Ok(Tee::terminal())
+        }
+    }
+}
+
+/// Write a failure to the log as `main` prints it.
+fn record_failure(tee: &Tee, result: &Result<(), String>) {
+    if let Err(e) = result {
+        tee.record(&crate::error_line(e));
+    }
 }
 
 /// Refuse a frontend on disk when the `frontend` feature is off:
@@ -108,6 +140,43 @@ mod tests {
         // `about = None` on `Cli` keeps the doc comments of `Cli`,
         // `XCommand` and the flattened `LibCommand` out of `--help`.
         assert!(crate::Cli::command().get_about().is_none());
+    }
+
+    #[test]
+    fn a_log_that_cannot_open_falls_back_to_the_terminal() {
+        let root = std::env::temp_dir()
+            .join(format!("xtask-validate-nolog-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("target"), "a file, not a dir").unwrap();
+        let tee = open_log(&root);
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(tee.unwrap().path(), None);
+    }
+
+    #[test]
+    fn a_second_run_while_one_holds_the_log_is_refused() {
+        // Its fallback would leave the first run's result in the log,
+        // read as this run's.
+        let root = std::env::temp_dir()
+            .join(format!("xtask-validate-held-{}", std::process::id()));
+        let first = Tee::open(&root, "validate").unwrap();
+        let e = open_log(&root).unwrap_err();
+        drop(first);
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(e.contains("another validate is running"), "{e}");
+    }
+
+    #[test]
+    fn a_failure_is_logged_as_main_prints_it() {
+        let root = std::env::temp_dir()
+            .join(format!("xtask-validate-log-{}", std::process::id()));
+        let tee = Tee::open(&root, "validate").unwrap();
+        record_failure(&tee, &Ok(()));
+        record_failure(&tee, &Err("boom".into()));
+        drop(tee);
+        let log = std::fs::read_to_string(root.join("target/validate.log"));
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(log.unwrap(), format!("{}\n", crate::error_line("boom")));
     }
 
     #[test]
