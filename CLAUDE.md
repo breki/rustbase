@@ -97,6 +97,7 @@ cargo xtask fmt               # format code
 cargo xtask dupes             # code duplication check
 cargo xtask audit             # security-advisory audit (RUSTSEC + npm)
 cargo xtask deny              # offline licence/bans/sources gate (cargo-deny)
+cargo xtask licenses          # THIRD-PARTY-LICENSES for a shipped binary
 cargo xtask dep-age <eco> <pkg> [ver]  # one package's publish age
 cargo xtask dep-age <eco> <pkg> --latest-aged  # newest ver past cooldown
 cargo xtask dep-age-check [--base <ref>]  # cooldown-gate changed deps (vs HEAD or --base)

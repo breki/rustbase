@@ -18,7 +18,7 @@ use clap::Subcommand;
 use crate::{
     Config, FMT_DIFF_LINES, STANDALONE_LINES, Strictness, audit, canon,
     cargo_test, changelog, check, clippy, coverage, deny, dep_age, doc, dupes,
-    fmt, records, scripts, todo, version_sync,
+    fmt, licenses, records, scripts, todo, version_sync,
 };
 
 /// The subcommands the library implements.
@@ -102,6 +102,27 @@ pub enum LibCommand {
     Changelog {
         #[command(subcommand)]
         action: ChangelogAction,
+    },
+    /// Write the third-party licence file for a distributed binary
+    /// (THIRD-PARTY-LICENSES): every crate that goes into building it,
+    /// with its licence texts; fails when a crate ships none
+    Licenses {
+        /// Where to write it: a file, or a directory to put
+        /// THIRD-PARTY-LICENSES in -- an existing one, or a path ending
+        /// in `/`, which is created (default: cargo's target directory)
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+        /// Target triple the binary is built for (default: the host's)
+        #[arg(long)]
+        target: Option<String>,
+        /// The workspace member whose binary ships (default: every
+        /// publishable member)
+        #[arg(long)]
+        package: Option<String>,
+        /// How many crates may ship no licence text; raise it only
+        /// with a stated reason
+        #[arg(long, default_value_t = 0)]
+        max_missing: usize,
     },
     /// Rewrite `<!-- version: X -->` sentinels (and `VERSION=` lines
     /// in the same files) in README.md and docs/ from the crate's
@@ -264,6 +285,20 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
         LibCommand::DepAgeCheck { base } => dep_age::dep_age_check(cfg, &base)?,
         LibCommand::DepPreflight => dep_age::dep_preflight(cfg)?,
         LibCommand::Changelog { action } => run_changelog(action, cfg)?,
+        LibCommand::Licenses {
+            out,
+            target,
+            package,
+            max_missing,
+        } => {
+            let opts = licenses::Options {
+                out: out.as_deref(),
+                target: target.as_deref(),
+                package: package.as_deref(),
+                max_missing,
+            };
+            println!("{}", licenses::write(cfg, &opts)?);
+        }
         LibCommand::VersionSync => println!("{}", version_sync::sync(cfg)?),
         LibCommand::Todo { action } => run_todo(action, cfg)?,
     }
@@ -349,7 +384,8 @@ mod tests {
         std::fs::create_dir_all(dir.0.join("crates/p/src")).unwrap();
         std::fs::write(
             dir.0.join("crates/p/Cargo.toml"),
-            "[package]\nname = \"p\"\nversion = \"1.0.0\"\nedition = \"2024\"\n",
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\n\
+             edition = \"2024\"\n",
         )
         .unwrap();
         std::fs::write(dir.0.join("crates/p/src/lib.rs"), "").unwrap();

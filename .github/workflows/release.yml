@@ -7,7 +7,12 @@ name: Release
 # there is deliberately **no build-and-publish matrix here** -- the
 # tag's job is to run the heavier gates somewhere nobody can skip,
 # not to mint release assets. A project that *does* ship binaries
-# (a `cargo install` CLI, say) adds a build/publish job below.
+# (a `cargo install` CLI, say) adds a build/publish job below, and
+# puts `cargo xtask licenses --package <crate> --target <triple>
+# --out <archive dir>/` in it: the licences of the crates a binary is
+# built from require their texts to travel with it. It also copies
+# the project's own `LICENSE` into that directory, which the
+# generated file refers to.
 on:
   push:
     tags: [ "v*.*.*" ]
