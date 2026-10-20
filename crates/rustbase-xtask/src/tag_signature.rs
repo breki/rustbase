@@ -479,6 +479,11 @@ mod tests {
     /// git checks an `OpenPGP` signature against the local GPG keyring
     /// and never reads the allowed-signers file, so only SSH
     /// signatures may pass.
+    ///
+    /// Not on Windows: Git for Windows' `gpg` is an MSYS program that
+    /// cannot use a Windows `GNUPGHOME` path. The table test above
+    /// covers the refusal everywhere.
+    #[cfg(not(windows))]
     #[test]
     fn gpg_signed_tag_is_refused() {
         let dir = empty_dir();
@@ -496,6 +501,7 @@ mod tests {
     /// Signs `tag` with a throwaway `OpenPGP` key kept in a private
     /// `GNUPGHOME` (gpg's key store directory). Returns false when gpg
     /// is not installed.
+    #[cfg(not(windows))]
     fn gpg_signed_tag(dir: &TempRepo, repo: &Path, tag: &str) -> bool {
         let home = dir.0.join("gnupg");
         std::fs::create_dir(&home).unwrap();
