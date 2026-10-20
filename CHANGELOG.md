@@ -14,7 +14,11 @@ and this project adheres to
 
 - `cargo xtask changelog add` and `cargo xtask todo` (list/add/done) commands
   that edit CHANGELOG.md and docs/todo.md mechanically, so `/commit`, `/todo`,
-  and `/implement` no longer hand-edit those files.
+  and `/implement` no longer hand-edit those files. `docs/todo.md` uses
+  bombyx's layout: one `### <slug>` entry per item with a one-line
+  `**Summary:**`, and `todo done <slug>` removes the entry (git history records
+  what shipped; there is no Done section). Both live in the `rustbase-xtask`
+  library (#7).
 - cargo xtask deny -- an offline cargo-deny licence/bans/sources gate configured
   by deny.toml, wired into validate and every-push CI (a missing cargo-deny is a
   hard error, not a warning).

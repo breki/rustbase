@@ -156,7 +156,7 @@ the library is a possible later step, not part of this plan.
 | `coverage`, `dupes` | extracted; limits are `Config::thresholds`; kozmotic's coverage hardening (unreadable manifest, vacuous run) and jutro's pooled-plus-per-crate duplication limit taken (copies between crates unmeasured: #15) |
 | `doc_cmd`, `canon` | extracted; canon exemptions are `Config::canon` (`canon::Rules`), set in `tasks_config()` (`xtask/src/helpers.rs`) |
 | `check`, `clippy_cmd`, `test_cmd`, `fmt_cmd` | extracted (#7) as the library's `check`, `clippy`, `cargo_test` and `fmt`: one `Failure` report per gate, a tail of the output when nothing else is found, one shared cargo-diagnostic filter; bombyx's drop of per-target `could not compile` lines and hoard's single-report `check` error taken |
-| `changelog`, `todo` | `changelog` extracted (#7) with jutro's `infer-bump` / `promote`, and the markdown helpers as `markdown` with hoard's hardening (CRLF-preserving rejoin, sections found by column-0 headings only, structure-preserving wrap); `todo` pending, format pluggable (bombyx) |
+| `changelog`, `todo` | extracted (#7): `changelog` with jutro's `infer-bump` / `promote`; the markdown helpers as `markdown` with hoard's hardening (CRLF-preserving rejoin, sections found by column-0 headings only, structure-preserving wrap); `todo` in bombyx's layout (one `### <slug>` entry per item, removed when done), the only layout (operator's choice) |
 | `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
 | `validate` | step runner; each gate supplies its `step()` (done, #5) |
 | `frontend*` | library-ready, optional feature |
@@ -190,8 +190,8 @@ signature check, `.ports` reader, worktree setup and log tee.
 3. Extract `audit`, `deny`, `coverage`, `dupes`, `doc_cmd`, `canon`,
    taking the downstream fixes listed above (done: #6).
 4. Extract the output parsers (`check`, `clippy_cmd`, `test_cmd`,
-   `fmt_cmd`) and `changelog`/`todo` with a pluggable todo format
-   (#7; the parsers and `changelog` done).
+   `fmt_cmd`) and `changelog`/`todo` (done: #7; `todo` uses bombyx's
+   layout only).
 5. Extension points for project subcommands and steps.
 6. Migrate clockdump, then the other downstreams.
 7. Deploy: decide what, if anything, is shared.

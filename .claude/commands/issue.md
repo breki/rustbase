@@ -220,10 +220,10 @@ commit**, so nothing is left to do on `main` after the merge:
    a design or security decision, a non-obvious constraint --
    into a reference doc under `docs/`, a code comment or the PR
    body, then remove it with `git rm docs/issues/<slug>.md`.
-2. Complete the item's `docs/todo.md` entry, if it has one:
+2. Remove the item's `docs/todo.md` entry, if it has one:
 
    ```
-   cargo -q xtask todo done <slug> --date <today's date>
+   cargo -q xtask todo done <slug>
    ```
 
 3. Commit through `/commit`, push, and watch its run as in

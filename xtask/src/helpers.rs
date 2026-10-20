@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use rustbase_xtask::canon::Exempt;
-pub use rustbase_xtask::text::is_iso_date;
 
 /// Resolve the workspace root (the parent of the xtask
 /// crate directory).

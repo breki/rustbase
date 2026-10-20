@@ -27,6 +27,7 @@ pub mod fmt;
 pub mod markdown;
 mod process;
 pub mod text;
+pub mod todo;
 
 /// The project's `xtask` package, left out of the coverage and
 /// duplication measurements: a binary of glue around this library.
