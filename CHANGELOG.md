@@ -14,11 +14,14 @@ and this project adheres to
 
 - `cargo xtask changelog add` and `cargo xtask todo` (list/add/done) commands
   that edit CHANGELOG.md and docs/todo.md mechanically, so `/commit`, `/todo`,
-  and `/implement` no longer hand-edit those files. `docs/todo.md` uses
-  bombyx's layout: one `### <slug>` entry per item with a one-line
-  `**Summary:**`, and `todo done <slug>` removes the entry (git history records
-  what shipped; there is no Done section). Both live in the `rustbase-xtask`
-  library (#7).
+  and `/implement` no longer hand-edit those files. `docs/todo.md` is an
+  introduction, then one `### <slug>` entry per item with a one-line
+  `**Summary:**` (the layout of the downstream project bombyx), and `todo done
+  <slug>` removes the entry (git history records what shipped; there is no Done
+  section). Both live in the `rustbase-xtask` library (#7). `/template-sync`
+  never copies `docs/todo.md`, so a derived project keeps its old `## Pending`
+  / `## Done` file, and the command refuses it until each pending bullet is
+  converted to an `### <slug>` entry with a `**Summary:**` line.
 - cargo xtask deny -- an offline cargo-deny licence/bans/sources gate configured
   by deny.toml, wired into validate and every-push CI (a missing cargo-deny is a
   hard error, not a warning).
@@ -110,8 +113,7 @@ and this project adheres to
   reviewers.
 - `/implement` and `/issue` treat `docs/issues/<slug>.md` as a working document:
   durable decisions are promoted to a reference doc or code comment and the
-  planning doc is removed when the item is done; `todo done` links only a
-  document named with `--doc`.
+  planning doc is removed when the item is done.
 - Command files invoke `cargo -q xtask ...`, so cargo compile progress no longer
   precedes a command's output; their `allowed-tools` grant both spellings.
 - `validate`'s dependency-cooldown step fails, instead of warning, when the
@@ -190,9 +192,12 @@ and this project adheres to
 - `cargo xtask changelog add`, `cargo xtask todo` and `feedback-add` keep a
   file's line endings (a one-line edit no longer rewrites a CRLF file wholesale
   on Windows), and the first two wrap entry text without flattening lists or
-  fenced code (from hoard). In those two, sections are found by headings at the
-  start of a line only, so nothing inside an indented entry -- a heading-like
-  line, a code block, closed or not -- is mistaken for structure.
+  fenced code (from hoard). In `CHANGELOG.md`, sections are found by headings at
+  the start of a line only, so nothing inside an indented entry -- a
+  heading-like line, a code block, closed or not -- is mistaken for structure.
+  In `docs/todo.md`, whose bodies sit at column 0, `todo add` refuses a body
+  line that reads as a heading, and `add` / `done` refuse a file with a
+  non-item heading after the first item.
   `feedback-add` removes an empty section's `_None yet._` placeholder when it
   adds the first entry (from bombyx).
 

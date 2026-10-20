@@ -5,9 +5,9 @@
 //! structure.
 
 /// True when `line` opens or closes a fenced code block (its first
-/// non-whitespace run is ```` ``` ```` or `~~~`). `wrap_markdown`
-/// uses it to copy fenced code through unwrapped; sections are found
-/// by column-0 headings and do not track fences.
+/// non-whitespace run is ```` ``` ```` or `~~~`). [`section_bounds`]
+/// deliberately does not use it: sections are found by column-0
+/// headings, whatever fences surround them.
 pub fn is_fence(line: &str) -> bool {
     let t = line.trim_start();
     t.starts_with("```") || t.starts_with("~~~")
@@ -58,10 +58,11 @@ pub fn rejoin_like<S: AsRef<str>>(lines: &[S], original: &str) -> String {
 ///
 /// Both ends match at column 0 only (trailing whitespace ignored).
 /// Correct for files whose entries are indented under a column-0
-/// bullet, as `changelog` and `todo add` write them: nothing inside an
-/// entry -- a heading-like line, a code fence, closed or not -- is
-/// structure. A file with column-0 entry headings needs another finder. Code fences are deliberately not tracked: one that
-/// looked unclosed would make the rest of the file read as code.
+/// bullet, as `changelog` writes them: nothing inside an entry -- a
+/// heading-like line, a code fence, closed or not -- is structure. A
+/// file with column-0 entry headings needs another finder. Code
+/// fences are deliberately not tracked: one that looked unclosed
+/// would make the rest of the file read as code.
 #[must_use]
 pub fn section_bounds<S: AsRef<str>>(
     lines: &[S],
@@ -79,8 +80,8 @@ pub fn section_bounds<S: AsRef<str>>(
     start.map(|h| (h, lines.len()))
 }
 
-/// Reject empty or whitespace-only input, so a contentless `- ` stub
-/// is never written; `label` names the field in the error.
+/// Reject empty or whitespace-only input, so a contentless entry is
+/// never written; `label` names the field in the error.
 ///
 /// # Errors
 ///
@@ -414,8 +415,8 @@ mod tests {
 
     #[test]
     fn wrap_markdown_wraps_a_long_list_item_under_its_marker() {
-        // `first` is the body indent, as `todo add --body` passes
-        // it; the item's own marker comes from the text.
+        // `first` is an indent the caller passes; the item's own
+        // marker comes from the text.
         let text = "- alpha beta gamma delta";
         let out = wrap_markdown(text, "  ", "  ", 16);
         assert_eq!(out, vec!["  - alpha beta", "    gamma delta"]);
@@ -432,9 +433,8 @@ mod tests {
 
     #[test]
     fn section_bounds_ignores_an_indented_heading() {
-        // `todo add` writes bodies at a 2-space indent, so an
-        // indented `## ` is content, not structure. Treating it as
-        // a terminator lets a body silently truncate its section.
+        // Entries are written indented, so an indented `## ` is
+        // content, not structure.
         let lines = to_owned_lines("## A\n\n- one\n  ## B\n\n- two\n\n## C\n");
         let (_, end) = section_bounds(&lines, "## A").unwrap();
         assert_eq!(lines[end], "## C");
