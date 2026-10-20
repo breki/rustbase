@@ -145,13 +145,15 @@ it waits for 0.2; the crate docs state the 0.x limitation.
 **Summary:** dep-age CI job fails on a base no fetched ref reaches
 
 The `dep-age` job in `.github/workflows/ci.yml` passes `github.event.before`
-straight to `dep-age-check --base`. A force-push to `main`, or a force-pushed
-release tag reaching the job through release.yml's `workflow_call`, gives a
-`before` the checkout does not have, so the standalone command fails and a
-replayed release is blocked. bombyx fixed its copy (breki/bombyx#196): fetch the
-base by hash, and only if that fails warn and fall back to `HEAD^`; under `bash
--e` the fetch needs `|| true`. Take that fix, and tell kozmotic, which copied
-the job.
+straight to `dep-age-check --base`. Under release.yml's `workflow_call` the
+event is the caller's tag push, so `before` is that tag's previous object. A
+force-pushed release tag, or a force-push to `main`, gives a `before` the
+checkout does not have, so the standalone command fails and a replayed release
+is blocked. bombyx fixed its copy (breki/bombyx#196): fetch the base by hash,
+and only if that fails warn and pass `--base HEAD^`; under `bash -e` the fetch
+needs `|| true`. Take that fix, correct the job's comment (it says
+`workflow_call` falls back to the parent), and tell kozmotic, which copied the
+job.
 
 ### xtask-glue-template-drift
 
@@ -162,6 +164,8 @@ which nothing in `xtask/src` uses. (2) `xtask/src/main.rs` has no crate doc
 comment, so a project denying `missing_docs` must merge the file on every sync.
 (3) `sync.rs` formats the status column three wide; a rename row (`R100`) pushes
 its category over (bombyx used four). (4) `sync.rs` names the three reviewer
-logs in the never-sync list; bombyx matched `docs/developer/*-log.md` as a glob.
-Also inert but different: `feedback.rs` removes `_None yet._` only as the first
-line of a section, bombyx anywhere in it.
+logs in the never-sync list, so a fourth `*-log.md` added later would be
+offered to every downstream; bombyx matched `docs/developer/*-log.md` as a
+glob. Record only, no change: `feedback.rs` removes `_None yet._` only as the
+first line of a section, bombyx's anywhere in it; the placeholder only ever
+appears first, so no file behaves differently.
