@@ -246,12 +246,19 @@ and frontend modules, compiled out but present. kozmotic followed
 its audit found 10 TLS advisories to fix, and its `xtask` grew by
 about 960 lines: the deploy, frontend and template-tools modules step
 1 copies in outweighed the vendored gates it removed, since kozmotic
-had vendored fewer of them than clockdump.
+had vendored fewer of them than clockdump. bombyx came third
+(breki/bombyx#196). The library's gates largely came from bombyx, so
+its migration was mostly deletion (about -6,600 lines of `xtask`). It
+runs every library gate, adding Scripts, which its vendored
+`validate` lacked (step 4), and a module-by-module comparison with
+the library found no lost gate behaviour.
 
 **Before step 1**, bring everything outside `xtask/` up to the
-template with `/template-sync`. Its rules still skip `xtask/`; step 9
-changes that. When that sync is large, it can wait as its own change,
-as kozmotic's did. The cost: the project keeps its own command files
+template with `/template-sync`. The downstream's own copy of that
+command (`.claude/commands/template-sync.md`) and the divergences in
+its `docs/developer/template-feedback.md` may still say to skip
+`xtask/`; step 9 changes that. When that sync is large, it can wait
+as its own change, as kozmotic's did. The cost: the project keeps its own command files
 (`/commit`, `/release`, CI), so check each one that runs `validate`,
 `cargo test` or `cargo clippy` against step 9's bullets. The steps,
 in the order clockdump took them:
@@ -270,9 +277,9 @@ in the order clockdump took them:
    subcommand becomes an `XCommand` variant in `main.rs` beside the
    flattened `LibCommand`, and its gate a step placed with
    `step::insert_after` in `validate.rs` ("Optional xtask features"
-   in `CLAUDE.md`). `main.rs` is then merged too, like the two files
-   in step 9. clockdump had no such module, so this part has not
-   been run yet.
+   in `CLAUDE.md`), and both files join step 9's merged list.
+   clockdump had no such module, so this part has not been run
+   yet.
 2. **`xtask/Cargo.toml`**: take the template's, then leave the
    feature groups the project does not use out of `default` and drop
    the `path` from the library dependency, leaving
@@ -283,7 +290,12 @@ in the order clockdump took them:
 3. **`helpers.rs`**: `Config::for_project("<name>", ...)`, which keeps
    the `<NAME>_DEP_AGE_ALLOW` variable. Drop the template's canon
    exemptions, which name template paths, and the test that asserts
-   them; keep `audit_npm_dir` only with a frontend.
+   them; keep `audit_npm_dir` only with a frontend. A project that
+   vendored canon carries its own exemptions over, as exact paths:
+   the library matches a path exactly, or a whole folder when it
+   ends in `/`, where bombyx's copy matched any prefix. A project
+   whose docs named `RUSTBASE_DEP_AGE_ALLOW` (bombyx's `CLAUDE.md`,
+   `/update-deps`, supply-chain doc) renames it there.
 4. **`validate.rs`**: the gates the old vendored `validate.rs` did
    not run can be left out, so the migration keeps the gates the
    project had. Compare its steps with `step::names` in
@@ -304,26 +316,52 @@ in the order clockdump took them:
 6. **`clippy.toml`**: the first `cargo xtask clippy` names each
    `doc-valid-idents` entry the template's `xtask` needs (clockdump
    lacked `CommonMark`); add them.
-7. **The cooldown**: a library version inside the 14 days needs the
-   allow-list, with a stated reason, on each local run
-   (`<NAME>_DEP_AGE_ALLOW=rustbase-xtask@X.Y.Z cargo xtask validate`)
-   and, where the project has CI, in a repository variable of the
-   same name (Settings, then Variables) read by its dep-age job. A
-   project that runs Dep-age (has not deferred it in step 4) and has
-   CI without that job takes the template's (`dep-age` in
-   `.github/workflows/ci.yml`), renaming its `RUSTBASE_DEP_AGE_ALLOW`
-   -- both the `env:` key and the `vars.` name -- to
-   `<NAME>_DEP_AGE_ALLOW`. Set the variable before the migration's own
-   PR runs the job. Clear its entries once the 14 days pass.
+7. **The cooldown.** A library version inside the 14 days needs the
+   allow-list, with a stated reason:
+   - Locally, on each run:
+     `<NAME>_DEP_AGE_ALLOW=rustbase-xtask@X.Y.Z cargo xtask validate`.
+   - In CI, only for a project that has CI and runs Dep-age (has not
+     deferred it in step 4): a dep-age job reading a repository
+     variable of the same name (Settings, then Variables). Set the
+     variable before the migration's own PR runs the job, and clear
+     its entries once the 14 days pass. A project without the job
+     copies bombyx's (`dep-age` in its `.github/workflows/ci.yml`,
+     breki/bombyx#196), not the template's, which fails on a base it
+     cannot fetch (`dep-age-ci-unreachable-base` in `docs/todo.md`).
+     The allow-list name in it -- the `env:` key and the `vars.`
+     name -- becomes `<NAME>_DEP_AGE_ALLOW`.
 8. **Run `validate`.** Failures in the project's own code from a
    newer toolchain (clockdump: Clippy 1.99's `assert_is_empty`) are
    their own commit.
 9. **Bring the project's canon in step**: docs naming the deleted
    modules (`coverage.rs`'s regex), its `template-feedback.md` and
-   `/template-sync` rules where they say to skip `xtask` files (every
-   file is now synced: the template's verbatim, `helpers.rs`,
-   `validate.rs` and any file holding project modules merged), and
-   its `CLAUDE.md` gate list. Three edits go beyond the docs:
+   `/template-sync` rules where they say to skip `xtask` files, and
+   its `CLAUDE.md` gate list. Every `xtask` file is now synced: the
+   template's copy verbatim, except these, which are merged. Write
+   the list into the downstream's `/template-sync` command file, as
+   bombyx did beside its rules for new tooling:
+   - `xtask/Cargo.toml`, always: the template's has the `path`
+     dependency and its own `default` features (step 2).
+   - `xtask/src/helpers.rs`, always: the project's settings (step 3).
+   - `xtask/src/validate.rs`, when it holds project steps or a
+     `DEFERRED` list (steps 1 and 4).
+   - `xtask/src/main.rs`, when it holds project commands (step 1) or
+     the project denies `missing_docs`, since the template's has no
+     crate doc comment (bombyx).
+   - Any other file holding a project module.
+
+   Also fix these:
+   - A `CLAUDE.md` that says the frontend or deploy subsystem was
+     removed, or that nothing in `xtask` knows npm: say the groups are
+     compiled out, and that `cargo xtask clippy` still lints each one
+     alone, so a lint there is a real failure.
+   - A command file that only prints a `git` command for the operator
+     (`git push` in `/release`): add "This command has no `git push`
+     grant". The library's canon-check reads commands inside
+     quotations, which bombyx's vendored copy skipped, and that
+     sentence is what exempts one (`CLAUDE.md`, Canon claims).
+
+   Three edits go beyond the docs:
    - The library's `validate` formats files in place unless given
      `--check`. A `/commit` or `/release` that validates after
      staging needs `--check`, or it fixes the working tree while the
@@ -339,7 +377,7 @@ in the order clockdump took them:
      only that, and `todo list` names what it refuses in a converted
      file. Done items leave the file.
 
-The other downstreams (bombyx, hoard, jutro) follow the same steps.
+The other downstreams (hoard, jutro) follow the same steps.
 
 ## Proposed follow-up issues
 
@@ -354,6 +392,7 @@ The other downstreams (bombyx, hoard, jutro) follow the same steps.
    layout only).
 5. Extension points for project subcommands and steps (done: #8;
    deploy hooks are #10).
-6. Migrate clockdump (done: #9, breki/clockdump#1), then the other
-   downstreams.
+6. Migrate the downstreams (#9): clockdump (breki/clockdump#1),
+   kozmotic (breki/kozmotic#1) and bombyx (breki/bombyx#196) done;
+   hoard and jutro remain.
 7. Deploy: decide what, if anything, is shared.
