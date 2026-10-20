@@ -18,6 +18,21 @@ work.
 
 ---
 
+### fr-2026-10-20-scripts-gate-committed-wording
+
+**Category:** wording (output, help, test name)
+
+The scripts gate (`crates/rustbase-xtask/src/scripts.rs`) reads what
+is staged, and its docs now say "staged", but three strings the
+program shows still say "committed" or read badly: the failure message
+("have a shebang but are not committed executable"), the
+`scripts-check` help in `crates/rustbase-xtask/src/cli.rs` ("are
+committed executable"), and the test name
+`a_work_tree_git_refuses_fails_rather_than_skipping` (better:
+`git_refusing_inside_a_work_tree_fails_the_gate`). The message could
+also say "permission denied" beside "exits 126". Deferred because
+stage 3 changes no program output, help text or code.
+
 ### fr-2026-10-20-validate-help-names-five-gates
 
 **Category:** help text (clap)

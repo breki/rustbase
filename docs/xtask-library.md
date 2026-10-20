@@ -180,7 +180,7 @@ only std and `serde_json` beyond its project's own helpers.
 |-|-|-|-|
 | bombyx `licenses` (third-party licence file) | 1,073 | move | the product name in one header line |
 | bombyx `version_sync` (`<!-- version: X -->` sentinels) | 204 | move | the manifest path |
-| hoard `repo_hygiene` (scripts committed executable) | 231 | moved (#28): `scripts`, the Scripts step | nothing: the `scripts/` convention |
+| hoard `repo_hygiene` (scripts staged executable) | 231 | moved (#28): `scripts`, the Scripts step | nothing: the `scripts/` convention |
 | jutro `tag_signature` (SSH-signed release tags) | 409 | move, opt-in | placeholder strings naming jutro |
 | jutro `xtask_log` (tee output to `target/<name>.log`) | 421 | move, beside `process` | nothing |
 | jutro `ports` (`.ports` reader) | 312 | move, frontend projects only | the web stack's default ports |
