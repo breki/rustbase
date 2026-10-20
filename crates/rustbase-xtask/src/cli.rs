@@ -18,7 +18,7 @@ use clap::Subcommand;
 use crate::{
     Config, FMT_DIFF_LINES, STANDALONE_LINES, Strictness, audit, canon,
     cargo_test, changelog, check, clippy, coverage, deny, dep_age, doc, dupes,
-    fmt, records, scripts, todo,
+    fmt, records, scripts, todo, version_sync,
 };
 
 /// The subcommands the library implements.
@@ -103,6 +103,10 @@ pub enum LibCommand {
         #[command(subcommand)]
         action: ChangelogAction,
     },
+    /// Rewrite `<!-- version: X -->` sentinels (and `VERSION=` lines
+    /// in the same files) in README.md and docs/ from the crate's
+    /// manifest (used by `/release`)
+    VersionSync,
     /// Mechanically read/edit `docs/todo.md` (used by `/todo` and
     /// `/implement`) -- list, add, or complete a captured item
     Todo {
@@ -260,6 +264,7 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
         LibCommand::DepAgeCheck { base } => dep_age::dep_age_check(cfg, &base)?,
         LibCommand::DepPreflight => dep_age::dep_preflight(cfg)?,
         LibCommand::Changelog { action } => run_changelog(action, cfg)?,
+        LibCommand::VersionSync => println!("{}", version_sync::sync(cfg)?),
         LibCommand::Todo { action } => run_todo(action, cfg)?,
     }
     Ok(())
@@ -341,6 +346,14 @@ mod tests {
         let cfg = Config::for_project("p", dir.0.clone());
         std::fs::create_dir_all(dir.0.join("docs")).unwrap();
         std::fs::write(dir.0.join("docs/todo.md"), "# TODO\n").unwrap();
+        std::fs::create_dir_all(dir.0.join("crates/p")).unwrap();
+        std::fs::write(
+            dir.0.join("crates/p/Cargo.toml"),
+            "[package]\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.0.join("README.md"), "<!-- version: 0.1.0 -->\n")
+            .unwrap();
         std::fs::write(
             dir.0.join("CHANGELOG.md"),
             "# Changelog\n\n## [Unreleased]\n",
@@ -352,6 +365,7 @@ mod tests {
             &["todo", "done", "a-b"],
             &["changelog", "add", "--kind", "fixed", "a fix"],
             &["changelog", "infer-bump"],
+            &["version-sync"],
             &[
                 "changelog",
                 "promote",
@@ -369,6 +383,8 @@ mod tests {
         let queue =
             std::fs::read_to_string(dir.0.join("docs/todo.md")).unwrap();
         assert!(!queue.contains("a-b"), "{queue}");
+        let readme = std::fs::read_to_string(dir.0.join("README.md")).unwrap();
+        assert_eq!(readme, "<!-- version: 1.0.0 -->\n");
     }
 
     #[test]

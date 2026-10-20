@@ -1,6 +1,6 @@
 ---
 description: Cut a SemVer release from accumulated [Unreleased] CHANGELOG entries
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask audit*), Bash(cargo -q xtask audit*), Bash(cargo clippy:*), Bash(rustc -vV), Bash(rustup target list:*), Bash(rustup target add:*), Bash(cargo update:*), Bash(cargo xtask changelog*), Bash(cargo -q xtask changelog*), Read, Edit, AskUserQuestion
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask audit*), Bash(cargo -q xtask audit*), Bash(cargo clippy:*), Bash(rustc -vV), Bash(rustup target list:*), Bash(rustup target add:*), Bash(cargo update:*), Bash(cargo xtask changelog*), Bash(cargo -q xtask changelog*), Bash(cargo xtask version-sync*), Bash(cargo -q xtask version-sync*), Read, Edit, AskUserQuestion
 ---
 
 Cut a SemVer release: bump the version, promote the
@@ -75,7 +75,11 @@ the deploy task refuses to ship a `HEAD` that is not on a
    transitive dependency, folding an unrelated
    workspace-wide bump into the release commit and
    tripping the `dep-age-check` cooldown gate on freshly
-   published transitive versions.
+   published transitive versions. Then run
+   `cargo -q xtask version-sync`, which rewrites every
+   `<!-- version: X -->` sentinel in `README.md` and `docs/`
+   (and `VERSION=` lines in the same files) to the new
+   version, and note the files it names.
 
 7. **Rewrite `CHANGELOG.md`** with
    `cargo -q xtask changelog promote --version X.Y.Z --date
@@ -143,7 +147,8 @@ the deploy task refuses to ship a `HEAD` that is not on a
 
 9. **Stage and commit:**
    - Stage `crates/rustbase/Cargo.toml`, `Cargo.lock`,
-     `CHANGELOG.md` (and nothing else).
+     `CHANGELOG.md` and the files `version-sync` named (and
+     nothing else).
    - Commit directly with `git commit` (do **not** route
      through `/commit` -- a release commit is a
      single-purpose bookkeeping commit; this
@@ -190,6 +195,7 @@ the deploy task refuses to ship a `HEAD` that is not on a
   `CHANGELOG.md`; only the `[Unreleased]` block is
   mutable.
 - If `cargo xtask validate` fails after the version
-  bump, leave `Cargo.toml`, `Cargo.lock`, and
-  `CHANGELOG.md` modified on disk so the user can see
-  the broken state, and do not commit or tag.
+  bump, leave `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md`
+  and any file `version-sync` rewrote modified on disk so
+  the user can see the broken state, and do not commit or
+  tag.
