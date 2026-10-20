@@ -140,20 +140,16 @@ particular:
    Then remove the doc: `git rm docs/issues/<slug>.md`
    when it was committed, otherwise delete the file.
 
-4. In `docs/todo.md`, move the item to Done
-   mechanically (do not hand-edit the file):
+4. Remove the item from `docs/todo.md` mechanically (do
+   not hand-edit the file):
 
    ```
-   cargo -q xtask todo done <slug> --date <today's date>
+   cargo -q xtask todo done <slug>
    ```
 
-   The command moves the bullet to the top of `## Done`
-   (newest first) and stamps the date. It writes no link
-   unless you pass `--doc <path>` (relative to `docs/`),
-   which must name a file that exists -- so never pass
-   the issue doc you just removed. Pass
-   `--summary "<text>"` to override the pending summary
-   for the Done entry.
+   The command removes the entry whole. The queue holds
+   live work only; the commit and git history record what
+   shipped.
 
 5. Verify the change manually. For UI / API
    changes, exercise the feature in a browser (run
@@ -185,6 +181,6 @@ particular:
   in flight; step 3 of Phase 3 retires it.
 - Never start implementing before the user explicitly
   approves the plan.
-- Never edit `## Done` items in `docs/todo.md` except
-  to add a new one when finalising.
+- Never remove an item from `docs/todo.md` except
+  through `cargo xtask todo done` when finalising.
 - Use 80-character margins in all Markdown.

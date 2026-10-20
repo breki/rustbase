@@ -7,7 +7,7 @@ Collect an issue or idea into `docs/todo.md`. This
 command **only captures** -- it never implements. Use
 `/implement` to act on a captured item.
 
-The mechanical work -- slug-uniqueness check, bullet
+The mechanical work -- slug-uniqueness check, entry
 placement, listing, wrapping to 80 columns -- lives in
 `cargo xtask todo`, so this skill never hand-edits
 `docs/todo.md`. The skill owns the *judgment*: turning
@@ -42,8 +42,11 @@ the user's words into a slug and a summary.
    Add `--body "<longer text>"` when the user gave
    more than a one-liner (kept verbatim, wrapped by the
    command). The command refuses a slug that already
-   exists (pending or done); if it errors on a
-   collision, append `-2` / `-3` to the slug and retry.
+   exists; if it errors on a collision, append `-2` /
+   `-3` to the slug and retry. It also refuses a summary
+   that will not fit one 80-column line (move the detail
+   into `--body`) and a body line that would read as a
+   heading.
    Keep the user's wording -- do not paraphrase or
    expand.
 
@@ -61,8 +64,8 @@ list` and show its output (each line is
 
 - Never hand-edit `docs/todo.md`; go through
   `cargo xtask todo`.
-- Never edit the `## Done` section from this command
-  (`todo done` is `/implement`'s finalise step).
+- Never remove an item from this command (`todo done`
+  is `/implement`'s finalise step).
 - Never create files in `docs/issues/` from this
   command -- that is `/implement`'s job.
 - Never run tests, builds, or git commands.

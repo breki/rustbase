@@ -210,9 +210,9 @@ provided, ask via `AskUserQuestion`.
      confirm it compiles.** A downstream's code is
      shaped to *its* conventions; ported verbatim it
      can compile and pass its own tests yet drift the
-     template's real files on first use (e.g. a
-     `todo done` entry written with the downstream's
-     separator/date style instead of the template's).
+     template's real files on first use (e.g. an
+     entry written with the downstream's separator or
+     date style instead of the template's).
      Read the file the ported code will write to and
      match its established shape.
 
