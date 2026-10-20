@@ -191,6 +191,9 @@ and this project adheres to
   line, a code block, closed or not -- is mistaken for structure.
   `feedback-add` removes an empty section's `_None yet._` placeholder when it
   adds the first entry (from bombyx).
+- dep-preflight now runs `cargo update --precise` with the cargo of the
+  toolchain in use (the `CARGO` variable), the same cargo as every other gate,
+  instead of whichever `cargo` is first on `PATH`.
 
 ### Removed
 

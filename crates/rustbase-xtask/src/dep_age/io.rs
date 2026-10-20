@@ -1,5 +1,6 @@
 //! The cooldown gate's unmockable I/O: the registry fetch, `git
-//! show`, `cargo update --precise` and the clock. Kept to the
+//! show`, `cargo update --precise` (through the shared
+//! `crate::process` spawn) and the clock. Kept to the
 //! calls themselves so the logic around them stays testable;
 //! this file is excluded from the coverage gate.
 //!
@@ -96,15 +97,16 @@ pub(super) fn cargo_update_precise(
     target: &str,
 ) -> Result<(), String> {
     let spec = format!("{name}@{current}");
-    let output = Command::new("cargo")
-        .current_dir(root)
-        .args(["update", "-p", &spec, "--precise", target])
-        .output()
-        .map_err(|e| format!("failed to run cargo update: {e}"))?;
-    if output.status.success() {
+    // Through the shared spawn, so this runs the same cargo (the
+    // `CARGO` env var, naming the toolchain in use) as every gate.
+    let out = crate::process::cargo(
+        root,
+        &["update", "-p", &spec, "--precise", target],
+    )?;
+    if out.ok {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+        Err(out.stderr.trim().to_string())
     }
 }
 
