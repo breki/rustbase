@@ -1,16 +1,9 @@
 // The `#[cfg(feature)]` groups are the optional command groups
 // declared in `Cargo.toml`.
-mod audit;
 #[cfg(feature = "template-tools")]
 mod backfeed;
-mod canon;
-mod changelog;
-mod check;
 #[cfg(feature = "clean-cache")]
 mod clean_cache;
-mod clippy_cmd;
-mod coverage;
-mod deny;
 #[cfg(feature = "deploy")]
 mod deploy;
 #[cfg(feature = "deploy")]
@@ -21,11 +14,8 @@ mod deploy_guard;
 mod deploy_remote;
 #[cfg(feature = "deploy")]
 mod deploy_setup;
-mod doc_cmd;
-mod dupes;
 #[cfg(feature = "template-tools")]
 mod feedback;
-mod fmt_cmd;
 #[cfg(feature = "frontend")]
 mod frontend;
 #[cfg(feature = "frontend")]
@@ -37,15 +27,12 @@ mod frontend_fmt;
 #[cfg(feature = "frontend")]
 mod frontend_test;
 mod helpers;
-mod records;
 #[cfg(feature = "template-tools")]
 mod sync;
-mod test_cmd;
-mod todo;
 mod validate;
 
 use clap::{Parser, Subcommand};
-use rustbase_xtask::dep_age;
+use rustbase_xtask::cli::{self, LibCommand};
 
 use helpers::tasks_config;
 
@@ -56,33 +43,11 @@ struct Cli {
     command: XCommand,
 }
 
+/// The library's subcommands, then this project's own.
 #[derive(Subcommand)]
 enum XCommand {
-    /// Type-check all targets (compiles tests, runs none)
-    Check,
-    /// Check the claims canon prose makes (paths, cross-refs,
-    /// git grants, width, backlog IDs)
-    CanonCheck,
-    /// Check the record files: duplicate ids, unknown field labels,
-    /// malformed ids, dangling Depends on / Supersedes
-    RecordsCheck,
-    /// Run clippy (deny warnings)
-    Clippy,
-    /// Check doc comments build and doc links resolve
-    Doc,
-    /// Run all tests
-    Test {
-        /// Optional test filter
-        filter: Option<String>,
-        /// Show raw cargo test output
-        #[arg(long)]
-        verbose: bool,
-        /// Run `#[ignore]`-tagged tests (e.g. manual
-        /// tools). Off by default; not run by
-        /// `validate`.
-        #[arg(long)]
-        ignored: bool,
-    },
+    #[command(flatten)]
+    Lib(LibCommand),
     /// Run fmt + clippy + tests + coverage + duplication
     Validate {
         /// Check formatting read-only (`fmt --check`)
@@ -91,51 +56,6 @@ enum XCommand {
         #[arg(long)]
         check: bool,
     },
-    /// Format code
-    Fmt,
-    /// Run coverage check (requires cargo-llvm-cov)
-    Coverage,
-    /// Run code duplication check (requires code-dupes)
-    Dupes,
-    /// Security-advisory audit (RUSTSEC + npm); requires
-    /// cargo-audit
-    Audit,
-    /// Licence, bans and sources gate (offline); requires
-    /// cargo-deny
-    Deny,
-    /// Report a dependency version's age and flag it if
-    /// within the publish cooldown (on-demand; requires curl)
-    DepAge {
-        /// Registry to query
-        #[arg(value_enum)]
-        ecosystem: rustbase_xtask::dep_age::Ecosystem,
-        /// Package name
-        package: String,
-        /// Version to check (default: latest)
-        version: Option<String>,
-        /// Instead of checking a version's age, print the
-        /// newest version published before the cooldown (the
-        /// pin target for `/update-deps`). Ignores `version`.
-        #[arg(long)]
-        latest_aged: bool,
-        /// With `--latest-aged`, stay on one release line: `3`,
-        /// `3.x` or `0.4` (whole version components).
-        #[arg(long, requires = "latest_aged")]
-        within: Option<String>,
-    },
-    /// Cooldown-check only the dependencies added or bumped in
-    /// the working tree versus HEAD (the changed-deps gate that
-    /// `validate` runs; requires curl + git)
-    DepAgeCheck {
-        /// Commit to diff the lockfiles against. CI passes the
-        /// commit the push or pull request started from.
-        #[arg(long, default_value = "HEAD")]
-        base: String,
-    },
-    /// Pin any changed Rust dependency still within the cooldown
-    /// down to its newest aged version, before compiling
-    /// (front-door remediation; requires curl + git + cargo)
-    DepPreflight,
     /// Type-check the frontend (svelte-check); skips
     /// cleanly when there is no frontend
     #[cfg(feature = "frontend")]
@@ -222,67 +142,14 @@ enum XCommand {
         /// The `last-synced` SHA from `.template-sync.toml`
         last_synced: String,
     },
-    /// Mechanically edit `CHANGELOG.md` (used by `/commit`) --
-    /// insert a bullet under the right `[Unreleased]` subsection
-    Changelog {
-        #[command(subcommand)]
-        action: changelog::ChangelogAction,
-    },
-    /// Mechanically read/edit `docs/todo.md` (used by `/todo` and
-    /// `/implement`) -- list, add, or complete a captured item
-    Todo {
-        #[command(subcommand)]
-        action: todo::TodoAction,
-    },
 }
 
 fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        XCommand::Check => check::check(),
-        XCommand::CanonCheck => canon::canon_check(),
-        XCommand::RecordsCheck => records::records_check(),
-        XCommand::Clippy => clippy_cmd::clippy(),
-        XCommand::Test {
-            filter,
-            verbose,
-            ignored,
-        } => test_cmd::test(test_cmd::TestOptions {
-            filter: filter.as_deref(),
-            verbose,
-            ignored,
-        }),
+        XCommand::Lib(cmd) => cli::run(cmd, &tasks_config()),
         XCommand::Validate { check } => validate::validate(check),
-        XCommand::Fmt => fmt_cmd::fmt(),
-        XCommand::Doc => doc_cmd::doc(),
-        XCommand::Coverage => coverage::coverage(),
-        XCommand::Dupes => dupes::dupes(),
-        XCommand::Audit => audit::audit(),
-        XCommand::Deny => deny::deny(),
-        XCommand::DepAge {
-            ecosystem,
-            package,
-            version,
-            latest_aged,
-            within,
-        } => {
-            let cfg = tasks_config();
-            if latest_aged {
-                dep_age::dep_age_latest(
-                    &cfg,
-                    ecosystem,
-                    &package,
-                    within.as_deref(),
-                )
-            } else {
-                dep_age::dep_age(&cfg, ecosystem, &package, version.as_deref())
-            }
-        }
-        XCommand::DepAgeCheck { base } => {
-            dep_age::dep_age_check(&tasks_config(), &base)
-        }
-        XCommand::DepPreflight => dep_age::dep_preflight(&tasks_config()),
         #[cfg(feature = "frontend")]
         XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
         #[cfg(feature = "frontend")]
@@ -326,8 +193,6 @@ fn main() {
         XCommand::SyncCandidates { last_synced } => {
             sync::sync_candidates(&last_synced)
         }
-        XCommand::Changelog { action } => changelog::changelog(action),
-        XCommand::Todo { action } => todo::todo(action),
     };
 
     if let Err(e) = result {

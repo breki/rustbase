@@ -130,9 +130,12 @@ Projects need to add, not only configure: extra subcommands (jutro's
 architecture lint), and for deploy, extra config keys and
 hooks before install, before start and during setup. The library
 provides the step and subcommand types; projects implement them.
-For `validate` this is in place (#8): `step::standard` is the
-library's gate list in order, and a project inserts its own steps
-before `step::run_all` runs them.
+For `validate` and the subcommands this is in place (#8):
+`step::standard` is the library's gate list in order, and a project
+inserts its own steps before `step::run_all` runs them;
+`cli::LibCommand` is the library's subcommands, which a project's
+CLI flattens into its own and dispatches with `cli::run`. Deploy's
+hooks are #10.
 
 ### Distribution and versioning
 

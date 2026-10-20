@@ -70,22 +70,6 @@ harmless advisory warnings. Same word, opposite weight. `verdict`
 already calls the first `unfinished`; rename the field to match.
 Deferred because stage 3 does not rename code.
 
-### fr-2026-10-19-validate-order-rationale-copies
-
-**Category:** Duplication (one rule, four homes)
-
-Why `validate` runs its steps in their order is written four times:
-the `validate()` doc in `xtask/src/validate.rs`, the comments in
-`steps()` (which defer to it), the ordering paragraph after the
-Definition of Done list in `CLAUDE.md`, and per gate in each
-`step()` doc (Dep-age's network behaviour in
-`xtask/src/dep_age_gate.rs`). They had drifted: the `validate()`
-doc said Dep-age "never blocks", which is false under CI. That
-clause was fixed in place for issue #5. Consolidation is left to
-its own commit: state the order once, on `steps()`, cut the
-`validate()` doc to what it does, and leave each gate's network
-behaviour to its own `step()` doc.
-
 ### fr-2026-10-19-history-comments-in-xtask
 
 **Category:** Comments (history and round-local IDs)

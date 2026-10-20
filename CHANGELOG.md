@@ -175,6 +175,11 @@ and this project adheres to
   after the project like the allow-list one (`<PROJECT>_DEP_AGE_STRICT`, still
   `RUSTBASE_DEP_AGE_STRICT` here), and the npm project the audit step covers is
   `Config::audit_npm_dir`.
+- The library's subcommands moved into it as `cli::LibCommand` (behind its
+  `clap` feature), dispatched by `cli::run`; a project's `xtask` flattens them
+  into its own command enum and keeps only its own commands (`validate`, the
+  frontend, deploy, template tools, clean-cache). The thirteen wrapper modules
+  under `xtask/src/` are gone.
 
 ### Fixed
 
