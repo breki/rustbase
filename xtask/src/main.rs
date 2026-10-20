@@ -11,7 +11,6 @@ mod clean_cache;
 mod clippy_cmd;
 mod coverage;
 mod deny;
-mod dep_age_gate;
 #[cfg(feature = "deploy")]
 mod deploy;
 #[cfg(feature = "deploy")]
@@ -39,7 +38,6 @@ mod frontend_fmt;
 mod frontend_test;
 mod helpers;
 mod records;
-mod step;
 #[cfg(feature = "template-tools")]
 mod sync;
 mod test_cmd;

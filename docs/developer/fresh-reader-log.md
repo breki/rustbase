@@ -27,17 +27,13 @@ work.
 the copy; keep the comment explaining why feedback, unlike changelog
 and todo, tracks fences. Deferred because stage 3 does not change code.
 
-### fr-2026-10-20-report-line-caps-owned-twice
+### fr-2026-10-20-stderr-tail-name
 
-**Category:** naming (ownership)
+**Category:** naming
 
-How many lines a `validate` step shows is decided in two places:
-`STEP_WARNING_LINES` in `xtask/src/clippy_cmd.rs`, and the library
-constant `doc::STDERR_TAIL_LINES` in `crates/rustbase-xtask/src/doc.rs`,
-which `xtask/src/doc_cmd.rs` borrows as its step cap. Keep each
-step's cap in its wrapper and give doc's constant a name for its own
-tail. Also `text::stderr_tail` is used on stdout too; a neutral name
-(`tail`) would say so. Deferred because stage 3 does not rename code.
+`text::stderr_tail` in `crates/rustbase-xtask/src/text.rs` is used on
+stdout too; a neutral name (`tail`) would say so. Deferred because
+stage 3 does not rename code.
 
 ### fr-2026-10-19-dupes-pooled-label-and-field-name
 

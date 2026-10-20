@@ -7,7 +7,7 @@
 use crate::frontend::{
     FrontendResult, report_cmd, run_npm_script, step_result,
 };
-use crate::step::Step;
+use rustbase_xtask::step::Step;
 
 /// The `validate` step.
 pub fn step() -> Step {

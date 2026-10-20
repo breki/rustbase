@@ -6,16 +6,10 @@
 use rustbase_xtask::canon;
 
 use crate::helpers::tasks_config;
-use crate::step::Step;
 
 /// Standalone `cargo xtask canon-check`.
 pub fn canon_check() -> Result<(), String> {
     let detail = canon::check(&tasks_config())?;
     println!("Canon OK ({detail})");
     Ok(())
-}
-
-/// The `validate` step.
-pub fn step() -> Step {
-    Step::new("Canon", "canon-check", || canon::check(&tasks_config()))
 }

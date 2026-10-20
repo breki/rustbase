@@ -169,6 +169,12 @@ and this project adheres to
   shows the end of the tool's output instead of an empty report, and `test`
   names every failing test. A read-only format check also reports a file that
   does not parse, beside the diff.
+- The `validate` runner, its `Step` type and the standard gate list moved into
+  the shared library (`step::standard`, `step::run_all`); a project inserts its
+  own steps into the list. The cooldown step's strict-mode variable is now named
+  after the project like the allow-list one (`<PROJECT>_DEP_AGE_STRICT`, still
+  `RUSTBASE_DEP_AGE_STRICT` here), and the npm project the audit step covers is
+  `Config::audit_npm_dir`.
 
 ### Fixed
 

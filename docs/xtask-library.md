@@ -130,6 +130,9 @@ Projects need to add, not only configure: extra subcommands (jutro's
 architecture lint), and for deploy, extra config keys and
 hooks before install, before start and during setup. The library
 provides the step and subcommand types; projects implement them.
+For `validate` this is in place (#8): `step::standard` is the
+library's gate list in order, and a project inserts its own steps
+before `step::run_all` runs them.
 
 ### Distribution and versioning
 
@@ -160,7 +163,7 @@ the library is a possible later step, not part of this plan.
 | `changelog`, `todo` | extracted (#7): `changelog` with jutro's `infer-bump` / `promote`; the markdown helpers as `markdown` with hoard's hardening (CRLF-preserving rejoin, sections found by column-0 headings only, structure-preserving wrap); `todo` in bombyx's layout (one `### <slug>` entry per item, removed when done), the only layout: every attempt to allow other headings among the items let an edit misplace or cut text, so the file is an introduction then items only |
 | `records` (bombyx's `records`) | extracted (#21) as the library's `records`: one parser for every record file (`todo` reads its items through it) and the `records-check` gate; the files are `Config::record_files`. It checks an id in an entry's `Depends on` / `Supersedes` field; canon-check checks a backlog ID cited in canon prose |
 | `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
-| `validate` | step runner; each gate supplies its `step()` (done, #5) |
+| `validate` | step runner; each gate supplies its `step()` (done, #5). The runner, the `Step` type and the standard gate list moved into the library as `step` (#8); a project inserts its own steps (here, the frontend gates) |
 | `frontend*` | library-ready, optional feature |
 | `deploy*` | last; generic pieces (remote run, tag guard, staging, crash check) only, with hooks |
 | `backfeed`, `feedback`, `sync` | template-maintenance tools; stay in the template |
@@ -176,9 +179,10 @@ signature check, `.ports` reader, worktree setup and log tee.
 2. In clockdump: add the dependency, delete its vendored
    `xtask/src/dep_age.rs` and `xtask/src/dep_age/`, and call the
    library with `Config::for_project("clockdump",
-   workspace_root())` where the template does: `main.rs` and the
-   `dep_age_gate.rs` step. (The prototype run, made before the
-   step moved out of `validate.rs`, came to -1,773 / +26 lines.)
+   workspace_root())` where the template does (`main.rs`, and the
+   library's standard steps in `validate.rs`). (The prototype run,
+   made before the step moved out of `validate.rs`, came to -1,773 /
+   +26 lines.)
 3. Run `cargo xtask validate` and its CI; record the result.
 4. Repeat per module as each is extracted; the other downstreams
    follow once their copies are synced to a template version that

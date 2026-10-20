@@ -27,6 +27,7 @@ pub mod fmt;
 pub mod markdown;
 mod process;
 pub mod records;
+pub mod step;
 pub mod text;
 pub mod todo;
 
@@ -150,6 +151,10 @@ pub struct Config {
     /// Name of the environment variable listing
     /// `name@version` dependencies allowed through the cooldown.
     pub dep_age_allow_env: String,
+    /// Name of the environment variable that, set to `1`, makes the
+    /// cooldown step fail when it cannot finish instead of warning
+    /// (as `CI=true` does).
+    pub dep_age_strict_env: String,
     /// User-Agent sent to package registries (crates.io refuses
     /// requests without one).
     pub user_agent: String,
@@ -160,18 +165,23 @@ pub struct Config {
     /// The record files the records check reads, relative to
     /// `root`.
     pub record_files: Vec<String>,
+    /// The npm project the audit step also audits, when it holds a
+    /// `package.json`; `None` audits Rust only.
+    pub audit_npm_dir: Option<PathBuf>,
 }
 
 impl Config {
     /// The defaults for a project called `project`:
-    /// `<PROJECT>_DEP_AGE_ALLOW`, `<project>-xtask-dep-age` and
-    /// the default [`Thresholds`], canon [`Rules`](canon::Rules) and
-    /// [record files](records::DEFAULT_FILES).
+    /// `<PROJECT>_DEP_AGE_ALLOW` and `<PROJECT>_DEP_AGE_STRICT`,
+    /// `<project>-xtask-dep-age`, the default [`Thresholds`], canon
+    /// [`Rules`](canon::Rules) and [record files](records::DEFAULT_FILES),
+    /// and no npm project to audit.
     pub fn for_project(project: &str, root: PathBuf) -> Self {
         let prefix = project.to_ascii_uppercase().replace('-', "_");
         Self {
             root,
             dep_age_allow_env: format!("{prefix}_DEP_AGE_ALLOW"),
+            dep_age_strict_env: format!("{prefix}_DEP_AGE_STRICT"),
             user_agent: format!("{project}-xtask-dep-age"),
             thresholds: Thresholds::default(),
             canon: canon::Rules::default(),
@@ -179,6 +189,7 @@ impl Config {
                 .iter()
                 .map(|f| (*f).to_owned())
                 .collect(),
+            audit_npm_dir: None,
         }
     }
 }
@@ -276,6 +287,8 @@ mod tests {
     fn project_defaults_derive_the_env_var_and_user_agent() {
         let cfg = Config::for_project("my-app", PathBuf::from("/w"));
         assert_eq!(cfg.dep_age_allow_env, "MY_APP_DEP_AGE_ALLOW");
+        assert_eq!(cfg.dep_age_strict_env, "MY_APP_DEP_AGE_STRICT");
+        assert_eq!(cfg.audit_npm_dir, None);
         assert_eq!(cfg.user_agent, "my-app-xtask-dep-age");
         assert_eq!(cfg.root, PathBuf::from("/w"));
     }
