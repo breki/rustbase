@@ -10,7 +10,8 @@
 //! let mut steps = step::standard(&cfg, false);
 //! let lint = Step::new("Lint", "lint", || Ok(String::new()));
 //! step::insert_after(&mut steps, step::names::DENY, [lint])?;
-//! step::run_all(steps)?;
+//! let tee = rustbase_xtask::tee::Tee::open(&cfg.root, "validate")?;
+//! step::run_all(steps, &tee)?;
 //! # Ok::<(), String>(())
 //! ```
 
@@ -19,6 +20,7 @@ use std::time::Instant;
 use crate::{
     Config, FMT_DIFF_LINES, STEP_LINES, Strictness, audit, canon, cargo_test,
     clippy, coverage, deny, dep_age, doc, dupes, fmt, records, scripts,
+    tee::Tee,
 };
 
 /// Width of the step name column, dots included.
@@ -194,12 +196,14 @@ pub fn insert_after(
 
 /// Run `steps` in order, printing a `[N/M]` line for each and then
 /// `Validate OK`, stopping at the first failure. A failed step
-/// prints the subcommand that re-runs it alone.
+/// prints the subcommand that re-runs it alone. Every line, and the
+/// failure the caller prints, also goes to `tee`'s log. Output a
+/// gate prints itself, such as a warning, is not in the log.
 ///
 /// # Errors
 ///
 /// The first failing step's error.
-pub fn run_all(steps: Vec<Step>) -> Result<(), String> {
+pub fn run_all(steps: Vec<Step>, tee: &Tee) -> Result<(), String> {
     let start = Instant::now();
     let total = steps.len();
     for (i, step) in steps.into_iter().enumerate() {
@@ -213,16 +217,17 @@ pub fn run_all(steps: Vec<Step>) -> Result<(), String> {
                 } else {
                     format!("{detail}, {time}")
                 };
-                println!("{}", format_step(i + 1, total, name, "OK", &full));
+                tee.println(&format_step(i + 1, total, name, "OK", &full));
             }
             Err(e) => {
-                println!("{}", format_step(i + 1, total, name, "FAILED", ""));
-                eprintln!("  -> iterate with: cargo xtask {cmd}");
+                tee.println(&format_step(i + 1, total, name, "FAILED", ""));
+                tee.eprintln(&format!("  -> iterate with: cargo xtask {cmd}"));
+                tee.record(&e);
                 return Err(e);
             }
         }
     }
-    println!("Validate OK ({})", elapsed(start));
+    tee.println(&format!("Validate OK ({})", elapsed(start)));
     Ok(())
 }
 
@@ -394,13 +399,28 @@ mod tests {
                 }
             })
         };
-        assert_eq!(run_all(vec![step(true), step(true)]), Ok(()));
+        let dir = crate::test_repo::empty_dir();
+        let log = || {
+            std::fs::read_to_string(dir.0.join("target/validate.log")).unwrap()
+        };
+        let tee = Tee::open(&dir.0, "validate").unwrap();
+        assert_eq!(run_all(vec![step(true), step(true)], &tee), Ok(()));
         assert_eq!(ran.get(), 2);
+        let ok = log();
+        assert!(ok.starts_with("[1/2] S"), "{ok}");
+        assert!(ok.contains("\nValidate OK ("), "{ok}");
+        let tee = Tee::open(&dir.0, "validate").unwrap();
         assert_eq!(
-            run_all(vec![step(true), step(false), step(true)]),
+            run_all(vec![step(true), step(false), step(true)], &tee),
             Err("boom".into())
         );
         assert_eq!(ran.get(), 4, "the step after the failure ran");
+        // The log holds the failure too, which the caller prints.
+        let failed = log();
+        assert!(failed.contains("[2/3] S............. FAILED"), "{failed}");
+        assert!(failed.contains("iterate with: cargo xtask s"), "{failed}");
+        assert!(failed.ends_with("boom\n"), "{failed}");
+        assert!(!failed.contains("[3/3]"), "{failed}");
     }
 
     #[test]

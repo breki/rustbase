@@ -117,6 +117,11 @@ and this project adheres to
   executable (mode `100755` in the git index), since canon runs those by bare
   path (`/commit` runs `scripts/e2e.sh`) and the shell refuses a `100644` one
   with "permission denied" (exit 126). Taken from the hoard downstream project.
+- `cargo xtask validate` also writes its step lines and a failure's report to
+  `target/validate.log`, rewritten each run, so the record survives a closed
+  terminal or a caller that shows only the tail. The library's new `tee::Tee`
+  does it, for any long-running command; taken from the jutro downstream
+  project.
 
 ### Changed
 

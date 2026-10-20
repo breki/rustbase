@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use rustbase_xtask::step::{self, Step};
+use rustbase_xtask::tee::Tee;
 
 use crate::helpers::tasks_config;
 #[cfg(feature = "frontend")]
@@ -39,7 +40,8 @@ pub fn validate(check: bool) -> Result<(), String> {
         cfg!(feature = "frontend"),
         Path::new("frontend/package.json").exists(),
     )?;
-    step::run_all(steps(check)?)
+    let tee = Tee::open(&tasks_config().root, "validate")?;
+    step::run_all(steps(check)?, &tee)
 }
 
 /// Refuse a frontend on disk when the `frontend` feature is off:
