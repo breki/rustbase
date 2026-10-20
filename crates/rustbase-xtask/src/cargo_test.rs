@@ -3,17 +3,22 @@
 //! the run.
 
 use crate::process::{self, Captured};
-use crate::text::pair_with_locations;
+use crate::text::{is_cargo_diagnostic, pair_with_locations};
 use crate::{Config, Failure, TOOLING_CRATE};
 
 /// Assertion detail lines kept per failing test.
 const MAX_DETAIL_LINES: usize = 5;
 
+/// Compile-error lines kept: the first errors are the ones to fix.
+/// Failing tests are never capped: every one is named.
+const MAX_COMPILE_LINES: usize = 10;
+
 /// What a test run covers and how it reports.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Options<'a> {
-    /// Run only tests whose name contains this; a filter that
-    /// matches nothing is a failure, not a pass.
+    /// Run only tests whose name contains this. In the condensed
+    /// report a filter that matches nothing is a failure, not a pass;
+    /// a verbose run shows `running 0 tests` instead.
     pub filter: Option<&'a str>,
     /// Stream cargo's own output instead of the condensed report.
     pub verbose: bool,
@@ -75,26 +80,39 @@ fn judge(out: &Captured, filter: Option<&str>) -> Result<(), Failure> {
         return Ok(());
     }
     if out.stderr.contains("could not compile") {
-        let lines =
-            pair_with_locations(&out.stderr, |l| l.starts_with("error"));
-        return Err(Failure::new(
-            "compilation failed",
-            lines.into_iter().map(String::from).collect(),
-        ));
+        // Errors only (a warning beside them is noise here), and not
+        // cargo's per-target `could not compile` summaries -- unless
+        // nothing else is there, as when rustc was killed.
+        let mut lines = pair_with_locations(&out.stderr, |l| {
+            l.starts_with("error") && is_cargo_diagnostic(l)
+        });
+        lines.truncate(MAX_COMPILE_LINES);
+        return Err(Failure::of_run("compilation failed", lines, out));
     }
-    let failures = extract_failure_details(&out.stdout, &out.stderr);
-    let items = if failures.is_empty() {
-        extract_failed_names(&out.stdout)
-    } else {
-        failures
-            .into_iter()
-            .flat_map(|f| {
-                let details = f.details.into_iter().take(MAX_DETAIL_LINES);
-                std::iter::once(f.name).chain(details.map(|d| format!("  {d}")))
-            })
-            .collect()
-    };
-    Err(Failure::new("test(s) failed", items))
+    // libtest's `... FAILED` lines name every failing test; a details
+    // section exists only for a test that captured output, so the
+    // names lead and the details attach to them.
+    let details = extract_failure_details(&out.stdout, &out.stderr);
+    let mut names = extract_failed_names(&out.stdout);
+    for d in &details {
+        if !names.contains(&d.name) {
+            names.push(d.name.clone());
+        }
+    }
+    let items: Vec<String> = names
+        .into_iter()
+        .flat_map(|name| {
+            let lines: Vec<String> = details
+                .iter()
+                .find(|d| d.name == name)
+                .into_iter()
+                .flat_map(|d| d.details.iter().take(MAX_DETAIL_LINES))
+                .map(|l| format!("  {l}"))
+                .collect();
+            std::iter::once(name).chain(lines)
+        })
+        .collect();
+    Err(Failure::of_run("test(s) failed", items, out))
 }
 
 /// Sum the `running N tests` counts cargo prints, one per test
@@ -146,9 +164,20 @@ fn extract_failed_names(stdout: &str) -> Vec<String> {
         .lines()
         .filter_map(|l| {
             let l = l.trim().strip_suffix(" ... FAILED")?;
-            Some(l.strip_prefix("test ").unwrap_or(l).to_string())
+            let name = l.strip_prefix("test ").unwrap_or(l);
+            Some(strip_test_mode(name).to_string())
         })
         .collect()
+}
+
+/// A test name without the mode libtest appends to its result line
+/// but not to its details header (`tests::sp - should panic` there,
+/// `---- tests::sp stdout ----` here).
+fn strip_test_mode(name: &str) -> &str {
+    [" - should panic", " - compile fail", " - compile"]
+        .iter()
+        .find_map(|mode| name.strip_suffix(mode))
+        .unwrap_or(name)
 }
 
 /// A single test failure with detail lines.
@@ -166,7 +195,11 @@ fn extract_failure_details(stdout: &str, stderr: &str) -> Vec<FailureDetail> {
     let mut current: Option<FailureDetail> = None;
     for line in combined.lines() {
         let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("---- ") {
+        // libtest's trailing `failures:` list and `test result:` line
+        // end the last section; they are not that test's details.
+        if trimmed == "failures:" || trimmed.starts_with("test result:") {
+            failures.extend(current.take());
+        } else if let Some(rest) = trimmed.strip_prefix("---- ") {
             failures.extend(current.take());
             current =
                 rest.strip_suffix(" stdout ----").map(|name| FailureDetail {
@@ -187,6 +220,8 @@ fn extract_failure_details(stdout: &str, stderr: &str) -> Vec<FailureDetail> {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write as _;
+
     use super::*;
 
     fn captured(ok: bool, stdout: &str, stderr: &str) -> Captured {
@@ -239,6 +274,100 @@ failures:
     }
 
     #[test]
+    fn a_compile_failure_with_no_diagnostic_carries_the_stderr_tail() {
+        // A rustc killed by a signal prints no error of its own; the
+        // `could not compile` summary and its cause are all there is.
+        let stderr = "error: could not compile `rustbase` (lib test)\n\
+                      Caused by:\n  process didn't exit successfully: \
+                      `rustc` (signal: 9, SIGKILL: kill)";
+        let f = judge(&captured(false, "", stderr), None).unwrap_err();
+        assert_eq!(f.summary, "compilation failed");
+        assert!(
+            f.items.iter().any(|l| l.contains("SIGKILL")),
+            "{:?}",
+            f.items
+        );
+        assert!(
+            f.items.iter().any(|l| l.contains("rustbase")),
+            "{:?}",
+            f.items
+        );
+    }
+
+    #[test]
+    fn compile_errors_are_capped() {
+        let mut stderr = String::new();
+        for i in 0..30 {
+            let _ = writeln!(stderr, "error[E0425]: cannot find `v{i}`");
+        }
+        stderr.push_str("error: could not compile `a` (lib)");
+        let f = judge(&captured(false, "", &stderr), None).unwrap_err();
+        assert_eq!(f.items.len(), MAX_COMPILE_LINES);
+    }
+
+    #[test]
+    fn every_failing_test_is_named_however_many_fail() {
+        let mut stdout = String::new();
+        for i in 0..20 {
+            let _ = write!(
+                stdout,
+                "---- t{i} stdout ----\nassertion failed\n  left: 1\n right: 2\n\
+                 a\nb\nc\nd\n"
+            );
+        }
+        let f = judge(&captured(false, &stdout, ""), None).unwrap_err();
+        for i in 0..20 {
+            assert!(f.items.contains(&format!("t{i}")), "t{i} missing");
+        }
+        // Details stay capped per test.
+        assert_eq!(f.items.len(), 20 * (1 + MAX_DETAIL_LINES));
+    }
+
+    #[test]
+    fn a_run_that_failed_with_no_test_named_shows_the_tail() {
+        // A manifest error prints no `could not compile` and no test.
+        let stderr = "error: string values must be quoted\n --> Cargo.toml:3:9";
+        let f = judge(&captured(false, "", stderr), None).unwrap_err();
+        assert!(
+            f.items.iter().any(|l| l.contains("Cargo.toml:3:9")),
+            "{:?}",
+            f.items
+        );
+    }
+
+    #[test]
+    fn a_failing_test_with_no_captured_output_is_still_named() {
+        let stdout = "\
+test t::noisy ... FAILED
+test t::silent ... FAILED
+
+failures:
+
+---- t::noisy stdout ----
+assertion failed
+
+failures:
+    t::noisy
+    t::silent
+
+test result: FAILED. 0 passed; 2 failed";
+        let f = judge(&captured(false, stdout, ""), None).unwrap_err();
+        assert_eq!(f.items, ["t::noisy", "  assertion failed", "t::silent"]);
+    }
+
+    #[test]
+    fn a_test_mode_suffix_does_not_split_one_failure_into_two() {
+        let stdout = "test tests::sp - should panic ... FAILED\n\nfailures:\n\n\
+                      ---- tests::sp stdout ----\n\
+                      note: test did not panic as expected\n\nfailures:\n    tests::sp\n";
+        let f = judge(&captured(false, stdout, ""), None).unwrap_err();
+        assert_eq!(
+            f.items,
+            ["tests::sp", "  note: test did not panic as expected"]
+        );
+    }
+
+    #[test]
     fn a_failure_without_details_lists_the_names() {
         let stdout = "test a::b ... FAILED\ntest result: FAILED";
         let f = judge(&captured(false, stdout, ""), None).unwrap_err();
@@ -252,11 +381,15 @@ error[E0425]: cannot find value `foo`
   --> crates/rustbase/src/lib.rs:10:5
 warning: unused variable: `x`
   --> crates/rustbase/src/lib.rs:99:9
-error: could not compile `rustbase` (lib) due to 1 previous error";
+error: could not compile `rustbase` (lib test) due to 1 previous error
+error: could not compile `rustbase` (bin \"rustbase\" test) due to 1 previous error";
         let f = judge(&captured(false, "", stderr), None).unwrap_err();
         assert_eq!(f.summary, "compilation failed");
-        assert_eq!(f.items.len(), 3, "{:?}", f.items);
+        // The error and its location; not cargo's per-target
+        // `could not compile` summaries, nor the warning.
+        assert_eq!(f.items.len(), 2, "{:?}", f.items);
         assert!(f.items[1].contains("lib.rs:10:5"));
+        assert!(!f.items.iter().any(|l| l.contains("could not compile")));
         assert!(!f.items.iter().any(|l| l.contains("99:9")));
     }
 

@@ -21,10 +21,15 @@ pub(crate) struct Captured {
     pub stderr: String,
 }
 
-/// Run `cargo <args>` in `root`, colour off. Prefers the `CARGO`
-/// env var (set when cargo runs xtask) over a `PATH` lookup.
+/// Run `cargo <args>` in `root`, colour off.
 pub(crate) fn cargo(root: &Path, args: &[&str]) -> Result<Captured, String> {
     cargo_env(root, args, &[])
+}
+
+/// The cargo to run: the `CARGO` env var (set when cargo runs
+/// xtask, naming the toolchain in use) over a `PATH` lookup.
+fn cargo_bin() -> String {
+    std::env::var("CARGO").unwrap_or_else(|_| "cargo".into())
 }
 
 /// [`cargo`] with extra environment variables, for settings cargo
@@ -34,7 +39,7 @@ pub(crate) fn cargo_env(
     args: &[&str],
     env: &[(&str, &str)],
 ) -> Result<Captured, String> {
-    let bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let bin = cargo_bin();
     let mut cmd = Command::new(&bin);
     cmd.current_dir(root)
         .args(args)
@@ -47,7 +52,7 @@ pub(crate) fn cargo_env(
 /// the terminal, for a command whose output is the point (`fmt`, a
 /// verbose test run).
 pub(crate) fn cargo_stream(root: &Path, args: &[&str]) -> Result<(), String> {
-    let bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let bin = cargo_bin();
     let status = Command::new(&bin)
         .current_dir(root)
         .args(args)

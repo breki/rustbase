@@ -80,7 +80,8 @@ and this project adheres to
 - The `rustbase-xtask` library now holds the `check`, `clippy`, `test` and `fmt`
   gates (part of #7), each returning a `rustbase_xtask::Failure` (a summary plus
   diagnostic lines). One cargo-diagnostic filter,
-  `rustbase_xtask::text::is_cargo_diagnostic`, serves clippy and doc.
+  `rustbase_xtask::text::is_cargo_diagnostic`, serves clippy, doc and the test
+  gate's compile errors.
 
 ### Changed
 
@@ -130,11 +131,15 @@ and this project adheres to
   instead of falling back to the built-in ignore list (which reported the
   excluded files as a coverage drop), and fails when a run measured no files at
   all.
-- A failing `cargo xtask check`, `clippy`, `test`, `fmt` or `doc` prints its
-  report once, as the error itself, instead of a FAILED block followed by a
-  second `xtask error:` line; in `validate` the diagnostics now follow the step
-  line. `cargo xtask check` no longer counts cargo's per-target `could not
-  compile` lines, so one error reads as one error rather than one per target.
+- A failing `cargo xtask check`, `clippy`, `test` or `doc`, or the Fmt step of
+  `validate --check`, prints its report once, as the error itself, instead of a
+  FAILED block followed by a second `xtask error:` line; in `validate` the
+  diagnostics now follow the step line. `check` no longer counts, and `test` no
+  longer lists, cargo's per-target `could not compile` lines, so one error
+  reads as one error. A failure whose tool printed nothing the gate recognises
+  shows the end of the tool's output instead of an empty report, and `test`
+  names every failing test. A read-only format check also reports a file that
+  does not parse, beside the diff.
 
 ### Fixed
 
