@@ -139,3 +139,29 @@ missing tool from a failed gate, and String does not implement
 std::error::Error. Failure (lib.rs) already implements Error and From<String>.
 Switching the public signatures to Result<_, Failure> is a breaking change, so
 it waits for 0.2; the crate docs state the 0.x limitation.
+
+### dep-age-ci-unreachable-base
+
+**Summary:** dep-age CI job fails on a base no fetched ref reaches
+
+The `dep-age` job in `.github/workflows/ci.yml` passes `github.event.before`
+straight to `dep-age-check --base`. A force-push to `main`, or a force-pushed
+release tag reaching the job through release.yml's `workflow_call`, gives a
+`before` the checkout does not have, so the standalone command fails and a
+replayed release is blocked. bombyx fixed its copy (breki/bombyx#196): fetch the
+base by hash, and only if that fails warn and fall back to `HEAD^`; under `bash
+-e` the fetch needs `|| true`. Take that fix, and tell kozmotic, which copied
+the job.
+
+### xtask-glue-template-drift
+
+**Summary:** Template xtask glue: four small defects found migrating bombyx
+
+Found while migrating bombyx (#9). (1) `xtask/Cargo.toml` lists `serde_json`,
+which nothing in `xtask/src` uses. (2) `xtask/src/main.rs` has no crate doc
+comment, so a project denying `missing_docs` must merge the file on every sync.
+(3) `sync.rs` formats the status column three wide; a rename row (`R100`) pushes
+its category over (bombyx used four). (4) `sync.rs` names the three reviewer
+logs in the never-sync list; bombyx matched `docs/developer/*-log.md` as a glob.
+Also inert but different: `feedback.rs` removes `_None yet._` only as the first
+line of a section, bombyx anywhere in it.

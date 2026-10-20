@@ -246,7 +246,12 @@ and frontend modules, compiled out but present. kozmotic followed
 its audit found 10 TLS advisories to fix, and its `xtask` grew by
 about 960 lines: the deploy, frontend and template-tools modules step
 1 copies in outweighed the vendored gates it removed, since kozmotic
-had vendored fewer of them than clockdump.
+had vendored fewer of them than clockdump. bombyx came third
+(breki/bombyx#196). The library's gates largely came from bombyx, so
+its migration was mostly deletion (about -6,600 lines of `xtask`), it
+ran every library gate with Scripts adopted and nothing deferred, and
+a module-by-module comparison with the library found no lost gate
+behaviour.
 
 **Before step 1**, bring everything outside `xtask/` up to the
 template with `/template-sync`. Its rules still skip `xtask/`; step 9
@@ -272,7 +277,9 @@ in the order clockdump took them:
    `step::insert_after` in `validate.rs` ("Optional xtask features"
    in `CLAUDE.md`). `main.rs` is then merged too, like the two files
    in step 9. clockdump had no such module, so this part has not
-   been run yet.
+   been run yet. A project whose workspace denies `missing_docs`
+   (bombyx) keeps its crate doc comment at the top of `main.rs`,
+   which the template's lacks, so `main.rs` is merged there too.
 2. **`xtask/Cargo.toml`**: take the template's, then leave the
    feature groups the project does not use out of `default` and drop
    the `path` from the library dependency, leaving
@@ -283,7 +290,12 @@ in the order clockdump took them:
 3. **`helpers.rs`**: `Config::for_project("<name>", ...)`, which keeps
    the `<NAME>_DEP_AGE_ALLOW` variable. Drop the template's canon
    exemptions, which name template paths, and the test that asserts
-   them; keep `audit_npm_dir` only with a frontend.
+   them; keep `audit_npm_dir` only with a frontend. A project that
+   vendored canon carries its own exemptions over, as exact paths:
+   the library matches a path exactly, or a whole folder when it
+   ends in `/`, where bombyx's copy matched any prefix. A project
+   whose docs named `RUSTBASE_DEP_AGE_ALLOW` (bombyx's `CLAUDE.md`,
+   `/update-deps`, supply-chain doc) renames it there.
 4. **`validate.rs`**: the gates the old vendored `validate.rs` did
    not run can be left out, so the migration keeps the gates the
    project had. Compare its steps with `step::names` in
@@ -314,7 +326,12 @@ in the order clockdump took them:
    `.github/workflows/ci.yml`), renaming its `RUSTBASE_DEP_AGE_ALLOW`
    -- both the `env:` key and the `vars.` name -- to
    `<NAME>_DEP_AGE_ALLOW`. Set the variable before the migration's own
-   PR runs the job. Clear its entries once the 14 days pass.
+   PR runs the job. Clear its entries once the 14 days pass. The
+   template's job fails when its base commit cannot be fetched (a
+   force-push, or a force-pushed release tag reaching it through
+   `release.yml`); bombyx's copy fetches the base by hash and
+   otherwise warns and checks `HEAD^..HEAD`, which the template is to
+   take (`dep-age-ci-unreachable-base` in `docs/todo.md`).
 8. **Run `validate`.** Failures in the project's own code from a
    newer toolchain (clockdump: Clippy 1.99's `assert_is_empty`) are
    their own commit.
@@ -323,7 +340,21 @@ in the order clockdump took them:
    `/template-sync` rules where they say to skip `xtask` files (every
    file is now synced: the template's verbatim, `helpers.rs`,
    `validate.rs` and any file holding project modules merged), and
-   its `CLAUDE.md` gate list. Three edits go beyond the docs:
+   its `CLAUDE.md` gate list. Three more places went wrong in bombyx:
+   - `/template-sync` names every merged file, `xtask/Cargo.toml`
+     among them: the template's has the `path` dependency and its
+     own `default` features. A `validate.rs` with nothing of the
+     project's in it is taken verbatim instead.
+   - A `CLAUDE.md` that says the frontend or deploy subsystem was
+     removed, or that nothing in `xtask` knows npm, now says the
+     groups are compiled out -- and that `cargo xtask clippy` still
+     lints each one alone, so a lint there is a real failure.
+   - Canon-check reads `git` commands inside quotations, where
+     bombyx's vendored copy skipped them, so a command file that only
+     prints `git push` for the operator says it has "no `git push`
+     grant".
+
+   Three edits go beyond the docs:
    - The library's `validate` formats files in place unless given
      `--check`. A `/commit` or `/release` that validates after
      staging needs `--check`, or it fixes the working tree while the
@@ -339,7 +370,7 @@ in the order clockdump took them:
      only that, and `todo list` names what it refuses in a converted
      file. Done items leave the file.
 
-The other downstreams (bombyx, hoard, jutro) follow the same steps.
+The other downstreams (hoard, jutro) follow the same steps.
 
 ## Proposed follow-up issues
 
@@ -354,6 +385,7 @@ The other downstreams (bombyx, hoard, jutro) follow the same steps.
    layout only).
 5. Extension points for project subcommands and steps (done: #8;
    deploy hooks are #10).
-6. Migrate clockdump (done: #9, breki/clockdump#1), then the other
-   downstreams.
+6. Migrate the downstreams (#9): clockdump (breki/clockdump#1),
+   kozmotic (breki/kozmotic#1) and bombyx (breki/bombyx#196) done;
+   hoard and jutro remain.
 7. Deploy: decide what, if anything, is shared.
