@@ -18,7 +18,7 @@ use clap::Subcommand;
 use crate::{
     Config, FMT_DIFF_LINES, STANDALONE_LINES, Strictness, audit, canon,
     cargo_test, changelog, check, clippy, coverage, deny, dep_age, doc, dupes,
-    fmt, records, todo,
+    fmt, records, scripts, todo,
 };
 
 /// The subcommands the library implements.
@@ -32,6 +32,9 @@ pub enum LibCommand {
     /// Check the record files: duplicate ids, unknown field labels,
     /// malformed ids, dangling Depends on / Supersedes
     RecordsCheck,
+    /// Check that scripts under scripts/ with a shebang are
+    /// committed executable
+    ScriptsCheck,
     /// Run clippy (deny warnings)
     Clippy,
     /// Check doc comments build and doc links resolve
@@ -184,6 +187,9 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
         }
         LibCommand::RecordsCheck => {
             println!("Records OK ({})", records::check(cfg)?);
+        }
+        LibCommand::ScriptsCheck => {
+            println!("Scripts OK ({})", scripts::check(cfg)?);
         }
         LibCommand::Clippy => {
             clippy::check(cfg).map_err(|f| f.report(STANDALONE_LINES))?;
@@ -374,6 +380,7 @@ mod tests {
         let ok = |args: &[&str]| run(parse(args), &cfg).is_ok();
         assert!(ok(&["records-check"]), "absent files are skipped");
         assert!(ok(&["canon-check"]), "no canon files to read");
+        assert!(ok(&["scripts-check"]), "skipped outside a work tree");
         for args in [
             &["check"][..],
             &["clippy"],

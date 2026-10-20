@@ -91,6 +91,7 @@ cargo xtask clippy            # lint (+ xtask: all features off, each alone)
 cargo xtask doc               # rustdoc twice (public + private), links must resolve
 cargo xtask canon-check       # claims canon prose makes: paths, xrefs, grants, width
 cargo xtask records-check     # record files: ids unique and well-formed, refs resolve
+cargo xtask scripts-check     # scripts/ files with a shebang committed executable
 cargo xtask coverage          # coverage only (>=90%)
 cargo xtask fmt               # format code
 cargo xtask dupes             # code duplication check
@@ -650,7 +651,13 @@ just when the code compiles:
     that names no entry. An id cited in prose is not checked,
     and a configured file that does not exist is skipped and
     named in the result
-15. **Doc links** (`cargo xtask doc`) -- rustdoc with
+15. **Executable scripts** (`cargo xtask scripts-check`) --
+    every file under `scripts/` that starts with `#!` must be
+    committed as mode `100755` in the git index, since canon
+    runs them by bare path and a `100644` one exits 126. A
+    file with no shebang (a sourced library) is exempt; outside
+    a git work tree the gate reports itself skipped
+16. **Doc links** (`cargo xtask doc`) -- rustdoc with
     `-D warnings`, twice: once public and once with
     `--document-private-items`, because each pass sees a
     class of broken link the other cannot
@@ -661,8 +668,9 @@ in, and `validate` refuses to run while `frontend/` exists.
 The dependency-cooldown gate runs **first** (it is a
 no-op on unchanged lockfiles, and fails fast on a within
 -cooldown dependency before anything compiles it); after it
-the gates run cheapest-first (Fmt, Canon, Records, Duplication,
-Clippy, Doc, Deny, then the frontend static gates) before the
+the gates run cheapest-first (Fmt, Canon, Records, Scripts,
+Duplication, Clippy, Doc, Deny, then the frontend static gates)
+before the
 expensive dynamic gates
 (frontend + Rust tests, Coverage, then the network Audit), and
 a failed step prints the single command to re-run just that

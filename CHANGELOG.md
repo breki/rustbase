@@ -112,6 +112,10 @@ and this project adheres to
   column-0 `### ` line outside a code block, or leaving a code block open), and
   `todo list`/`add`/`done` refuse any `###` heading in `docs/todo.md` that is
   not an item.
+- `cargo xtask scripts-check`, also a `validate` step (Scripts, after Records):
+  fails when a file under `scripts/` that starts with `#!` is not committed
+  executable (mode `100755` in the git index), since canon runs those by bare
+  path and a `100644` one exits 126. Taken from hoard.
 
 ### Changed
 
