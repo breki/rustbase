@@ -17,9 +17,11 @@ Each item is a headed entry: an `### <slug>` heading, a
 `**Summary:**` line, then any prose body. Add and complete items
 through `cargo xtask todo`; completing one removes it, and git
 history records what shipped. The file is this introduction, then
-items only: `list`, `add` and `done` refuse a non-item heading after
-the first item, and an `###` heading anywhere that is not an item
-(the introduction uses `##`). Do not hand-edit it: `todo add` refuses
+items only. `list`, `add` and `done` refuse the file when, below the
+first item, it holds any other heading (an `## Notes` section, say),
+or anywhere an `###` heading that is not an item: one whose text is
+not a kebab-case slug (`### Foo Bar`), or with no `**Summary:**` line
+under it. The introduction uses `##`. Do not hand-edit it: `todo add` refuses
 a body line that would read as a heading, and a hand edit can slip
 one in.
 

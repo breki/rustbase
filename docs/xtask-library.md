@@ -241,11 +241,17 @@ the template's `xtask` at v0.17.0 to `rustbase-xtask` 0.1.0. Its
 `validate` passes every gate it ran before, coverage at 96.9%, and
 `xtask` came to about -1,100 lines net -- less than the one-module
 prototype's -1,773, because step 1 copies in the template's deploy
-and frontend modules, compiled out but present.
+and frontend modules, compiled out but present. kozmotic followed
+(breki/kozmotic#1): it adopted three gates it had never run (step 4),
+its audit found 10 TLS advisories to fix, and its `xtask` grew by
+about 960 lines, since it had vendored fewer gates than the template
+carries.
 
 **Before step 1**, bring everything outside `xtask/` up to the
 template with `/template-sync`. Its rules still skip `xtask/`; step 9
-changes that. The steps, in the order clockdump took them:
+changes that. When that sync is large, it can wait as its own change
+(kozmotic's did): step 9 then covers only the canon that describes
+`xtask`. The steps, in the order clockdump took them:
 
 1. **Copy the template's `xtask/src`** from the commit tagged
    `rustbase-xtask-vX.Y.Z` for the version you will pin, not from
@@ -284,7 +290,10 @@ changes that. The steps, in the order clockdump took them:
    `steps.retain(|s| !DEFERRED.contains(&s.name()))` **after** any
    `insert_after`: the template anchors the frontend gates on Deny,
    so filtering first leaves no anchor and `validate` fails at
-   startup. Adopt the left-out gates later, one change each.
+   startup. Adopt the left-out gates later, one change each, or
+   some now: kozmotic adopted Dep-age and Audit, which needs the CI
+   job in step 7 and a fix for whatever the audit finds, and Scripts,
+   since its release job runs a script by path.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
    to `[workspace.metadata.coverage] ignore` in the root
    `Cargo.toml`.
@@ -295,8 +304,11 @@ changes that. The steps, in the order clockdump took them:
    allow-list, with a stated reason, on each local run
    (`<NAME>_DEP_AGE_ALLOW=rustbase-xtask@X.Y.Z cargo xtask validate`)
    and, where the project has CI, in a repository variable of the
-   same `<NAME>_DEP_AGE_ALLOW` name read by its dep-age job. It can
-   go once the 14 days pass.
+   same `<NAME>_DEP_AGE_ALLOW` name read by its dep-age job. A
+   project whose CI has no such job takes the template's (the `dep-age`
+   job in `.github/workflows/ci.yml`), and the variable must be set
+   before the migration's own PR runs it. It can go once the 14 days
+   pass.
 8. **Run `validate`.** Failures in the project's own code from a
    newer toolchain (clockdump: Clippy 1.99's `assert_is_empty`) are
    their own commit.
@@ -305,10 +317,20 @@ changes that. The steps, in the order clockdump took them:
    `/template-sync` rules where they say to skip `xtask` files (every
    file is now synced: the template's verbatim, `helpers.rs`,
    `validate.rs` and any file holding project modules merged), and
-   its `CLAUDE.md` gate list.
+   its `CLAUDE.md` gate list. Three changes in behaviour reach past
+   the docs:
+   - The library's `validate` formats files in place unless given
+     `--check`. A `/commit` or `/release` that validates after
+     staging needs `--check`, or it fixes the working tree while the
+     unformatted copy is committed.
+   - CI that calls `cargo test` / `cargo clippy` directly misses the
+     per-feature lint passes `validate` requires; it calls
+     `cargo xtask test` and `cargo xtask clippy` instead.
+   - A todo list in another layout (kozmotic's `TODO.md`, Pending and
+     Done) moves to `docs/todo.md` in the library's, since `cargo
+     xtask todo` reads only that; done items leave the file.
 
-The other downstreams (kozmotic, bombyx, hoard, jutro) follow the
-same steps.
+The other downstreams (bombyx, hoard, jutro) follow the same steps.
 
 ## Proposed follow-up issues
 
