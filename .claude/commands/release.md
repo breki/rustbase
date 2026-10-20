@@ -1,6 +1,6 @@
 ---
 description: Cut a SemVer release from accumulated [Unreleased] CHANGELOG entries
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask audit*), Bash(cargo -q xtask audit*), Bash(cargo clippy:*), Bash(rustc -vV), Bash(rustup target list:*), Bash(rustup target add:*), Bash(cargo update:*), Bash(cargo xtask changelog*), Bash(cargo -q xtask changelog*), Bash(cargo xtask version-sync*), Bash(cargo -q xtask version-sync*), Read, Edit, AskUserQuestion
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git describe:*), Bash(cargo xtask validate*), Bash(cargo -q xtask validate*), Bash(cargo xtask audit*), Bash(cargo -q xtask audit*), Bash(cargo clippy:*), Bash(rustc -vV), Bash(rustup target list:*), Bash(rustup target add:*), Bash(cargo update:*), Bash(cargo xtask changelog*), Bash(cargo -q xtask changelog*), Bash(cargo xtask version-sync*), Bash(cargo -q xtask version-sync*), Bash(cargo xtask verify-release-tag*), Bash(cargo -q xtask verify-release-tag*), Bash(git ls-files:*), Read, Edit, AskUserQuestion
 ---
 
 Cut a SemVer release: bump the version, promote the
@@ -27,9 +27,11 @@ the deploy task refuses to ship a `HEAD` that is not on a
    untracked changes: the later steps dirty
    `crates/rustbase/Cargo.toml`, `Cargo.lock`,
    `CHANGELOG.md` and the docs `version-sync` rewrites, and
-   nothing else may ride along. A retry after a failed
-   release starts from a clean tree too: ask the operator to
-   restore those files, then begin again here. To tell which
+   nothing else may ride along. A retry after a release that
+   failed before step 9's commit starts from a clean tree
+   too: ask the operator to restore those files, then begin
+   again here. A failure after that commit is finished by
+   hand instead (step 10). To tell which
    dirty docs are `version-sync`'s leftovers, run
    `cargo -q xtask version-sync` before anything is
    restored: with the bumped `Cargo.toml` still in place it
@@ -42,11 +44,18 @@ the deploy task refuses to ship a `HEAD` that is not on a
 2. **Check `[Unreleased]` has content** -- run
    `cargo -q xtask changelog infer-bump`, even when a level was
    passed: it fails with "nothing to release" when
-   `[Unreleased]` holds no bullet, and then abort. Reason: a release with no
-   user-visible changes is a deploy in disguise; if the
-   user wants to ship the same version with no changes,
-   they should just `cargo xtask deploy` (which will pass
-   the tag check on the existing tag).
+   `[Unreleased]` holds no bullet, and then abort. Reason: a
+   release with no user-visible changes is a deploy in
+   disguise; if the user wants to ship the same version with
+   no changes, they should just `cargo xtask deploy` (which
+   will pass the tag check on the existing tag).
+
+   One exception, checked only when the abort happens: if
+   `HEAD` is a `release: vX.Y.Z` commit (`git log -1`) that
+   `git describe --exact-match --match 'v*' HEAD` finds no
+   tag on, an earlier run stopped at step 10. Say instead
+   that the release commit has no tag, so deploy refuses it,
+   and point to step 10's hand finish.
 
 3. **Determine the bump:**
    - If the user passed `major` / `minor` / `patch`, use
@@ -185,21 +194,68 @@ the deploy task refuses to ship a `HEAD` that is not on a
      )"
      ```
 
-10. **Tag** -- create an **annotated** tag:
-    `git tag -a vX.Y.Z -m "Release vX.Y.Z"`. Do **not**
-    use a lightweight tag (`git tag vX.Y.Z`) -- the
-    deploy guard runs `git describe --exact-match
-    --match 'v*' HEAD`, which only sees annotated tags
-    by default. Do not push; the user pushes when ready.
+10. **Tag** -- the tag must be **annotated**, never
+    lightweight (`git tag vX.Y.Z`): the deploy guard runs
+    `git describe --exact-match --match 'v*' HEAD`, which
+    only sees annotated tags by default. Whether it is also
+    signed depends on one file. `git ls-files
+    .github/release-signers` prints that path when the
+    project tracks a list of keys allowed to sign releases,
+    and nothing when it does not.
+    - **No key list:** `git tag -a vX.Y.Z -m "Release
+      vX.Y.Z"`.
+    - **Key list:** `git tag -s vX.Y.Z -m "Release vX.Y.Z"`
+      (a signed tag is annotated too), then **always**
+      `cargo -q xtask verify-release-tag vX.Y.Z`, whatever
+      `git tag -s` printed or returned. git can exit 0 and
+      leave an unsigned tag (a passphrase-protected key with
+      no ssh-agent does this), and the deploy guard accepts
+      any annotated tag, so only the check decides.
+    - **When either command fails**, keep the release commit
+      and report the reason. Do not rerun `/release`: its
+      `[Unreleased]` block is already promoted, so step 2
+      would stop. Once the cause is fixed, the operator
+      finishes by hand with the same `git tag -s` and
+      `verify-release-tag` commands. This command has no
+      `git config` grant, so git settings are the
+      operator's to change.
+
+      **The tag:** delete it (`git tag -d vX.Y.Z`) only when
+      `git tag -s` exited 0 and the check then refused it.
+      Only then did this run create it: `git tag -s` refuses
+      a name that already exists. Otherwise delete nothing.
+
+      **The cause**, by what failed:
+      - `git tag -s` failed: name the error. If the tag
+        already exists, report the commit it points at
+        (`git log -1 vX.Y.Z`) and let the operator decide.
+        With no signing key, ask the operator to set
+        `gpg.format` to `ssh` and `user.signingkey` to
+        their key.
+      - "carries no signature": signing failed silently;
+        a passphrase-protected key needs ssh-agent.
+      - "not SSH-signed": git signed with GPG; ask the
+        operator to set `gpg.format` to `ssh` and
+        `user.signingkey` to their key.
+      - "not trusted": the key is not in the list (or is
+        listed for a namespace other than `git`). Fixing
+        it takes a commit, which moves `HEAD` off the
+        release commit, so there is no hand finish; ask the
+        operator.
+
+    Do not push; the user pushes when ready.
 
 11. **Tell the user what to do next** -- print:
-    - The new version and tag name
+    - The new version and tag name, and whether the tag is
+      signed and verified or only annotated
     - The CHANGELOG bullets that were released
     - The targets the cross-platform clippy linted, so a
       platform that was never checked is visible
     - "Next: `cargo xtask deploy` will now accept this
       HEAD." (or "Push with `git push && git push
-      --tags`" if appropriate)
+      --tags`" if appropriate). After a step-10 failure,
+      say instead that the release commit has no tag yet,
+      so deploy refuses it, and how to finish (step 10).
 
     This command has no `git push` grant, deliberately: the
     operator pushes.

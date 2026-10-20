@@ -18,7 +18,7 @@ use clap::Subcommand;
 use crate::{
     Config, FMT_DIFF_LINES, STANDALONE_LINES, Strictness, audit, canon,
     cargo_test, changelog, check, clippy, coverage, deny, dep_age, doc, dupes,
-    fmt, licenses, records, scripts, todo, version_sync,
+    fmt, licenses, records, scripts, tag_signature, todo, version_sync,
 };
 
 /// The subcommands the library implements.
@@ -123,6 +123,13 @@ pub enum LibCommand {
         /// with a stated reason
         #[arg(long, default_value_t = 0)]
         max_missing: usize,
+    },
+    /// Check that a release tag carries an SSH signature from a key
+    /// in `.github/release-signers` (used by `/release` when the
+    /// project tracks that file)
+    VerifyReleaseTag {
+        /// The tag to check, for example `v1.2.0`
+        tag: String,
     },
     /// Rewrite `<!-- version: X -->` sentinels (and `VERSION=` lines
     /// in the same files) in README.md and docs/ from the crate's
@@ -298,6 +305,9 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
                 max_missing,
             };
             println!("{}", licenses::write(cfg, &opts)?);
+        }
+        LibCommand::VerifyReleaseTag { tag } => {
+            println!("{}", tag_signature::verify_release_tag(cfg, &tag)?);
         }
         LibCommand::VersionSync => println!("{}", version_sync::sync(cfg)?),
         LibCommand::Todo { action } => run_todo(action, cfg)?,

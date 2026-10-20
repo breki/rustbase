@@ -181,7 +181,7 @@ only std and `serde_json` beyond its project's own helpers.
 | bombyx `licenses` (third-party licence file) | 1,073 | moved (#31) as `licenses`, run in CI as a check | the product name, now `Config::name` |
 | bombyx `version_sync` (`<!-- version: X -->` sentinels) | 204 | moved (#30): `version_sync`, `version-sync`, run by `/release` | the manifest path, now `Config::version_manifest` |
 | hoard `repo_hygiene` (scripts staged executable) | 231 | moved (#28): `scripts`, the Scripts step | nothing: the `scripts/` convention |
-| jutro `tag_signature` (SSH-signed release tags) | 409 | move, opt-in | placeholder strings naming jutro |
+| jutro `tag_signature` (SSH-signed release tags) | 409 | moved (#32) as `tag_signature`, `verify-release-tag`; `/release` signs and runs it when `.github/release-signers` is tracked | placeholder strings naming jutro, now generic |
 | jutro `xtask_log` (tee output to `target/<name>.log`) | 421 | moved (#29) as `tee`, used by `validate`; its cargo-streaming variants stay in jutro | nothing |
 | jutro `ports` (`.ports` reader) | 312 | move, frontend projects only | the web stack's default ports |
 | jutro `worktree` (a worktree with free ports) | 573 | keep | the `jutro-` prefix, `ports`, `vite`, npm |

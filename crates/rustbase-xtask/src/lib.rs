@@ -32,6 +32,7 @@ mod process;
 pub mod records;
 pub mod scripts;
 pub mod step;
+pub mod tag_signature;
 pub mod tee;
 pub mod text;
 pub mod todo;
