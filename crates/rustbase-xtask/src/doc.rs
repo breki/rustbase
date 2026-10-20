@@ -7,9 +7,9 @@ use crate::text::{is_cargo_diagnostic, pair_with_locations};
 use crate::{Config, Failure};
 
 /// Non-progress stderr lines doc's own fallback keeps when no
-/// diagnostic is located: the last line is the cause. The template's
-/// `validate` step shows this many too, so the cause is never cut.
-pub const STDERR_TAIL_LINES: usize = 5;
+/// diagnostic is located: the last line is the cause. The Doc step in
+/// `step::standard` shows this many too, so the cause is never cut.
+pub(crate) const STDERR_TAIL_LINES: usize = 5;
 
 /// Cargo's progress verbs, which say nothing about a failure.
 const PROGRESS: &[&str] = &[

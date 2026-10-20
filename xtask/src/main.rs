@@ -36,8 +36,10 @@ use rustbase_xtask::cli::{self, LibCommand};
 
 use helpers::tasks_config;
 
+// No description: clap would otherwise print the doc comment of a
+// command enum, the library's included, as one.
 #[derive(Parser)]
-#[command(name = "xtask")]
+#[command(name = "xtask", about = None, long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: XCommand,

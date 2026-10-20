@@ -13,7 +13,8 @@ description = "Shared cargo-xtask tooling for rustbase-derived projects"
 workspace = true
 
 [features]
-# Derive `clap::ValueEnum` on the public enums, for an xtask CLI.
+# Enables `cli` (the library's subcommands, for an xtask CLI) and
+# derives `clap::ValueEnum` on the public enums.
 clap = ["dep:clap"]
 
 [dependencies]

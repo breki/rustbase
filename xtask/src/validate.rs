@@ -10,29 +10,24 @@ use crate::{frontend_check, frontend_dupes, frontend_fmt, frontend_test};
 /// order), with this project's frontend gates after Deny: three
 /// static ones, then the frontend tests, ahead of the Rust tests.
 ///
-/// The `[N/M]` numbering follows whichever gates are compiled in. A
-/// unit test resolves every `cmd` through the real CLI, so a renamed
-/// subcommand cannot leave the `iterate with` hint pointing at a
-/// command that no longer exists.
-fn steps(check: bool) -> Vec<Step> {
+/// The `[N/M]` numbering follows whichever gates are compiled in.
+// Without the frontend feature nothing is inserted, so nothing fails.
+#[cfg_attr(not(feature = "frontend"), allow(clippy::unnecessary_wraps))]
+fn steps(check: bool) -> Result<Vec<Step>, String> {
     #[cfg_attr(not(feature = "frontend"), allow(unused_mut))]
     let mut steps = step::standard(&tasks_config(), check);
     #[cfg(feature = "frontend")]
-    {
-        let at = step::position(&steps, "Deny")
-            .expect("the standard gates include Deny")
-            + 1;
-        steps.splice(
-            at..at,
-            [
-                frontend_fmt::step(check),
-                frontend_check::step(),
-                frontend_dupes::step(),
-                frontend_test::step(),
-            ],
-        );
-    }
-    steps
+    step::insert_after(
+        &mut steps,
+        step::names::DENY,
+        [
+            frontend_fmt::step(check),
+            frontend_check::step(),
+            frontend_dupes::step(),
+            frontend_test::step(),
+        ],
+    )?;
+    Ok(steps)
 }
 
 /// Run every gate, printing one `[N/M]` line each. `check` makes the
@@ -44,7 +39,7 @@ pub fn validate(check: bool) -> Result<(), String> {
         cfg!(feature = "frontend"),
         Path::new("frontend/package.json").exists(),
     )?;
-    step::run_all(steps(check))
+    step::run_all(steps(check)?)
 }
 
 /// Refuse a frontend on disk when the `frontend` feature is off:
@@ -79,7 +74,7 @@ mod tests {
         // a command that does not exist. `check` does not affect
         // the cmd strings, so either value exercises them all.
         let cli = crate::Cli::command();
-        for step in steps(false) {
+        for step in steps(false).unwrap() {
             assert!(
                 cli.find_subcommand(step.cmd()).is_some(),
                 "validate step {:?} hints `cargo xtask {}`, \
@@ -95,14 +90,22 @@ mod tests {
         // The frontend gates are in the list exactly when the
         // feature compiles them in, so the `[N/M]` total counts
         // only gates that exist.
-        let names: Vec<&str> = steps(false).iter().map(Step::name).collect();
-        let deny = names.iter().position(|n| *n == "Deny").unwrap();
+        let all = steps(false).unwrap();
+        let names: Vec<&str> = all.iter().map(Step::name).collect();
+        let deny = names.iter().position(|n| *n == step::names::DENY).unwrap();
         let first = names.iter().position(|n| n.starts_with("Frontend"));
         if cfg!(feature = "frontend") {
             assert_eq!(first, Some(deny + 1), "{names:?}");
         } else {
             assert_eq!(first, None, "{names:?}");
         }
+    }
+
+    #[test]
+    fn the_help_carries_no_program_description() {
+        // `about = None` on `Cli` keeps the doc comments of `Cli`,
+        // `XCommand` and the flattened `LibCommand` out of `--help`.
+        assert!(crate::Cli::command().get_about().is_none());
     }
 
     #[test]

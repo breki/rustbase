@@ -13,7 +13,8 @@ pub fn workspace_root() -> PathBuf {
 
 /// This project's settings for the shared `rustbase-xtask`
 /// gates. A derived project changes the name here (and with it
-/// the `<NAME>_DEP_AGE_ALLOW` variable and the user agent), and
+/// the `<NAME>_DEP_AGE_ALLOW` and `<NAME>_DEP_AGE_STRICT` variables
+/// and the user agent), and
 /// overrides a limit on the returned value, e.g.
 /// `cfg.thresholds.coverage_file = 80.0;`. The canon check's
 /// exemptions are here too: paths canon names that are correct to

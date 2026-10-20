@@ -575,7 +575,8 @@ just when the code compiles:
    `cargo clippy --all-targets -- -D warnings`, then
    `xtask` again with every optional feature off and
    with each one alone
-3. **All tests pass**: `cargo test`
+3. **All tests pass**: the Test step runs the `xtask` package's
+   tests, and Coverage (item 4) runs every other crate's
 4. **Coverage >= 90%**, and >= 85% in each file
 5. **Code duplication <= 6%** pooled across the crates
    (duplicate lines over total lines) and <= 12% in any
@@ -830,9 +831,11 @@ A shared gate goes into the library's list,
 also fixes the order, and its subcommand into `cli::LibCommand`
 (`crates/rustbase-xtask/src/cli.rs`), which `xtask`'s
 `XCommand` flattens in. A project's own gate is a `step()`
-function in its own `xtask` module, inserted into that list in
-`xtask/src/validate.rs` (`step::position` finds the place), with
-its own `XCommand` variant. An optional gate also takes
+function in its own `xtask` module returning a `Step`
+(`Step::new(name, cmd, closure)`), with its own `XCommand`
+variant; `xtask/src/validate.rs` places it with
+`step::insert_after(&mut steps, step::names::DENY, [...])`, after
+Deny for a static gate. An optional gate also takes
 `#[cfg(feature = "<name>")]` in each place that names it:
 
 - the feature in `[features]` of `xtask/Cargo.toml`;

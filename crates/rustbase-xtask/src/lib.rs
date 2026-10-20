@@ -43,6 +43,17 @@ const TOOLING_CRATE: &str = "xtask";
 /// diagnostic in it.
 const RUN_TAIL_LINES: usize = 10;
 
+/// Report lines a command run on its own shows. A `validate` step
+/// shows `STEP_LINES`, fewer because it sits among the other steps.
+#[cfg(feature = "clap")]
+const STANDALONE_LINES: usize = 10;
+
+/// Report lines a `validate` step shows.
+const STEP_LINES: usize = 5;
+
+/// Diff lines `fmt` shows, run on its own or as a step.
+const FMT_DIFF_LINES: usize = 20;
+
 /// Why a gate failed: a one-line summary and the diagnostic lines
 /// behind it (empty when there are none, as when a tool could not
 /// be run at all).
@@ -168,7 +179,9 @@ pub struct Config {
     /// `root`.
     pub record_files: Vec<String>,
     /// The npm project the audit step also audits, when it holds a
-    /// `package.json`; `None` audits Rust only.
+    /// `package.json`; `None` audits Rust only. Unlike `record_files`
+    /// it is not joined to `root`: set it absolute (`root.join(...)`),
+    /// or a run from another directory skips it.
     pub audit_npm_dir: Option<PathBuf>,
 }
 
@@ -249,6 +262,27 @@ pub(crate) mod test_repo {
         ));
         std::fs::create_dir_all(&dir).expect("create temp dir");
         TempRepo(dir)
+    }
+
+    /// An empty temp directory with no `Cargo.toml` in any directory
+    /// above it, so a cargo command run there finds no workspace and
+    /// fails fast instead of building one. Panics, naming the
+    /// manifest, when that does not hold.
+    pub(crate) fn outside_any_workspace() -> TempRepo {
+        let dir = empty_dir();
+        if let Some(m) = dir
+            .0
+            .ancestors()
+            .map(|a| a.join("Cargo.toml"))
+            .find(|m| m.is_file())
+        {
+            panic!(
+                "{} lies above the temp dir, so cargo would find a \
+                 workspace there; point TMPDIR elsewhere",
+                m.display()
+            );
+        }
+        dir
     }
 
     impl Drop for TempRepo {

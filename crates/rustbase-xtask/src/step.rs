@@ -1,14 +1,15 @@
 //! `validate` as data. Each gate is a [`Step`]; [`standard`] lists
 //! the library's gates in their order, and [`run_all`] runs a list,
 //! printing one `[N/M]` line per step. A project adds its own steps
-//! to the list -- [`position`] finds where -- before running it:
+//! to the list -- [`insert_after`] places them by a step's name in
+//! [`names`] -- before running it:
 //!
 //! ```no_run
 //! # use rustbase_xtask::{Config, step::{self, Step}};
 //! # let cfg = Config::for_project("p", ".".into());
 //! let mut steps = step::standard(&cfg, false);
-//! let at = step::position(&steps, "Deny").map_or(steps.len(), |i| i + 1);
-//! steps.insert(at, Step::new("Lint", "lint", || Ok(String::new())));
+//! let lint = Step::new("Lint", "lint", || Ok(String::new()));
+//! step::insert_after(&mut steps, step::names::DENY, [lint])?;
 //! step::run_all(steps)?;
 //! # Ok::<(), String>(())
 //! ```
@@ -16,18 +17,40 @@
 use std::time::Instant;
 
 use crate::{
-    Config, Strictness, audit, canon, cargo_test, clippy, coverage, deny,
-    dep_age, doc, dupes, fmt, records,
+    Config, FMT_DIFF_LINES, STEP_LINES, Strictness, audit, canon, cargo_test,
+    clippy, coverage, deny, dep_age, doc, dupes, fmt, records,
 };
 
 /// Width of the step name column, dots included.
 const STEP_NAME_WIDTH: usize = 14;
 
-/// Diff lines the Fmt step shows.
-const FMT_DIFF_LINES: usize = 20;
-
-/// Diagnostics the Clippy and Doc steps show.
-const DIAGNOSTIC_LINES: usize = 5;
+/// The names of the standard steps, as their `[N/M]` lines print
+/// them: what [`position`] and [`insert_after`] find a step by.
+pub mod names {
+    /// The cooldown check of changed dependencies.
+    pub const DEP_AGE: &str = "Dep-age";
+    /// Formatting.
+    pub const FMT: &str = "Fmt";
+    /// The claims canon prose makes.
+    pub const CANON: &str = "Canon";
+    /// The record files.
+    pub const RECORDS: &str = "Records";
+    /// Code duplication.
+    pub const DUPLICATION: &str = "Duplication";
+    /// Lints.
+    pub const CLIPPY: &str = "Clippy";
+    /// Doc comments and links.
+    pub const DOC: &str = "Doc";
+    /// Licences, bans and sources; the last static gate.
+    pub const DENY: &str = "Deny";
+    /// The `xtask` package's tests; Coverage runs every other
+    /// crate's. Its re-run, `test`, runs them all.
+    pub const TEST: &str = "Test (xtask only)";
+    /// Line coverage.
+    pub const COVERAGE: &str = "Coverage";
+    /// Security advisories.
+    pub const AUDIT: &str = "Audit";
+}
 
 /// One gate: the name on its `[N/M]` line, the `cargo xtask`
 /// subcommand that re-runs it alone, and the work.
@@ -73,8 +96,21 @@ impl Step {
     }
 }
 
-/// The library's gates in the order `validate` runs them, each
-/// re-run by the subcommand of the same name in the project's CLI.
+/// The name and subcommand; the work is a closure, which has no
+/// `Debug`.
+impl std::fmt::Debug for Step {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Step")
+            .field("name", &self.name)
+            .field("cmd", &self.cmd)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The library's gates in the order `validate` runs them. Each
+/// carries the subcommand that re-runs it (`Step::cmd`), whose name
+/// can differ from the step's: Duplication is `dupes`, Dep-age
+/// `dep-age-check`.
 /// `check` makes Fmt read-only (`fmt --check`) instead of fixing.
 ///
 /// Dep-age leads: it is free on unchanged lockfiles and fails a
@@ -85,35 +121,36 @@ impl Step {
 pub fn standard(cfg: &Config, check: bool) -> Vec<Step> {
     let c = cfg.clone();
     let strict = dep_age_strict(cfg, |k| std::env::var(k).ok());
-    let mut steps = vec![Step::new("Dep-age", "dep-age-check", move || {
-        dep_age_verdict(dep_age::check_changed_deps(&c, "HEAD"), strict)
-    })];
+    let mut steps =
+        vec![Step::new(names::DEP_AGE, "dep-age-check", move || {
+            dep_age_verdict(dep_age::check_changed_deps(&c, "HEAD"), strict)
+        })];
     let c = cfg.clone();
-    steps.push(Step::new("Fmt", "fmt", move || {
+    steps.push(Step::new(names::FMT, "fmt", move || {
         let r = if check { fmt::check(&c) } else { fmt::fix(&c) };
         r.map_err(|f| f.report(FMT_DIFF_LINES))?;
         Ok(String::new())
     }));
-    steps.push(gate(cfg, "Canon", "canon-check", canon::check));
-    steps.push(gate(cfg, "Records", "records-check", records::check));
-    steps.push(gate(cfg, "Duplication", "dupes", dupes::check));
-    steps.push(gate(cfg, "Clippy", "clippy", |c| {
-        clippy::check(c).map_err(|f| f.report(DIAGNOSTIC_LINES))?;
+    steps.push(gate(cfg, names::CANON, "canon-check", canon::check));
+    steps.push(gate(cfg, names::RECORDS, "records-check", records::check));
+    steps.push(gate(cfg, names::DUPLICATION, "dupes", dupes::check));
+    steps.push(gate(cfg, names::CLIPPY, "clippy", |c| {
+        clippy::check(c).map_err(|f| f.report(STEP_LINES))?;
         Ok(String::new())
     }));
-    steps.push(gate(cfg, "Doc", "doc", |c| {
-        doc::check(c).map_err(|f| f.report(DIAGNOSTIC_LINES))?;
+    steps.push(gate(cfg, names::DOC, "doc", |c| {
+        doc::check(c).map_err(|f| f.report(doc::STDERR_TAIL_LINES))?;
         Ok(String::new())
     }));
-    steps.push(gate(cfg, "Deny", "deny", deny::check));
-    steps.push(gate(cfg, "Test (xtask only)", "test", |c| {
+    steps.push(gate(cfg, names::DENY, "deny", deny::check));
+    steps.push(gate(cfg, names::TEST, "test", |c| {
         cargo_test::tooling_only(c).map_err(|f| f.to_string())?;
         Ok(String::new())
     }));
-    steps.push(gate(cfg, "Coverage", "coverage", |c| {
+    steps.push(gate(cfg, names::COVERAGE, "coverage", |c| {
         Ok(coverage::check(c)?.to_string())
     }));
-    steps.push(gate(cfg, "Audit", "audit", |c| {
+    steps.push(gate(cfg, names::AUDIT, "audit", |c| {
         audit::check(c, c.audit_npm_dir.as_deref(), Strictness::Warn)
     }));
     steps
@@ -133,6 +170,23 @@ fn gate(
 /// Index of the step named `name`.
 pub fn position(steps: &[Step], name: &str) -> Option<usize> {
     steps.iter().position(|s| s.name == name)
+}
+
+/// Insert `new` right after the step named `anchor`, in order.
+///
+/// # Errors
+///
+/// When no step is named `anchor`.
+pub fn insert_after(
+    steps: &mut Vec<Step>,
+    anchor: &str,
+    new: impl IntoIterator<Item = Step>,
+) -> Result<(), String> {
+    let at = position(steps, anchor)
+        .ok_or_else(|| format!("no validate step named {anchor:?}"))?
+        + 1;
+    steps.splice(at..at, new);
+    Ok(())
 }
 
 /// Run `steps` in order, printing a `[N/M]` line for each and then
@@ -255,29 +309,60 @@ mod tests {
 
     #[test]
     fn every_standard_step_runs_against_its_config() {
-        // In an empty directory the tools fail fast (no Cargo.toml
-        // above a temp dir), Fmt only checks, and nothing is written.
-        // The file-reading gates show the steps reach the config.
-        let dir = crate::test_repo::empty_dir();
+        // With no workspace the cargo gates fail fast, Fmt only
+        // checks, and nothing is written. Audit is left out: it can
+        // reach the advisory database over the network.
+        let dir = crate::test_repo::outside_any_workspace();
         let cfg = Config::for_project("p", dir.0.clone());
         for step in standard(&cfg, true) {
-            let (name, cmd) = (step.name(), step.cmd());
-            assert!(!cmd.is_empty(), "{name}");
-            let got = step.run();
+            let name = step.name();
             match name {
-                "Records" => {
-                    let d = got.unwrap();
+                names::AUDIT => {}
+                // Strict, and so failing, under CI.
+                names::DEP_AGE => drop(step.run()),
+                names::RECORDS => {
+                    let d = step.run().unwrap();
                     assert!(
                         d.starts_with("0 files, 0 entries; absent:"),
                         "{d}"
                     );
                 }
-                "Dep-age" | "Canon" | "Duplication" | "Fmt" | "Clippy"
-                | "Doc" | "Deny" | "Test (xtask only)" | "Coverage"
-                | "Audit" => {}
+                names::CANON => {
+                    let d = step.run().unwrap();
+                    assert!(d.starts_with("0 files"), "no canon to read: {d}");
+                }
+                names::FMT
+                | names::DUPLICATION
+                | names::CLIPPY
+                | names::DOC
+                | names::DENY
+                | names::TEST
+                | names::COVERAGE => {
+                    assert!(
+                        step.run().is_err(),
+                        "{name} passed with no workspace"
+                    );
+                }
                 other => panic!("untested step {other}"),
             }
         }
+    }
+
+    #[test]
+    fn insert_after_places_steps_behind_their_anchor() {
+        let mut steps = standard(&cfg(), true);
+        let new = |n| Step::new(n, "x", || Ok(String::new()));
+        insert_after(&mut steps, names::DENY, [new("A"), new("B")]).unwrap();
+        let at = position(&steps, names::DENY).unwrap();
+        assert_eq!(steps[at + 1].name(), "A");
+        assert_eq!(steps[at + 2].name(), "B");
+        assert_eq!(steps[at + 3].name(), names::TEST);
+        let e = insert_after(&mut steps, "Nope", [new("C")]).unwrap_err();
+        assert!(e.contains("\"Nope\""), "{e}");
+        assert_eq!(
+            format!("{:?}", new("A")),
+            "Step { name: \"A\", cmd: \"x\", .. }"
+        );
     }
 
     #[test]
