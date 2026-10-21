@@ -18,6 +18,22 @@ work.
 
 ---
 
+### fr-2026-10-21-audit-warnings-means-unfinished
+
+**Category:** naming
+
+**Summary:** `AuditResult.warnings` holds checks that could not finish, not advisory warnings
+
+In `crates/rustbase-xtask/src/audit.rs` the field that collects
+"could not finish" reasons (a missing tool, an unreachable DB, and
+since #67 a timeout) is called `warnings`, the word cargo-audit
+uses for its unsound / unmaintained / yanked advisories, which the
+same file counts as `CargoAudit.warnings`. Three comments exist to
+undo the name, and `verdict` renames it to `unfinished` on arrival,
+the word `process::Unfinished` now uses. Rename the field to
+`unfinished` and drop the disclaimers. Deferred from #67's review:
+a code rename, outside its prose-only stage.
+
 ### fr-2026-10-20-licenses-publishable-wording
 
 **Category:** wording (output, help)

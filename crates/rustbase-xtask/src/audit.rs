@@ -11,7 +11,9 @@
 //! advisory DB unreachable) fails or warns by the caller's
 //! [`Strictness`].
 
+use std::env::VarError;
 use std::path::Path;
+use std::time::Duration;
 
 use serde_json::Value;
 
@@ -33,7 +35,9 @@ struct CargoAudit {
 /// Parsed `npm audit --json` result.
 #[derive(Debug, PartialEq, Eq)]
 struct NpmAudit {
-    /// Total vulnerabilities across all severities.
+    /// Vulnerabilities across all severities: the larger of npm's
+    /// `total` and the sum of its severity counts, so a report whose
+    /// fields disagree is never read as clean.
     total: u64,
     /// High-severity count (for the summary line).
     high: u64,
@@ -74,12 +78,61 @@ pub fn check(
     npm_dir: Option<&Path>,
     strictness: Strictness,
 ) -> Result<String, String> {
+    let var = &cfg.audit_timeout_env;
+    let limit = audit_limit(var, std::env::var(var))?;
     let r = collect(
         npm_dir,
-        || process::cargo(&cfg.root, &["audit", "--json"]),
-        |dir| process::npm(dir, &["audit", "--json"]),
+        || {
+            process::cargo_within(&cfg.root, &["audit", "--json"], limit)
+                .map_err(|u| unfinished(u, var))
+        },
+        |dir| {
+            process::npm_within(dir, &["audit", "--json"], limit)
+                .map_err(|u| unfinished(u, var))
+        },
     );
     verdict(r, strictness)
+}
+
+/// How long each audit may run by default: a length, from which
+/// `deadline::wait_until` computes the moment to stop. Both reach the network,
+/// and a host that accepts the connection and never answers would
+/// otherwise hang the gate; a run past the limit is a check that
+/// could not finish.
+const DEADLINE: Duration = Duration::from_secs(180);
+
+/// The limit `var` sets, in whole seconds, or [`DEADLINE`] when it is
+/// unset. A value that is not a positive whole number, or not UTF-8,
+/// is refused rather than ignored, so a typo cannot quietly keep the
+/// default.
+fn audit_limit(
+    var: &str,
+    value: Result<String, VarError>,
+) -> Result<Duration, String> {
+    let value = match value {
+        Ok(v) => v,
+        Err(VarError::NotPresent) => return Ok(DEADLINE),
+        Err(VarError::NotUnicode(_)) => {
+            return Err(format!("{var} is not valid UTF-8"));
+        }
+    };
+    match value.trim().parse::<u64>() {
+        Ok(secs) if secs > 0 => Ok(Duration::from_secs(secs)),
+        _ => Err(format!(
+            "{var}={value:?} is not a positive whole number of seconds"
+        )),
+    }
+}
+
+/// The message for an audit that produced no output; a timed-out one
+/// names the variable that gives it longer.
+fn unfinished(u: process::Unfinished, var: &str) -> String {
+    match u {
+        process::Unfinished::Failed(m) => m,
+        process::Unfinished::TimedOut(m) => {
+            format!("{m}; give it longer with {var}=<seconds>")
+        }
+    }
 }
 
 /// Run both audits through the injected spawns and classify the
@@ -182,6 +235,10 @@ fn rustsec_line(v: &Value) -> String {
     )
 }
 
+/// The severity keys of npm's `metadata.vulnerabilities`.
+const NPM_SEVERITIES: [&str; 5] =
+    ["info", "low", "moderate", "high", "critical"];
+
 /// Parse the counts in `metadata.vulnerabilities` from `npm audit
 /// --json`, and turn each entry of the top-level `vulnerabilities`
 /// map into one line (`npm_line`). npm exits non-zero when it finds
@@ -191,10 +248,42 @@ fn parse_npm_audit(stdout: &str) -> Result<NpmAudit, String> {
     let j: Value = serde_json::from_str(stdout)
         .map_err(|e| format!("failed to parse npm audit JSON: {e}"))?;
     let v = &j["metadata"]["vulnerabilities"];
+    // A count npm left out is `None`; one it wrote as anything but a
+    // whole number makes the report unreadable, never a 0.
+    let count = |k: &str| match &v[k] {
+        Value::Null => Ok(None),
+        n => n.as_u64().map(Some).ok_or_else(|| {
+            format!(
+                "npm audit metadata.vulnerabilities.{k} is not a count: {n}"
+            )
+        }),
+    };
+    let mut severities = Vec::new();
+    for k in NPM_SEVERITIES {
+        severities.push(count(k)?);
+    }
+    // The larger of npm's total and its own severity counts, so a
+    // report whose `total` is missing or 0 beside non-zero counts
+    // still fails. Saturating: the counts are external input, and a
+    // capped sum is still non-zero.
+    let counted = severities
+        .iter()
+        .map(|c| c.unwrap_or(0))
+        .fold(0, u64::saturating_add);
+    let total = match (count("total")?, severities.iter().any(Option::is_some))
+    {
+        (Some(t), _) => t.max(counted),
+        (None, true) => counted,
+        (None, false) => {
+            return Err(
+                "missing metadata.vulnerabilities counts in npm audit output"
+                    .into(),
+            );
+        }
+    };
+    // `high` and `critical` passed `count` above, so the 0 here
+    // stands only for an absent key.
     let get = |k: &str| v[k].as_u64().unwrap_or(0);
-    let total = v["total"]
-        .as_u64()
-        .ok_or("missing metadata.vulnerabilities.total in npm audit output")?;
     let advisories =
         j["vulnerabilities"].as_object().map_or_else(Vec::new, |o| {
             o.iter().map(|(name, e)| npm_line(name, e)).collect()
@@ -561,7 +650,84 @@ mod tests {
     }
 
     #[test]
-    fn parse_npm_audit_rejects_missing_total_and_garbage() {
+    fn a_zero_npm_total_with_severity_counts_is_not_clean() {
+        // The verdict must not rest on one field: a report whose
+        // `total` disagrees with its own severity counts fails.
+        let json = r#"{"metadata":{"vulnerabilities":
+            {"low":1,"moderate":1,"high":1,"critical":0,"total":0}}}"#;
+        assert_eq!(parse_npm_audit(json).unwrap().total, 3);
+    }
+
+    #[test]
+    fn severity_counts_too_large_to_add_still_fail_without_a_panic() {
+        // External JSON: a sum that overflows u64 must not abort the
+        // gate, and must stay non-zero so the verdict still fails.
+        let max = u64::MAX;
+        let json = format!(
+            r#"{{"metadata":{{"vulnerabilities":
+                {{"high":{max},"critical":{max},"total":0}}}}}}"#
+        );
+        assert_eq!(parse_npm_audit(&json).unwrap().total, u64::MAX);
+    }
+
+    #[test]
+    fn a_missing_npm_total_is_the_sum_of_the_severities() {
+        let json = r#"{"metadata":{"vulnerabilities":{"high":2}}}"#;
+        assert_eq!(parse_npm_audit(json).unwrap().total, 2);
+    }
+
+    #[test]
+    fn the_audit_limit_defaults_to_three_minutes() {
+        let unset = Err(VarError::NotPresent);
+        assert_eq!(audit_limit("X_AUDIT_TIMEOUT_SECS", unset), Ok(DEADLINE));
+    }
+
+    #[test]
+    fn the_audit_limit_takes_whole_seconds_from_its_variable() {
+        let var = "X_AUDIT_TIMEOUT_SECS";
+        let set = |v: &str| Ok(v.to_owned());
+        assert_eq!(audit_limit(var, set("600")), Ok(Duration::from_secs(600)));
+        assert_eq!(audit_limit(var, set(" 30 ")), Ok(Duration::from_secs(30)));
+        for bad in ["", "0", "-5", "1.5", "ten"] {
+            let e = audit_limit(var, set(bad)).unwrap_err();
+            assert!(e.contains(var), "{bad}: {e}");
+        }
+        // Not UTF-8: refused, not read as unset.
+        let raw = Err(VarError::NotUnicode(std::ffi::OsString::from("x")));
+        assert!(audit_limit(var, raw).unwrap_err().contains(var));
+    }
+
+    #[test]
+    fn a_timed_out_audit_names_the_variable_that_raises_the_limit() {
+        let var = "X_AUDIT_TIMEOUT_SECS";
+        let m = unfinished(
+            process::Unfinished::TimedOut("cargo did not finish".into()),
+            var,
+        );
+        assert!(m.starts_with("cargo did not finish"), "{m}");
+        assert!(m.contains(var), "{m}");
+        let m =
+            unfinished(process::Unfinished::Failed("no such file".into()), var);
+        assert_eq!(m, "no such file");
+    }
+
+    #[test]
+    fn an_npm_count_that_is_not_a_number_is_unreadable_not_zero() {
+        // A present field npm could not fill is a report that could
+        // not be read, never a clean one.
+        for json in [
+            r#"{"metadata":{"vulnerabilities":
+                {"info":0,"high":"3","total":"3"}}}"#,
+            r#"{"metadata":{"vulnerabilities":
+                {"high":"7","info":0,"total":0}}}"#,
+            r#"{"metadata":{"vulnerabilities":{"high":0,"total":-1}}}"#,
+        ] {
+            assert!(parse_npm_audit(json).is_err(), "{json}");
+        }
+    }
+
+    #[test]
+    fn parse_npm_audit_rejects_no_counts_and_garbage() {
         let json = r#"{"metadata":{"vulnerabilities":{}}}"#;
         assert!(parse_npm_audit(json).is_err());
         assert!(parse_npm_audit("not json").is_err());

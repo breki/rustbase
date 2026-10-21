@@ -27,6 +27,7 @@ pub mod check;
 pub mod cli;
 pub mod clippy;
 pub mod coverage;
+mod deadline;
 pub mod deny;
 pub mod dep_age;
 pub mod doc;
@@ -187,6 +188,12 @@ pub struct Config {
     /// top of `dep_age_allow_file`; for a one-off run.
     /// `for_project("hoard", ...)` names it `HOARD_DEP_AGE_ALLOW`.
     pub dep_age_allow_env: String,
+    /// Name of the environment variable that sets how many seconds
+    /// each security audit may run (three minutes when unset), for
+    /// the first run on a machine, which downloads the whole advisory
+    /// database.
+    /// `for_project("hoard", ...)` names it `HOARD_AUDIT_TIMEOUT_SECS`.
+    pub audit_timeout_env: String,
     /// The committed allow-list file, one `name@version` per line with
     /// `#` comments; `None` reads none. Unlike the other paths here it
     /// is a git path: from the repository top, `/`-separated, never
@@ -226,6 +233,7 @@ impl Config {
 
     /// The defaults for a project called `project`: `project` as
     /// `name`, `<PROJECT>_DEP_AGE_ALLOW`, `.dep-age-allow`,
+    /// `<PROJECT>_AUDIT_TIMEOUT_SECS`,
     /// `<project>-xtask-dep-age`,
     /// the default [`Thresholds`], canon
     /// [`Rules`](canon::Rules) and [record files](records::DEFAULT_FILES),
@@ -237,6 +245,7 @@ impl Config {
             name: project.to_owned(),
             root,
             dep_age_allow_env: format!("{prefix}_DEP_AGE_ALLOW"),
+            audit_timeout_env: format!("{prefix}_AUDIT_TIMEOUT_SECS"),
             dep_age_allow_file: Some(".dep-age-allow".to_owned()),
             user_agent: format!("{project}-xtask-dep-age"),
             thresholds: Thresholds::default(),
