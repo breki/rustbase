@@ -200,8 +200,9 @@ pub struct Config {
     /// `package.json`; `None` audits Rust only.
     pub audit_npm_dir: Option<PathBuf>,
     /// The frontend the `frontend` feature's four gates run in,
-    /// relative to `root`; `None`, or a folder with no
-    /// `package.json`, means no frontend and the gates skip.
+    /// relative to `root`. A folder with no `package.json` means no
+    /// frontend, and the gates skip; `None` skips too, but reports
+    /// "`frontend_dir` not set", so a forgotten setting shows.
     pub frontend_dir: Option<PathBuf>,
     /// The manifest of the package whose version, as cargo resolves it
     /// (inherited from the workspace or not), is the project's; the

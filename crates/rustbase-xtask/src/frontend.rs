@@ -3,24 +3,33 @@
 //! `Config::frontend_dir`. The JS tools are the project's own npm dev
 //! dependencies; the gates only map a script's exit status.
 //!
-//! A gate passes as skipped when there is no frontend, but fails --
-//! never skips -- when the frontend exists with its `node_modules`
-//! not installed, so a missing install cannot read as a pass.
+//! A gate passes as skipped when there is no frontend, or when no
+//! `frontend_dir` is set (reported apart, so a forgotten setting
+//! shows), but fails -- never skips -- when the frontend exists with
+//! its `node_modules` not installed, so a missing install cannot read
+//! as a pass.
 
 use std::path::Path;
 
-use crate::Config;
 use crate::process::{self, Captured};
 use crate::step::{Step, names};
+use crate::{Config, Failure, STEP_LINES};
 
-/// Lines of a failing script's output kept in the error.
-const MAX_OUTPUT_LINES: usize = 10;
+/// The step detail of a gate that found no frontend.
+pub const SKIPPED: &str = "skipped: no frontend";
 
-/// One of the four gates.
+/// The step detail of a gate given no `Config::frontend_dir`, kept
+/// apart from [`SKIPPED`] so a project that forgot to set it can see so.
+pub const NOT_CONFIGURED: &str = "skipped: frontend_dir not set";
+
+/// One of the four gates; Prettier comes in two modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Gate {
-    /// Prettier: `format`, or `format:check` when read-only.
+    /// Prettier, fixing in place: `format`.
     Fmt,
+    /// Prettier, read-only: `format:check`.
+    FmtCheck,
     /// svelte-check: `check`.
     Check,
     /// jscpd, which enforces its own threshold: `dupes`.
@@ -30,16 +39,19 @@ pub enum Gate {
 }
 
 impl Gate {
-    /// All four, in `validate` order: the static three, then the
-    /// tests.
-    pub const ALL: [Self; 4] =
-        [Self::Fmt, Self::Check, Self::Dupes, Self::Test];
+    /// The four `validate` runs, in order: the static three, then the
+    /// tests. `check` picks Prettier's read-only mode.
+    #[must_use]
+    pub fn all(check: bool) -> [Self; 4] {
+        let fmt = if check { Self::FmtCheck } else { Self::Fmt };
+        [fmt, Self::Check, Self::Dupes, Self::Test]
+    }
 
     /// The step name, as `validate` prints it and `--skip` matches it.
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
-            Self::Fmt => names::FRONTEND_FMT,
+            Self::Fmt | Self::FmtCheck => names::FRONTEND_FMT,
             Self::Check => names::FRONTEND_CHECK,
             Self::Dupes => names::FRONTEND_DUPES,
             Self::Test => names::FRONTEND_TEST,
@@ -50,37 +62,36 @@ impl Gate {
     #[must_use]
     pub fn subcommand(self) -> &'static str {
         match self {
-            Self::Fmt => "frontend-fmt",
+            Self::Fmt | Self::FmtCheck => "frontend-fmt",
             Self::Check => "frontend-check",
             Self::Dupes => "frontend-dupes",
             Self::Test => "frontend-test",
         }
     }
 
-    /// The npm script; `check` makes Fmt read-only.
-    fn script(self, check: bool) -> &'static str {
-        match self {
-            Self::Fmt if check => "format:check",
-            Self::Fmt => "format",
-            Self::Check => "check",
-            Self::Dupes => "dupes",
-            Self::Test => "test",
-        }
-    }
-
     /// The step detail on a pass.
-    fn ok_detail(self) -> &'static str {
+    #[must_use]
+    pub fn ok_detail(self) -> &'static str {
         match self {
             Self::Dupes => "<= threshold",
             _ => "",
         }
     }
 
-    /// The error on a failing script.
-    fn failure(self, check: bool) -> &'static str {
+    fn script(self) -> &'static str {
         match self {
-            Self::Fmt if check => "prettier found unformatted files",
+            Self::Fmt => "format",
+            Self::FmtCheck => "format:check",
+            Self::Check => "check",
+            Self::Dupes => "dupes",
+            Self::Test => "test",
+        }
+    }
+
+    fn failure(self) -> &'static str {
+        match self {
             Self::Fmt => "prettier failed",
+            Self::FmtCheck => "prettier found unformatted files",
             Self::Check => "svelte-check reported errors",
             Self::Dupes => "frontend duplication exceeds threshold",
             Self::Test => "frontend unit tests failed",
@@ -89,12 +100,15 @@ impl Gate {
 }
 
 /// What a gate did when it did not fail.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Outcome {
     /// There is no frontend; nothing ran.
     Skipped,
-    /// The script passed; the step detail.
-    Passed(String),
+    /// No `Config::frontend_dir` is set; nothing ran.
+    NotConfigured,
+    /// The script passed.
+    Passed,
 }
 
 /// What to do, given what is on disk.
@@ -115,27 +129,24 @@ fn classify(has_package_json: bool, has_node_modules: bool) -> Action {
     }
 }
 
-/// Run `gate` in the configured frontend. `check` makes Fmt
-/// read-only (`format:check`) instead of fixing in place.
+/// Run `gate` in the configured frontend, found from `cfg.root`.
 ///
 /// # Errors
 /// When the frontend exists but is not installed, npm cannot run,
-/// or the script fails (with the start of its output).
-pub fn run(cfg: &Config, gate: Gate, check: bool) -> Result<Outcome, String> {
+/// or the script fails.
+pub fn run(cfg: &Config, gate: Gate) -> Result<Outcome, Failure> {
     let Some(dir) = cfg.frontend_dir.as_ref().map(|d| cfg.root.join(d)) else {
-        return Ok(Outcome::Skipped);
+        return Ok(Outcome::NotConfigured);
     };
     match classify(
         dir.join("package.json").is_file(),
         dir.join("node_modules").is_dir(),
     ) {
         Action::Skip => Ok(Outcome::Skipped),
-        Action::NotInstalled => Err(not_installed(&dir)),
-        Action::Run => outcome(
-            gate,
-            check,
-            &process::npm(&dir, &["run", gate.script(check)])?,
-        ),
+        Action::NotInstalled => Err(not_installed(&dir).into()),
+        Action::Run => {
+            outcome(gate, &process::npm(&dir, &["run", gate.script()])?)
+        }
     }
 }
 
@@ -147,70 +158,48 @@ fn not_installed(dir: &Path) -> String {
     )
 }
 
-/// Map a finished script to the gate's result.
-fn outcome(gate: Gate, check: bool, c: &Captured) -> Result<Outcome, String> {
+/// Map a finished script to the gate's result, reported as every gate
+/// reports a failed run: the end of the tool's stderr, else its stdout.
+fn outcome(gate: Gate, c: &Captured) -> Result<Outcome, Failure> {
     if c.ok {
-        return Ok(Outcome::Passed(gate.ok_detail().to_owned()));
+        return Ok(Outcome::Passed);
     }
-    let output = format!("{}{}", c.stdout, c.stderr);
-    let head: Vec<&str> = output.lines().take(MAX_OUTPUT_LINES).collect();
-    let mut err = format!("{} ({})", gate.failure(check), c.status);
-    for line in head {
-        err.push_str("\n  ");
-        err.push_str(line);
-    }
-    Err(err)
+    let summary = format!("{} ({})", gate.failure(), c.status);
+    Err(Failure::of_run(summary, Vec::<String>::new(), c))
 }
 
-/// The four `validate` steps, in [`Gate::ALL`] order. A project puts
+/// The four `validate` steps, in [`Gate::all`] order. A project puts
 /// them after Deny: `step::insert_after(&mut steps, names::DENY, ..)`.
 #[must_use]
 pub fn steps(cfg: &Config, check: bool) -> Vec<Step> {
-    Gate::ALL
+    Gate::all(check)
         .into_iter()
         .map(|gate| {
             let c = cfg.clone();
             Step::new(gate.name(), gate.subcommand(), move || {
-                Ok(match run(&c, gate, check)? {
-                    Outcome::Skipped => "skipped: no frontend".to_owned(),
-                    Outcome::Passed(detail) => detail,
-                })
+                match run(&c, gate).map_err(|f| f.report(STEP_LINES))? {
+                    Outcome::Skipped => Ok(SKIPPED.to_owned()),
+                    Outcome::NotConfigured => Ok(NOT_CONFIGURED.to_owned()),
+                    Outcome::Passed => Ok(gate.ok_detail().to_owned()),
+                }
             })
         })
         .collect()
 }
 
-/// The standalone `cargo xtask frontend-<gate>` line.
-///
-/// # Errors
-/// As [`run`].
-pub fn command(cfg: &Config, gate: Gate, check: bool) -> Result<(), String> {
-    match run(cfg, gate, check)? {
-        Outcome::Skipped => println!("{} skipped: no frontend", gate.name()),
-        Outcome::Passed(_) => println!("{} OK", gate.name()),
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use std::fmt::Write as _;
     use std::fs;
     use std::path::PathBuf;
 
     use super::*;
 
-    fn captured(ok: bool, stdout: &str) -> Captured {
+    fn failed(stdout: &str, stderr: &str) -> Captured {
         Captured {
-            ok,
-            status: if ok {
-                "exit status: 0"
-            } else {
-                "exit status: 1"
-            }
-            .into(),
+            ok: false,
+            status: "exit status: 1".into(),
             stdout: stdout.into(),
-            stderr: String::new(),
+            stderr: stderr.into(),
         }
     }
 
@@ -223,45 +212,76 @@ mod tests {
     }
 
     #[test]
-    fn a_passing_script_gives_the_gates_detail() {
-        let ok = captured(true, "");
-        assert_eq!(
-            outcome(Gate::Dupes, false, &ok),
-            Ok(Outcome::Passed("<= threshold".into()))
-        );
-        assert_eq!(
-            outcome(Gate::Test, false, &ok),
-            Ok(Outcome::Passed(String::new()))
-        );
+    fn a_passing_script_passes() {
+        let mut ok = failed("", "");
+        ok.ok = true;
+        assert_eq!(outcome(Gate::Test, &ok), Ok(Outcome::Passed));
+        assert_eq!(Gate::Dupes.ok_detail(), "<= threshold");
+        assert_eq!(Gate::Test.ok_detail(), "");
     }
 
     #[test]
-    fn a_failing_script_keeps_the_start_of_its_output() {
-        let long = (0..20).fold(String::new(), |mut s, i| {
-            let _ = writeln!(s, "line {i}");
-            s
-        });
-        let err =
-            outcome(Gate::Fmt, true, &captured(false, &long)).unwrap_err();
-        assert!(err.starts_with("prettier found unformatted files"), "{err}");
-        assert!(err.contains("exit status: 1"), "{err}");
-        assert!(err.contains("line 9") && !err.contains("line 10"), "{err}");
+    fn a_failure_reports_the_end_of_stderr() {
+        // Real jscpd output: the table on stdout, the verdict on stderr.
+        let stdout = "\n> rustbase-frontend@0.1.0 dupes\n> jscpd src\n\n\
+            Found 1 clones.\n";
+        let stderr = "Using config from .jscpd.json\n\
+            ERROR: jscpd found too many duplicates (12.0%) over threshold \
+            (6.0%)\n";
+        let f = outcome(Gate::Dupes, &failed(stdout, stderr)).unwrap_err();
+        assert_eq!(
+            f.summary,
+            "frontend duplication exceeds threshold (exit status: 1)"
+        );
+        assert_eq!(f.items.last().unwrap(), stderr.lines().nth(1).unwrap());
     }
 
     #[test]
-    fn fmt_runs_the_read_only_script_under_check() {
-        assert_eq!(Gate::Fmt.script(true), "format:check");
-        assert_eq!(Gate::Fmt.script(false), "format");
-        assert_eq!(Gate::Fmt.failure(false), "prettier failed");
-        assert_eq!(Gate::Check.script(true), "check");
+    fn a_failure_with_nothing_on_stderr_reports_the_end_of_stdout() {
+        // Real svelte-check output (human format, colour off).
+        let stdout = "\n> rustbase-frontend@0.1.0 check\n\
+            /w/frontend/src/zz_type.ts:1:7\n\
+            Error: Type 'string' is not assignable to type 'number'. \n\
+            svelte-check found 1 error and 0 warnings in 1 file\n";
+        let f = outcome(Gate::Check, &failed(stdout, "")).unwrap_err();
+        assert!(f.items.iter().any(|i| i.ends_with("zz_type.ts:1:7")), "{f}");
+        assert!(f.items.iter().any(|i| i.starts_with("Error: Type")), "{f}");
+    }
+
+    #[test]
+    fn a_silent_failure_still_says_something() {
+        let f = outcome(Gate::Check, &failed("", "")).unwrap_err();
+        assert_eq!(f.items, ["exit status: 1, and no output"]);
+    }
+
+    #[test]
+    fn npms_missing_script_error_is_what_gets_reported() {
+        let stderr = "npm error Missing script: \"dupes\"\n";
+        let f = outcome(Gate::Dupes, &failed("", stderr)).unwrap_err();
+        assert_eq!(f.items, ["npm error Missing script: \"dupes\""]);
+    }
+
+    #[test]
+    fn check_picks_prettiers_read_only_mode() {
+        assert_eq!(Gate::all(true)[0], Gate::FmtCheck);
+        assert_eq!(Gate::all(false)[0], Gate::Fmt);
+        assert_eq!(Gate::FmtCheck.script(), "format:check");
+        assert_eq!(Gate::Fmt.script(), "format");
+        assert_eq!(Gate::Fmt.name(), Gate::FmtCheck.name());
+        assert_eq!(Gate::Fmt.failure(), "prettier failed");
     }
 
     #[test]
     fn no_configured_frontend_skips() {
         let cfg = Config::for_project("t", PathBuf::from("/nonexistent"));
-        for gate in Gate::ALL {
-            assert_eq!(run(&cfg, gate, true), Ok(Outcome::Skipped));
+        for gate in Gate::all(true) {
+            assert_eq!(run(&cfg, gate), Ok(Outcome::NotConfigured));
         }
+        let steps = steps(&cfg, true);
+        assert_eq!(
+            steps.into_iter().next().unwrap().run(),
+            Ok(NOT_CONFIGURED.to_owned())
+        );
     }
 
     #[test]
@@ -273,10 +293,10 @@ mod tests {
         fs::write(dir.0.join("frontend/package.json"), "{}").unwrap();
         let mut cfg = Config::for_project("t", dir.0.clone());
         cfg.frontend_dir = Some("frontend".into());
-        let err = run(&cfg, Gate::Check, true).unwrap_err();
-        assert!(err.contains("no node_modules"), "{err}");
+        let f = run(&cfg, Gate::Check).unwrap_err();
+        assert!(f.summary.contains("no node_modules"), "{f}");
         cfg.frontend_dir = Some("elsewhere".into());
-        assert_eq!(run(&cfg, Gate::Check, true), Ok(Outcome::Skipped));
+        assert_eq!(run(&cfg, Gate::Check), Ok(Outcome::Skipped));
     }
 
     #[test]
@@ -294,11 +314,7 @@ mod tests {
             ]
         );
         for s in steps {
-            assert_eq!(s.run(), Ok("skipped: no frontend".to_owned()));
-        }
-        for gate in Gate::ALL {
-            assert!(command(&cfg, gate, false).is_ok());
-            assert!(gate.subcommand().starts_with("frontend-"));
+            assert_eq!(s.run(), Ok(NOT_CONFIGURED.to_owned()));
         }
     }
 }

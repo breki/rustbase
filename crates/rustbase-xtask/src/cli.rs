@@ -384,14 +384,22 @@ pub enum FrontendCommand {
 /// `frontend-<gate>`.
 #[cfg(feature = "frontend")]
 fn run_frontend(c: &FrontendCommand, cfg: &Config) -> Result<(), String> {
-    use frontend::Gate;
-    let (gate, check) = match *c {
-        FrontendCommand::FrontendCheck => (Gate::Check, false),
-        FrontendCommand::FrontendFmt { check } => (Gate::Fmt, check),
-        FrontendCommand::FrontendDupes => (Gate::Dupes, false),
-        FrontendCommand::FrontendTest => (Gate::Test, false),
+    use frontend::{Gate, Outcome};
+    let gate = match *c {
+        FrontendCommand::FrontendCheck => Gate::Check,
+        FrontendCommand::FrontendFmt { check: true } => Gate::FmtCheck,
+        FrontendCommand::FrontendFmt { check: false } => Gate::Fmt,
+        FrontendCommand::FrontendDupes => Gate::Dupes,
+        FrontendCommand::FrontendTest => Gate::Test,
     };
-    frontend::command(cfg, gate, check)
+    match frontend::run(cfg, gate).map_err(|f| f.report(STANDALONE_LINES))? {
+        Outcome::Skipped => println!("{} {}", gate.name(), frontend::SKIPPED),
+        Outcome::NotConfigured => {
+            println!("{} {}", gate.name(), frontend::NOT_CONFIGURED);
+        }
+        _ => println!("{} OK", gate.name()),
+    }
+    Ok(())
 }
 
 /// `todo <action>`.
@@ -498,6 +506,16 @@ mod tests {
         assert!(ok(&["records-check"]), "absent files are skipped");
         assert!(ok(&["canon-check"]), "no canon files to read");
         assert!(ok(&["scripts-check"]), "skipped outside a work tree");
+        #[cfg(feature = "frontend")]
+        for args in [
+            &["frontend-fmt", "--check"][..],
+            &["frontend-fmt"],
+            &["frontend-check"],
+            &["frontend-dupes"],
+            &["frontend-test"],
+        ] {
+            assert!(ok(args), "{args:?}: no frontend configured, so skipped");
+        }
         for args in [
             &["check"][..],
             &["clippy"],
@@ -527,7 +545,11 @@ mod tests {
         use clap::CommandFactory;
         let cli = Cli::command();
         let cfg = Config::for_project("p", "/w".into());
-        for step in crate::step::standard(&cfg, false) {
+        let steps = crate::step::standard(&cfg, false);
+        #[cfg(feature = "frontend")]
+        let steps =
+            steps.into_iter().chain(crate::frontend::steps(&cfg, false));
+        for step in steps {
             assert!(
                 cli.find_subcommand(step.cmd()).is_some(),
                 "step {:?} hints `{}`, which is no library command",

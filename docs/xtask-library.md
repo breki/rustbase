@@ -210,7 +210,7 @@ the library is a possible later step, not part of this plan.
 | `changelog`, `todo` | extracted (#7): `changelog` with jutro's `infer-bump` / `promote`; the markdown helpers as `markdown` with hoard's hardening (CRLF-preserving rejoin, sections found by column-0 headings only, structure-preserving wrap); `todo` in bombyx's layout (one `### <slug>` entry per item, removed when done), the only layout: every attempt to allow other headings among the items let an edit misplace or cut text, so the file is an introduction then items only |
 | `records` (bombyx's `records`) | extracted (#21) as the library's `records`: one parser for every record file (`todo` reads its items through it) and the `records-check` gate; the files are `Config::record_files`. It checks an id in an entry's `Depends on` / `Supersedes` field; canon-check checks a backlog ID cited in canon prose |
 | `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
-| `validate` | step runner; each gate supplies its `step()` (done, #5). The runner, the `Step` type and the standard gate list moved into the library as `step` (#8); a project inserts its own steps (here, the frontend gates) |
+| `validate` | step runner; each gate supplies its `step()` (done, #5). The runner, the `Step` type and the standard gate list moved into the library as `step` (#8); a project inserts its own steps, and the library's feature-gated ones (`frontend::steps`, #44) |
 | `frontend*` | extracted (#44): `frontend`, behind the library's `frontend` feature (default off), with its four `frontend-*` subcommands in `cli::FrontendCommand`; the folder is `Config::frontend_dir`, found from `root`. The JS tools stay the project's npm dev dependencies |
 | `deploy*` | last; generic pieces (remote run, tag guard, staging, crash check) only, with hooks |
 | `backfeed`, `feedback`, `sync` | template-maintenance tools; stay in the template |
@@ -240,12 +240,13 @@ clockdump went first (#9, breki/clockdump#1), from a vendored copy of
 the template's `xtask` at v0.17.0 to `rustbase-xtask` 0.1.0. Its
 `validate` passes every gate it ran before, coverage at 96.9%, and
 `xtask` came to about -1,100 lines net -- less than the one-module
-prototype's -1,773, because step 1 copies in the template's deploy
-and frontend modules, compiled out but present. kozmotic followed
+prototype's -1,773, because step 1 then copied in the template's
+deploy and frontend modules, compiled out but present (the frontend
+ones moved into the library since, #44). kozmotic followed
 (breki/kozmotic#1): it adopted three gates it had never run (step 4),
 its audit found 10 TLS advisories to fix, and its `xtask` grew by
 about 960 lines: the deploy, frontend and template-tools modules step
-1 copies in outweighed the vendored gates it removed, since kozmotic
+1 then copied in outweighed the vendored gates it removed, since kozmotic
 had vendored fewer of them than clockdump. bombyx came third
 (breki/bombyx#196). The library's gates largely came from bombyx, so
 its migration was mostly deletion (about -6,600 lines of `xtask`). It

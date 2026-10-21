@@ -31,8 +31,9 @@ use crate::{
 /// Width of the step name column, dots included.
 const STEP_NAME_WIDTH: usize = 14;
 
-/// The names of the standard steps, as their `[N/M]` lines print
-/// them: what [`position`] and [`insert_after`] find a step by.
+/// The names of the library's steps -- the standard ones and the
+/// `frontend` feature's -- as their `[N/M]` lines print them: what
+/// [`position`] and [`insert_after`] find a step by.
 pub mod names {
     /// The cooldown check of changed dependencies.
     pub const DEP_AGE: &str = "Dep-age";
@@ -50,7 +51,8 @@ pub mod names {
     pub const CLIPPY: &str = "Clippy";
     /// Doc comments and links.
     pub const DOC: &str = "Doc";
-    /// Licences, bans and sources; the last static gate.
+    /// Licences, bans and sources; the last of the standard static
+    /// gates, so the anchor for a project's own (and the frontend's).
     pub const DENY: &str = "Deny";
     /// The `xtask` package's tests; Coverage runs every other
     /// crate's. Its re-run, `test`, runs them all.

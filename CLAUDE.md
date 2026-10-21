@@ -675,7 +675,9 @@ just when the code compiles:
 
 The frontend gates skip only when there is no frontend at
 all. Without xtask's `frontend` feature they are not compiled
-in, and `validate` refuses to run while `frontend/` exists.
+in, and `validate` refuses to run while `frontend/` exists; it
+refuses too when `tasks_config()` (`xtask/src/helpers.rs`) sets
+no `frontend_dir`, which would make them skip.
 The dependency-cooldown gate runs **first**: it is a no-op on
 unchanged lockfiles, and fails fast on a within-cooldown
 dependency before anything compiles it. The static gates follow,
@@ -688,7 +690,7 @@ gate out by name or subcommand and says so before the first step
 and after the closing `Validate OK`; skipping Coverage still runs
 every crate's tests, in a step in its place. On a
 fresh full-stack checkout, run
-`npm --prefix frontend install` before `validate` -- the
+`npm install` inside `frontend/` before `validate` -- the
 frontend gates fail (rather than silently skipping) when
 `frontend/` exists but its `node_modules` is not
 installed.
@@ -851,7 +853,10 @@ A shared gate goes into the library's list,
 `step::standard` (`crates/rustbase-xtask/src/step.rs`), which
 also fixes the order, and its subcommand into `cli::LibCommand`
 (`crates/rustbase-xtask/src/cli.rs`), which `xtask`'s
-`XCommand` flattens in. A project's own gate is a `step()`
+`XCommand` flattens in. A shared gate behind a library feature
+stays out of that list: it offers its own `steps()`, which the
+project places, as `xtask/src/validate.rs` places
+`frontend::steps` after Deny. A project's own gate is a `step()`
 function in its own `xtask` module returning a `Step`
 (`Step::new(name, cmd, closure)`), with its own `XCommand`
 variant; `xtask/src/validate.rs` places it with

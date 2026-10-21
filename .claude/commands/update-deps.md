@@ -188,7 +188,7 @@ fresh with its age-out date.
 - **Never allow-list a fresh version without a stated
   justification.** Security fixes are the standing
   exception.
-- **Restore cwd to the repo root after any in-`frontend/`
-  npm command** before running `cargo xtask`.
+- **npm runs inside `frontend/`; `cargo xtask` runs from
+  either directory** (step 4).
 - **Never commit a red `validate`.** Back out the offending
   bump or escalate instead.
