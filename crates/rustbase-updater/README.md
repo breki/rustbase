@@ -131,8 +131,9 @@ paths, build, activation, health).
 
 ## Status
 
-Not published to crates.io yet, and neither application uses it yet:
-each switches over in its own repository. Publishing follows the
-manual procedure `rustbase-xtask` uses (`docs/xtask-library.md`,
+Published on crates.io; 0.1.0 went out on 2026-10-21, tagged
+`rustbase-updater-v0.1.0`. Neither application uses it yet: each
+switches over in its own repository. A release follows the manual
+procedure `rustbase-xtask` uses (`docs/xtask-library.md`,
 "Distribution and versioning"), with a `rustbase-updater-v` tag
 prefix.

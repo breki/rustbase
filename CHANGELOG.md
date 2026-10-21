@@ -267,6 +267,9 @@ and this project adheres to
   reach `target/validate.log`. A frontend without
   `node_modules` is told to run `npm install` inside it rather than `npm
   --prefix` (#44).
+- The starter crates rustbase and rustbase-web carry publish = false, so a stray
+  cargo publish cannot upload the template placeholders; a project that
+  publishes its own crate removes it.
 
 ### Fixed
 

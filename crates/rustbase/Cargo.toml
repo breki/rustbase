@@ -2,6 +2,9 @@
 name = "rustbase"
 version = "0.17.0"
 edition = "2024"
+# Starter code a project copies and renames, not a library: kept off
+# crates.io. Remove to publish your own crate.
+publish = false
 # TODO: update these fields for your project
 description = "A Rust project"
 license = "MIT"

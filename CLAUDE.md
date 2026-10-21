@@ -22,8 +22,8 @@ they require manual approval every time.**
 |-------|---------|
 | `crates/rustbase` | Core library and CLI binary |
 | `crates/rustbase-web` | Axum web server (optional) |
-| `crates/rustbase-xtask` | Shared xtask gates, as a library prepared for crates.io (`docs/xtask-library.md`) |
-| `crates/rustbase-updater` | Self-upgrade engine for apps updating from signed release tags, a library prepared for crates.io (`crates/rustbase-updater/README.md`) |
+| `crates/rustbase-xtask` | Shared xtask gates, as a library published on crates.io (`docs/xtask-library.md`) |
+| `crates/rustbase-updater` | Self-upgrade engine for apps updating from signed release tags, a library published on crates.io (`crates/rustbase-updater/README.md`) |
 | `xtask` | Build automation (calls `rustbase-xtask`) |
 
 The web crate is optional. For a CLI-only project,
