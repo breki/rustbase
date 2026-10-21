@@ -1,11 +1,11 @@
-// Adapted from silkboard's `silkboard-updater` crate (v0.3.0): generic
-// over the `App`, whose usage and profile replace silkboard's; see the
-// crate README, "Provenance".
+// Adapted from silkboard's `silkboard-updater` crate at silkboard tag
+// v0.3.0: generic over the `App`, whose usage and profile replace
+// silkboard's; see the crate README, "Provenance".
 
 //! Operator command parsing and reports, reusable without process I/O.
 //!
-//! Callers must serialize operations using the deployment lock; the
-//! installed entry point takes it before calling [`execute`].
+//! The crate takes no lock: the caller must hold an exclusive lock
+//! across each [`execute`], so only one operation runs at a time.
 
 use crate::{
     App, Backend, State, Version,
@@ -28,7 +28,7 @@ pub enum Operation {
     Help,
 }
 
-/// A parsed request for the app's registered adapter.
+/// A parsed request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     /// Emit machine-readable reports instead of plain text.
@@ -37,8 +37,9 @@ pub struct Request {
     pub operation: Operation,
 }
 
-/// Parse a command for app `A`. `--profile` accepts only
-/// [`App::PROFILE`]; arbitrary configuration paths are forbidden.
+/// Parse a command for app `A`. `--profile` exists only when
+/// [`App::PROFILE`] names one, and accepts only that name; arbitrary
+/// configuration paths are forbidden.
 ///
 /// # Errors
 /// Rejects unknown profiles, malformed tags and unsupported command syntax.
@@ -50,9 +51,14 @@ pub fn parse<A: App>(arguments: &[String]) -> Result<Request, Error> {
     } else {
         false
     };
-    if arguments.peek() == Some(&"--profile") {
+    // The name is checked, then not kept: it only stops a command line
+    // naming another app from running here. An app without a profile
+    // leaves `--profile` to the usage error.
+    if let Some(profile) = A::PROFILE
+        && arguments.peek() == Some(&"--profile")
+    {
         arguments.next();
-        if A::PROFILE.is_none() || arguments.next() != A::PROFILE {
+        if arguments.next() != Some(profile) {
             return Err(Error::new(
                 Stage::Configuration,
                 "application profile is not registered",
@@ -112,7 +118,8 @@ pub enum Report<P> {
     },
 }
 
-/// Execute a parsed command against a trusted, serialized backend.
+/// Execute a parsed command against a trusted backend. The caller
+/// holds its lock across the call.
 ///
 /// # Errors
 /// Reports boundary failures without treating unavailable evidence as success.
@@ -155,7 +162,7 @@ pub fn execute<A: App>(
     Ok(result)
 }
 
-/// Render the existing human interface; ineligible inspection remains a failure.
+/// Render a report as plain text; an ineligible inspection is an error.
 ///
 /// # Errors
 /// Rejects ineligible inspection and reports serialization failure.

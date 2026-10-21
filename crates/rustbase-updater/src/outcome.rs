@@ -1,5 +1,5 @@
-// Copied from silkboard's `silkboard-updater` crate (v0.3.0, MIT, same
-// owner); see the crate README, "Provenance".
+// Copied from silkboard's `silkboard-updater` crate at silkboard tag
+// v0.3.0 (MIT, same owner); see the crate README, "Provenance".
 
 //! Structured library outcomes, independent of terminal output.
 
@@ -11,7 +11,7 @@ use std::{collections::BTreeSet, fmt};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "admission", rename_all = "snake_case")]
 pub enum Admission {
-    /// Both independently installed trust gates succeeded.
+    /// The signature and every release check the app requires passed.
     Eligible {
         /// Exact admitted source identity.
         release: Release,
@@ -26,7 +26,7 @@ pub enum Admission {
         /// Non-secret explanation.
         reason: String,
     },
-    /// A compatibility backend supplied no classification.
+    /// Not admitted, and the backend gave no reason.
     NotAdmitted,
 }
 
@@ -50,7 +50,7 @@ pub struct Candidate {
     pub admission: Admission,
 }
 
-/// One serialized engine operation's successful result.
+/// The successful result of one engine operation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum Outcome {

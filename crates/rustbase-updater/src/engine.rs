@@ -1,5 +1,5 @@
-// Copied from silkboard's `silkboard-updater` crate (v0.3.0, MIT, same
-// owner); see the crate README, "Provenance".
+// Copied from silkboard's `silkboard-updater` crate at silkboard tag
+// v0.3.0 (MIT, same owner); see the crate README, "Provenance".
 
 //! Verified release selection and durable upgrade recovery.
 
@@ -159,7 +159,8 @@ pub trait Backend {
     /// Returns boundary failures without treating unavailable evidence as success.
     fn admit(&mut self, tag: &str) -> Result<Option<Release>, String>;
     /// Classify admission when the backend can distinguish waiting from rejection.
-    /// The default preserves older backends without inventing a reason.
+    /// The engine calls only this; the default derives it from `admit`
+    /// for a backend that cannot tell waiting from rejected.
     ///
     /// # Errors
     /// Returns unavailable evidence or boundary errors.

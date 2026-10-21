@@ -18,7 +18,7 @@ fn policy() -> Policy {
     }
 }
 
-/// Registers a profile name, as an app hosting several profiles would.
+/// Registers a profile name, so `--profile demo` is accepted.
 struct Demo;
 impl App for Demo {
     type Policy = Policy;
@@ -240,14 +240,18 @@ fn malformed_requests_and_wrong_admitted_tag_fail_before_build() {
 
 #[test]
 fn an_app_without_a_profile_refuses_the_option_and_uses_its_usage() {
-    for words in [&["--profile", "demo", "poll"][..], &["--profile"]] {
+    // `--profile` is not in this app's syntax, so it is a usage error.
+    for words in [
+        &["--profile", "demo", "poll"][..],
+        &["--profile"],
+        &["bogus"],
+    ] {
         let error = cli::parse::<Single>(&args(words)).unwrap_err();
-        assert_eq!(error.stage, Stage::Configuration, "{words:?}");
+        assert_eq!(
+            (error.stage, error.message.as_str()),
+            (Stage::Usage, Single::USAGE),
+            "{words:?}"
+        );
     }
-    let error = cli::parse::<Single>(&args(&["bogus"])).unwrap_err();
-    assert_eq!(
-        (error.stage, error.message.as_str()),
-        (Stage::Usage, Single::USAGE)
-    );
     assert!(cli::parse::<Single>(&args(&["--json", "poll"])).is_ok());
 }
