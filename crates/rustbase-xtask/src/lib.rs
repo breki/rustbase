@@ -186,6 +186,11 @@ pub struct Config {
     /// `name@version` dependencies allowed through the cooldown.
     /// `for_project("hoard", ...)` names it `HOARD_DEP_AGE_ALLOW`.
     pub dep_age_allow_env: String,
+    /// The committed allow-list file, relative to `root`: one
+    /// `name@version` per line, `#` comments. The cooldown gate reads
+    /// it as committed at the base it diffs against, so a change
+    /// cannot waive its own fresh dependency.
+    pub dep_age_allow_file: String,
     /// User-Agent sent to package registries (crates.io refuses
     /// requests without one).
     pub user_agent: String,
@@ -217,7 +222,8 @@ impl Config {
     }
 
     /// The defaults for a project called `project`: `project` as
-    /// `name`, `<PROJECT>_DEP_AGE_ALLOW`, `<project>-xtask-dep-age`,
+    /// `name`, `<PROJECT>_DEP_AGE_ALLOW`, `.dep-age-allow`,
+    /// `<project>-xtask-dep-age`,
     /// the default [`Thresholds`], canon
     /// [`Rules`](canon::Rules) and [record files](records::DEFAULT_FILES),
     /// no npm project to audit, and `crates/<project>/Cargo.toml` as
@@ -228,6 +234,7 @@ impl Config {
             name: project.to_owned(),
             root,
             dep_age_allow_env: format!("{prefix}_DEP_AGE_ALLOW"),
+            dep_age_allow_file: ".dep-age-allow".to_owned(),
             user_agent: format!("{project}-xtask-dep-age"),
             thresholds: Thresholds::default(),
             canon: canon::Rules::default(),

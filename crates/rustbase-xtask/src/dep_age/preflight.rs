@@ -328,12 +328,12 @@ pub fn dep_preflight(cfg: &Config) -> Result<(), String> {
         );
         return Ok(());
     }
-    Err(failure_message(&report, &cfg.dep_age_allow_env))
+    Err(failure_message(&report, cfg))
 }
 
 /// The advice for a tree preflight could not certify, naming the
-/// project's own allow-list variable (`allow_env`).
-fn failure_message(report: &Report, allow_env: &str) -> String {
+/// project's own allow file and variable.
+fn failure_message(report: &Report, cfg: &Config) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !report.dead_ends.is_empty() {
         parts.push(format!(
@@ -350,11 +350,11 @@ fn failure_message(report: &Report, allow_env: &str) -> String {
     }
     format!(
         "dep-preflight could not certify the tree -- {}.\n  Wait out the \
-         cooldown, adopt the fresh version deliberately (allow it via \
-         {allow_env}=name@version[,...] when you run `cargo xtask \
-         validate`; dep-preflight does not read it), or drop/adjust \
+         cooldown, adopt the fresh version deliberately (for `cargo xtask \
+         validate`, {}; dep-preflight reads neither), or drop/adjust \
          the dependency.",
-        parts.join("; ")
+        parts.join("; "),
+        super::gate::allow_hint(cfg)
     )
 }
 
@@ -539,11 +539,14 @@ mod tests {
             warnings: Vec::new(),
             iterations: 1,
         };
-        let msg = failure_message(&report, "HOARD_DEP_AGE_ALLOW");
+        let cfg = Config::for_project("hoard", "/r".into());
+        let msg = failure_message(&report, &cfg);
         assert!(
             msg.contains("HOARD_DEP_AGE_ALLOW=name@version[,...]"),
             "{msg}"
         );
+        assert!(msg.contains(".dep-age-allow"), "{msg}");
+        assert!(msg.contains("dep-preflight reads neither"), "{msg}");
         assert!(msg.contains("cargo xtask validate"), "{msg}");
         assert!(!msg.contains("RUSTBASE_"), "{msg}");
     }

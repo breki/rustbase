@@ -1221,15 +1221,20 @@ exits non-zero when the version is within the cooldown.
 
 `validate` enforces this automatically for changed deps via
 the `dep-age-check` step above. When you *do* adopt a
-fresh version with justification (or a security fix), name it
-in the **`RUSTBASE_DEP_AGE_ALLOW`** env var
-(`name@version`, comma-separated) so the gate passes while
-leaving an auditable record of what was waved through --
-e.g. `RUSTBASE_DEP_AGE_ALLOW=serde@1.0.999 cargo xtask
-validate`. In CI the same list comes from the repository
-variable `RUSTBASE_DEP_AGE_ALLOW` (Settings, then Variables),
-which only a maintainer can set, so a pull request cannot wave
-through its own fresh dependency.
+fresh version with justification (or a security fix), add a
+`name@version` line, with the reason as a `#` comment, to
+**`.dep-age-allow`** at the root. The gate reads that file **as
+committed at the base it diffs against**: `HEAD` locally, the
+pull request's base on `main` in CI. So the waiver lands first,
+as its own commit on `main`, and the change adopting the version
+follows; a pull request cannot wave through its own fresh
+dependency, and git keeps the record. Prune a line once its
+version clears the cooldown. For a one-off local run, the
+**`RUSTBASE_DEP_AGE_ALLOW`** env var (`name@version`,
+comma-separated) still works -- e.g.
+`RUSTBASE_DEP_AGE_ALLOW=serde@1.0.999 cargo xtask validate` --
+and CI also reads it from the maintainer-set repository variable
+of that name (Settings, then Variables).
 
 **`cargo update` interaction.** The gate checks *every*
 newly-locked registry dependency, **transitive ones included**

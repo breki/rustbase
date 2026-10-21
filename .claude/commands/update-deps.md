@@ -147,8 +147,11 @@ brand-new major), **do not** silently drop it:
   date it clears the cooldown (published date + 14 days).
 - Adopt a still-fresh version **only** with an explicit,
   user-stated justification (or a security fix). When the
-  user approves, record it in the commit and pass it through
-  the gate via `RUSTBASE_DEP_AGE_ALLOW=pkg@ver[,...]`. Never
+  user approves, add a `pkg@ver  # reason` line to
+  `.dep-age-allow` and commit it on its own, ahead of the update
+  (the gate reads the file as committed at its base; in CI that
+  is `main`, so the waiver must land there first), or pass
+  `RUSTBASE_DEP_AGE_ALLOW=pkg@ver[,...]` for a local run. Never
   add an allow entry without that stated reason.
 - **Audit vs cooldown.** `npm audit fix` and a fresh RUSTSEC
   fix both want the *newest* version, which is usually still

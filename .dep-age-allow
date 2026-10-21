@@ -1,0 +1,6 @@
+# Dependencies waved through the 14-day cooldown gate (dep-age-check).
+# One `name@version` per line, the reason as a comment, e.g.
+#   ring@0.17.9   # RUSTSEC-2026-0042; the only fix is 3 days old
+# The gate reads this file as committed at the base it diffs against
+# (HEAD locally, main in CI): commit a waiver on main before the change
+# that adopts the version. Prune a line once its version is 14 days old.

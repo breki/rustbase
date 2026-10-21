@@ -55,15 +55,16 @@ enum DepOutcome {
     /// Could not be checked (network / tool / parse); fails the
     /// gate like `Fresh`, but is reported apart from it.
     Unavailable(String),
-    /// Named in the allow env var -- skipped, never fetched.
+    /// Named in the allow file or env var -- skipped, never fetched.
     Allowed,
 }
 
 /// Fold per-dependency outcomes into the combined result.
 /// Pure, so the fresh-vs-unchecked split is unit-tested.
+/// `allow_hint` ends a fresh failure, saying how to waive one.
 fn classify_dep_age(
     outcomes: &[(String, DepOutcome)],
-    allow_env: &str,
+    allow_hint: &str,
 ) -> DepAgeResult {
     if outcomes.is_empty() {
         return DepAgeResult {
@@ -102,7 +103,7 @@ fn classify_dep_age(
         Some(format!(
             "dependencies within the {COOLDOWN_DAYS}-day cooldown: {}\n  \
              adopt only with a stated justification (security fixes \
-             exempt); allow via {allow_env}=name@version[,...]",
+             exempt); {allow_hint}",
             fresh.join("; ")
         ))
     };
@@ -111,6 +112,34 @@ fn classify_dep_age(
         error,
         unchecked,
     }
+}
+
+/// How a fresh dependency is waived, for the failure message.
+pub(super) fn allow_hint(cfg: &Config) -> String {
+    format!(
+        "allow via a `name@version` line in {} committed at the base the \
+         check diffs from (main, in CI), or {}=name@version[,...]",
+        cfg.dep_age_allow_file, cfg.dep_age_allow_env
+    )
+}
+
+/// The waived `name@version` labels: the env list, and the allow
+/// file as committed at `base` (none when it is absent there).
+fn allowed(cfg: &Config, base: &str, env: Option<&str>) -> HashSet<String> {
+    let mut allow = parse_allow(env);
+    if let Some(text) = git_show(&cfg.root, base, &cfg.dep_age_allow_file) {
+        allow.extend(parse_allow_file(&text));
+    }
+    allow
+}
+
+/// One `name@version` per line; `#` starts a comment.
+fn parse_allow_file(text: &str) -> HashSet<String> {
+    text.lines()
+        .map(|l| l.split('#').next().unwrap_or("").trim())
+        .filter(|l| !l.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Parse the comma-separated allow list into a set of
@@ -372,8 +401,8 @@ fn collect_changes(
 /// lockfiles versus `base` (`validate` passes `HEAD`). Free (no
 /// network) when the lockfiles are unchanged.
 pub fn check_changed_deps(cfg: &Config, base: &str) -> DepAgeResult {
-    let allow =
-        parse_allow(std::env::var(&cfg.dep_age_allow_env).ok().as_deref());
+    let env = std::env::var(&cfg.dep_age_allow_env).ok();
+    let allow = allowed(cfg, base, env.as_deref());
     let mut outcomes: Vec<(String, DepOutcome)> = Vec::new();
     let mut unchecked: Vec<String> = Vec::new();
 
@@ -402,7 +431,7 @@ pub fn check_changed_deps(cfg: &Config, base: &str) -> DepAgeResult {
         &mut unchecked,
     );
 
-    let mut result = classify_dep_age(&outcomes, &cfg.dep_age_allow_env);
+    let mut result = classify_dep_age(&outcomes, &allow_hint(cfg));
     // Lockfile-level entries precede the per-dep ones the
     // classifier collected.
     unchecked.extend(result.unchecked);
@@ -743,6 +772,47 @@ dependencies = [
     }
 
     #[test]
+    fn the_allow_file_takes_one_pin_per_line_with_comments() {
+        let a = parse_allow_file(
+            "# security fixes still in the cooldown\n\
+             ring@0.17.9   # RUSTSEC-2026-0042\n\
+             \n   serde@1.0.999\n#old@1.0.0\n",
+        );
+        let mut a: Vec<_> = a.into_iter().collect();
+        a.sort();
+        assert_eq!(a, ["ring@0.17.9", "serde@1.0.999"]);
+    }
+
+    #[test]
+    fn the_allow_file_counts_as_committed_at_the_base() {
+        // A pin added in the working tree, or in a commit after the
+        // base, does not count: in CI the base is main, so a change
+        // cannot waive its own fresh dependency.
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        let cfg = Config::for_project("t", repo.0.clone());
+        let file = repo.0.join(&cfg.dep_age_allow_file);
+        std::fs::write(&file, "ring@0.17.9 # fix\n").unwrap();
+        crate::test_repo::git(&repo.0, &["add", "."]);
+        crate::test_repo::git(&repo.0, &["commit", "-q", "-m", "waive"]);
+        std::fs::write(&file, "ring@0.17.9\nserde@1.0.999\n").unwrap();
+        let a = allowed(&cfg, "HEAD", Some("anyhow@1.0.80"));
+        assert!(a.contains("ring@0.17.9"), "{a:?}");
+        assert!(a.contains("anyhow@1.0.80"), "{a:?}");
+        assert!(!a.contains("serde@1.0.999"), "{a:?}");
+        // At the first commit the file did not exist: only the env.
+        let a = allowed(&cfg, "HEAD~1", None);
+        assert!(a.is_empty(), "{a:?}");
+    }
+
+    #[test]
+    fn the_hint_names_the_file_and_the_variable() {
+        let cfg = Config::for_project("my-app", "/r".into());
+        let hint = allow_hint(&cfg);
+        assert!(hint.contains(".dep-age-allow"), "{hint}");
+        assert!(hint.contains("MY_APP_DEP_AGE_ALLOW=name@version"), "{hint}");
+    }
+
+    #[test]
     fn classify_dep_age_empty_is_clean() {
         let r = classify_dep_age(&[], "ALLOW");
         assert!(r.error.is_none());
@@ -760,11 +830,11 @@ dependencies = [
                     DepOutcome::Fresh("published 2d ago".into()),
                 ),
             ],
-            "MY_ALLOW",
+            "allow via MY_ALLOW",
         );
         let err = r.error.unwrap();
         assert!(err.contains("b@2.0.0"));
-        assert!(err.contains("MY_ALLOW=name@version"), "{err}");
+        assert!(err.ends_with("; allow via MY_ALLOW"), "{err}");
         assert!(err.contains("published 2d ago"));
         assert!(r.detail.contains("1 fresh"));
         assert!(r.detail.contains("1 aged"));
