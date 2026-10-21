@@ -350,8 +350,10 @@ fn failure_message(report: &Report, allow_env: &str) -> String {
     }
     format!(
         "dep-preflight could not certify the tree -- {}.\n  Wait out the \
-         cooldown, adopt the fresh version deliberately (record it in \
-         {allow_env} when you commit), or drop/adjust the dependency.",
+         cooldown, adopt the fresh version deliberately (allow it via \
+         {allow_env}=name@version[,...] when you run `cargo xtask \
+         validate`; dep-preflight does not read it), or drop/adjust \
+         the dependency.",
         parts.join("; ")
     )
 }
@@ -538,7 +540,11 @@ mod tests {
             iterations: 1,
         };
         let msg = failure_message(&report, "HOARD_DEP_AGE_ALLOW");
-        assert!(msg.contains("HOARD_DEP_AGE_ALLOW"), "{msg}");
+        assert!(
+            msg.contains("HOARD_DEP_AGE_ALLOW=name@version[,...]"),
+            "{msg}"
+        );
+        assert!(msg.contains("cargo xtask validate"), "{msg}");
         assert!(!msg.contains("RUSTBASE_"), "{msg}");
     }
 

@@ -180,8 +180,9 @@ pub struct Config {
     /// The workspace root: where `Cargo.lock` lives and where
     /// `git` and `cargo` run.
     pub root: PathBuf,
-    /// Name of the environment variable listing
+    /// Name of the environment variable listing comma-separated
     /// `name@version` dependencies allowed through the cooldown.
+    /// `for_project("hoard", ...)` names it `HOARD_DEP_AGE_ALLOW`.
     pub dep_age_allow_env: String,
     /// Name of the environment variable that, set to `1`, makes the
     /// cooldown step fail when it cannot finish instead of warning
