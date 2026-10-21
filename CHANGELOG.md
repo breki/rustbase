@@ -397,6 +397,10 @@ and this project adheres to
   `dep-age npm` refuses `created` / `modified` and versions npm has
   unpublished, rather than reporting the date `time` keeps for them; the gate
   lists these as unchecked, which fails it too (#69).
+- vitest 4.1.11 -> 4.1.12 (with its @vitest/* packages) in the frontend dev
+  dependencies, for GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp (@vitest/mocker:
+  manual-mock code injection, Windows backslash traversal of the redirect
+  allowlist).
 
 ### Removed
 
