@@ -12,7 +12,7 @@
 //! its `node_modules` not installed, so a missing install cannot read
 //! as a pass.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::process::{self, Captured};
 use crate::step::{Step, names};
@@ -149,16 +149,27 @@ pub fn run(cfg: &Config, gate: Gate) -> Result<Outcome, Failure> {
         Action::NotInstalled => Err(not_installed(&dir).into()),
         Action::Run => {
             let c = process::npm(&dir, &["run", gate.script()])?;
-            outcome(gate, &c, &write_log(&cfg.root, gate, &c))
+            let log = write_log(&cfg.root, gate, &c);
+            outcome(gate, &c, log.as_deref().map_err(String::as_str))
         }
     }
 }
 
-/// Write a run's whole output to `target/<subcommand>.log` under
-/// `root`, replacing the last run's, and return that relative path.
-/// The file is for reading: nothing parses it.
-fn write_log(root: &Path, gate: Gate, c: &Captured) -> Result<String, String> {
-    let rel = format!("target/{}.log", gate.subcommand());
+/// Write a finished run's whole output to `target/<subcommand>.log`
+/// under `root`, replacing the last run's, and return the log's
+/// absolute path, made so even when `root` is relative. The file is
+/// for reading: nothing parses it.
+///
+/// When two runs of the same subcommand overlap (Prettier's fix and
+/// `--check` modes share `frontend-fmt.log`), the later run's log is
+/// the one left; its first two lines give that run's script and exit
+/// status.
+fn write_log(root: &Path, gate: Gate, c: &Captured) -> Result<PathBuf, String> {
+    let path = root
+        .join("target")
+        .join(format!("{}.log", gate.subcommand()));
+    let path = std::path::absolute(&path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     let text = format!(
         "$ npm run {}\n{}\n--- stdout ---\n{}\n--- stderr ---\n{}",
         gate.script(),
@@ -166,10 +177,11 @@ fn write_log(root: &Path, gate: Gate, c: &Captured) -> Result<String, String> {
         c.stdout,
         c.stderr
     );
-    std::fs::create_dir_all(root.join("target"))
-        .and_then(|()| std::fs::write(root.join(&rel), text))
-        .map(|()| rel.clone())
-        .map_err(|e| format!("{rel}: {e}"))
+    path.parent()
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| std::fs::write(&path, text))
+        .map(|()| path.clone())
+        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn not_installed(dir: &Path) -> String {
@@ -182,18 +194,19 @@ fn not_installed(dir: &Path) -> String {
 
 /// Map a finished script to the gate's result, reported as every gate
 /// reports a failed run: the end of the tool's stderr, else its stdout.
-/// The summary names the log holding the whole run, since the summary
-/// is the one line no report cap cuts.
+/// The summary names the log holding the whole run, since
+/// `Failure::report` always prints the summary and cuts only the items
+/// (to `STEP_LINES` under `validate`).
 fn outcome(
     gate: Gate,
     c: &Captured,
-    log: &Result<String, String>,
+    log: Result<&Path, &str>,
 ) -> Result<Outcome, Failure> {
     if c.ok {
         return Ok(Outcome::Passed);
     }
     let saved = match log {
-        Ok(path) => format!("full output in {path}"),
+        Ok(path) => format!("full output in {}", path.display()),
         Err(e) => format!("output not saved: {e}"),
     };
     let summary = format!("{} ({}); {saved}", gate.failure(), c.status);
@@ -222,7 +235,6 @@ pub fn steps(cfg: &Config, check: bool) -> Vec<Step> {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
 
     use super::*;
 
@@ -235,21 +247,35 @@ mod tests {
         }
     }
 
-    /// The log as `write_log` names it for the Dupes gate.
-    const LOG: &str = "target/frontend-dupes.log";
+    fn passed(stdout: &str) -> Captured {
+        Captured {
+            ok: true,
+            status: "exit status: 0".into(),
+            stdout: stdout.into(),
+            stderr: String::new(),
+        }
+    }
+
+    /// Where `write_log` puts `gate`'s log under a root of `/r`.
+    fn log(gate: Gate) -> PathBuf {
+        PathBuf::from("/r/target").join(format!("{}.log", gate.subcommand()))
+    }
 
     #[test]
     fn a_failure_names_the_log_or_says_why_there_is_none() {
         let c = failed("", "boom\n");
-        let f = outcome(Gate::Test, &c, &Ok("target/frontend-test.log".into()))
-            .unwrap_err();
+        let path = log(Gate::Test);
+        let f = outcome(Gate::Test, &c, Ok(&path)).unwrap_err();
         assert_eq!(
             f.summary,
-            "frontend unit tests failed (exit status: 1); \
-             full output in target/frontend-test.log"
+            format!(
+                "frontend unit tests failed (exit status: 1); \
+                 full output in {}",
+                path.display()
+            )
         );
         assert_eq!(f.items, ["boom"]);
-        let f = outcome(Gate::Test, &c, &Err("denied".into())).unwrap_err();
+        let f = outcome(Gate::Test, &c, Err("denied")).unwrap_err();
         assert_eq!(
             f.summary,
             "frontend unit tests failed (exit status: 1); \
@@ -258,25 +284,24 @@ mod tests {
     }
 
     #[test]
-    fn the_log_holds_the_last_run_whole() {
+    fn the_log_holds_the_last_run_whole_at_an_absolute_path() {
+        // Absolute, so the path in a failure resolves from any directory.
         let dir = crate::test_repo::empty_dir();
+        let path = dir.0.join("target/frontend-test.log");
         let first = failed("RUN v4\n FAIL a.test.ts\n", "AssertionError\n");
-        assert_eq!(
-            write_log(&dir.0, Gate::Test, &first),
-            Ok("target/frontend-test.log".into())
-        );
-        let log =
-            fs::read_to_string(dir.0.join("target/frontend-test.log")).unwrap();
+        assert_eq!(write_log(&dir.0, Gate::Test, &first), Ok(path.clone()));
+        let text = fs::read_to_string(&path).unwrap();
         for part in ["npm run test", "exit status: 1", "FAIL a.test.ts"] {
-            assert!(log.contains(part), "{part}: {log}");
+            assert!(text.contains(part), "{part}: {text}");
         }
-        assert!(log.contains("AssertionError"), "{log}");
-        let mut second = failed("all passed\n", "");
-        second.ok = true;
-        write_log(&dir.0, Gate::Test, &second).unwrap();
-        let log =
-            fs::read_to_string(dir.0.join("target/frontend-test.log")).unwrap();
-        assert!(log.contains("all passed") && !log.contains("FAIL"), "{log}");
+        assert!(text.contains("AssertionError"), "{text}");
+        write_log(&dir.0, Gate::Test, &passed("all passed\n")).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("exit status: 0"), "{text}");
+        assert!(text.contains("all passed"), "{text}");
+        for stale in ["exit status: 1", "FAIL"] {
+            assert!(!text.contains(stale), "{stale}: {text}");
+        }
     }
 
     #[test]
@@ -285,7 +310,26 @@ mod tests {
         let dir = crate::test_repo::empty_dir();
         fs::write(dir.0.join("target"), "").unwrap();
         let err = write_log(&dir.0, Gate::Check, &failed("", "")).unwrap_err();
-        assert!(err.contains("target/frontend-check.log"), "{err}");
+        assert!(err.contains("target"), "{err}");
+        // The folder exists but the write fails: the log is a folder.
+        let dir = crate::test_repo::empty_dir();
+        fs::create_dir_all(dir.0.join("target/frontend-check.log")).unwrap();
+        let err = write_log(&dir.0, Gate::Check, &failed("", "")).unwrap_err();
+        assert!(err.contains("frontend-check.log"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_relative_root_still_names_an_absolute_log() {
+        // `Config::root` may be relative; reach the temp dir from the
+        // working directory by `..` steps.
+        let dir = crate::test_repo::empty_dir();
+        let cwd = std::env::current_dir().unwrap();
+        let up = "../".repeat(cwd.components().count() - 1);
+        let rel = PathBuf::from(up).join(dir.0.strip_prefix("/").unwrap());
+        let path = write_log(&rel, Gate::Test, &passed("")).unwrap();
+        assert!(path.is_absolute(), "{}", path.display());
+        assert!(path.is_file(), "{}", path.display());
     }
 
     #[test]
@@ -298,10 +342,9 @@ mod tests {
 
     #[test]
     fn a_passing_script_passes() {
-        let mut ok = failed("", "");
-        ok.ok = true;
+        let ok = passed("");
         assert_eq!(
-            outcome(Gate::Test, &ok, &Ok(LOG.into())),
+            outcome(Gate::Test, &ok, Ok(&log(Gate::Test))),
             Ok(Outcome::Passed)
         );
         assert_eq!(Gate::Dupes.ok_detail(), "<= threshold");
@@ -316,12 +359,19 @@ mod tests {
         let stderr = "Using config from .jscpd.json\n\
             ERROR: jscpd found too many duplicates (12.0%) over threshold \
             (6.0%)\n";
-        let f = outcome(Gate::Dupes, &failed(stdout, stderr), &Ok(LOG.into()))
-            .unwrap_err();
+        let f = outcome(
+            Gate::Dupes,
+            &failed(stdout, stderr),
+            Ok(&log(Gate::Dupes)),
+        )
+        .unwrap_err();
         assert_eq!(
             f.summary,
-            "frontend duplication exceeds threshold (exit status: 1); \
-             full output in target/frontend-dupes.log"
+            format!(
+                "frontend duplication exceeds threshold (exit status: 1); \
+                 full output in {}",
+                log(Gate::Dupes).display()
+            )
         );
         assert_eq!(f.items.last().unwrap(), stderr.lines().nth(1).unwrap());
     }
@@ -333,24 +383,26 @@ mod tests {
             /w/frontend/src/zz_type.ts:1:7\n\
             Error: Type 'string' is not assignable to type 'number'. \n\
             svelte-check found 1 error and 0 warnings in 1 file\n";
-        let f = outcome(Gate::Check, &failed(stdout, ""), &Ok(LOG.into()))
-            .unwrap_err();
+        let f =
+            outcome(Gate::Check, &failed(stdout, ""), Ok(&log(Gate::Check)))
+                .unwrap_err();
         assert!(f.items.iter().any(|i| i.ends_with("zz_type.ts:1:7")), "{f}");
         assert!(f.items.iter().any(|i| i.starts_with("Error: Type")), "{f}");
     }
 
     #[test]
     fn a_silent_failure_still_says_something() {
-        let f =
-            outcome(Gate::Check, &failed("", ""), &Ok(LOG.into())).unwrap_err();
+        let f = outcome(Gate::Check, &failed("", ""), Ok(&log(Gate::Check)))
+            .unwrap_err();
         assert_eq!(f.items, ["exit status: 1, and no output"]);
     }
 
     #[test]
     fn npms_missing_script_error_is_what_gets_reported() {
         let stderr = "npm error Missing script: \"dupes\"\n";
-        let f = outcome(Gate::Dupes, &failed("", stderr), &Ok(LOG.into()))
-            .unwrap_err();
+        let f =
+            outcome(Gate::Dupes, &failed("", stderr), Ok(&log(Gate::Dupes)))
+                .unwrap_err();
         assert_eq!(f.items, ["npm error Missing script: \"dupes\""]);
     }
 

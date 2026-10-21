@@ -263,8 +263,8 @@ and this project adheres to
   would not check looks from the root too. A failing script is reported as
   every gate reports a failed run: the last 10 lines of the tool's stderr,
   else its stdout, of which `validate` shows the first 5 and the standalone
-  command all 10 (per-tool key lines: #55), as part of the error, so they also
-  reach `target/validate.log`. A frontend without
+  command all 10 (the whole run is kept in a log: #55), as part of the
+  error, so they also reach `target/validate.log`. A frontend without
   `node_modules` is told to run `npm install` inside it rather than `npm
   --prefix` (#44).
 - The starter crates rustbase and rustbase-web carry publish = false, so a stray
@@ -272,8 +272,8 @@ and this project adheres to
   publishes its own crate removes it.
 - A failing frontend gate names target/frontend-<gate>.log, which holds the
   whole run of its tool (both streams, rewritten each run), so the failing test
-  names and counts the short report cuts are one file away. The gates still
-  parse nothing (#55).
+  names and counts the short report cuts are one file away. The log is for
+  reading; the gates do not parse the tools' output (#55).
 
 ### Fixed
 
