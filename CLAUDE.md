@@ -686,8 +686,9 @@ Clippy, Doc, Deny, then the frontend static gates. The dynamic
 gates come last: the frontend and Rust tests, Coverage, then
 Audit, which needs the network. A failed step prints the single
 command to re-run just that gate. `validate --skip <gate>` leaves a
-gate out by name or subcommand and says so before the first step;
-skipping Coverage still runs the workspace's tests in its place. On a
+gate out by name or subcommand and says so before the first step
+and after the closing `Validate OK`; skipping Coverage still runs
+every crate's tests, in a step in its place. On a
 fresh full-stack checkout, run
 `npm --prefix frontend install` before `validate` -- the
 frontend gates fail (rather than silently skipping) when

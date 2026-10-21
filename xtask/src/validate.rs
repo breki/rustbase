@@ -11,7 +11,11 @@ use crate::{frontend_check, frontend_dupes, frontend_fmt, frontend_test};
 /// The library's standard gates (`step::standard`, which gives their
 /// order), with this project's frontend gates after Deny (three static
 /// ones, then the frontend tests, ahead of the Rust tests), less any
-/// gate `skip` names; the skipped gates' names come back too.
+/// gate `skip` names; the skipped gates' names come back too. When
+/// Coverage is skipped but Test is not, a `Test (workspace)` step takes
+/// Coverage's slot and the Test gate goes too, unlisted: the stand-in
+/// runs its tests. A name matching no gate, or a set leaving none, is
+/// refused.
 ///
 /// The `[N/M]` numbering follows whichever gates are compiled in.
 fn steps(
@@ -30,45 +34,47 @@ fn steps(
             frontend_test::step(),
         ],
     )?;
-    // The gates ahead of Coverage, so a stand-in takes its slot.
-    let before_coverage: Vec<&str> =
-        step::position(&steps, step::names::COVERAGE)
-            .map(|i| steps[..i].iter().map(Step::name).collect())
-            .unwrap_or_default();
-    let skipped = skip_gates(&mut steps, skip)?;
-    // The stand-in is a `test` gate, so `--skip test` leaves it out
-    // too. It cannot be skipped by its own name: it does not exist
-    // yet when `skip_gates` checks the names.
-    let stand_in_skipped = skip.iter().any(|n| n.eq_ignore_ascii_case("test"));
-    if skipped.contains(&step::names::COVERAGE) && !stand_in_skipped {
-        // Coverage is where the library runs the workspace's tests.
-        let cfg = tasks_config();
-        let at = steps
-            .iter()
-            .filter(|s| before_coverage.contains(&s.name()))
-            .count();
-        steps.insert(
-            at,
-            Step::new(WORKSPACE_TESTS, "test", move || {
-                cargo_test::run(&cfg, cargo_test::Options::default())
-                    .map_err(|f| f.to_string())?;
-                Ok(String::new())
-            }),
-        );
+    let skipped = skipped_gates(&steps, skip)?;
+    if skipped.contains(&step::names::COVERAGE)
+        && !skipped.contains(&step::names::TEST)
+    {
+        // Coverage runs every crate's tests but xtask's, and the Test
+        // gate runs xtask's. The stand-in runs them all, so it replaces
+        // both. With Test skipped too, it is never added.
+        if let Some(i) = step::position(&steps, step::names::COVERAGE) {
+            steps[i] = workspace_tests();
+        }
+        steps.retain(|s| s.name() != step::names::TEST);
+    }
+    steps.retain(|s| !skipped.contains(&s.name()));
+    if steps.is_empty() {
+        // It would end "Validate OK" having run nothing.
+        return Err("--skip leaves out every gate; nothing to validate".into());
     }
     Ok((steps, skipped))
+}
+
+/// Every crate's tests, xtask's included, run where Coverage would
+/// have run the rest.
+fn workspace_tests() -> Step {
+    let cfg = tasks_config();
+    Step::new(WORKSPACE_TESTS, "test", move || {
+        cargo_test::run(&cfg, cargo_test::Options::default())
+            .map_err(|f| f.to_string())?;
+        Ok(String::new())
+    })
 }
 
 /// The step that stands in for Coverage when it is skipped.
 const WORKSPACE_TESTS: &str = "Test (workspace)";
 
-/// Remove each gate `skip` names, matched without case against its
-/// name or its subcommand, and return the removed gates' names in run
-/// order. Every name is matched against the full list first, so a
-/// repeat is harmless, while a name matching no gate is refused: a
-/// typo must not turn into a run that skipped nothing.
-fn skip_gates(
-    steps: &mut Vec<Step>,
+/// The names of the gates `skip` names, matched without case against
+/// each gate's name or subcommand, in run order. A name matching no
+/// gate is refused: a typo must not turn into a run that skipped
+/// nothing. The gates are walked, keeping each that any name hits, so
+/// `--skip coverage --skip Coverage` reports Coverage once.
+fn skipped_gates(
+    steps: &[Step],
     skip: &[String],
 ) -> Result<Vec<&'static str>, String> {
     let hit = |s: &Step, name: &str| {
@@ -82,20 +88,19 @@ fn skip_gates(
             gates.join(", ")
         ));
     }
-    let skipped = |s: &Step| skip.iter().any(|n| hit(s, n));
-    let names = steps
+    Ok(steps
         .iter()
-        .filter(|s| skipped(s))
+        .filter(|s| skip.iter().any(|n| hit(s, n)))
         .map(Step::name)
-        .collect();
-    steps.retain(|s| !skipped(s));
-    Ok(names)
+        .collect())
 }
 
-/// Run every gate, printing one `[N/M]` line each. `check` makes the
-/// format gates read-only instead of fixing in place, for CI or
-/// before partial staging, where a rewrite would sweep unrelated
-/// drift into the working tree.
+/// Run every gate except those `skip` names, printing one `[N/M]` line
+/// each; a partial run names its skipped gates before the first step
+/// and after a passing run's last line. `check` makes the format gates
+/// read-only instead of fixing in place, for CI or before partial
+/// staging, where a rewrite would sweep unrelated drift into the
+/// working tree.
 pub fn validate(check: bool, skip: &[String]) -> Result<(), String> {
     // Opened first, so a failure at any later point reaches the log.
     let tee = open_log(&tasks_config().root)?;
@@ -105,11 +110,17 @@ pub fn validate(check: bool, skip: &[String]) -> Result<(), String> {
             Path::new("frontend/package.json").exists(),
         )?;
         let (steps, skipped) = steps(check, skip)?;
+        // Said first and last, so neither the head nor the tail of a
+        // partial run reads as a full one.
+        let names = skipped.join(", ");
         if !skipped.is_empty() {
-            // Said first, so a partial run is never read as a full one.
-            tee.println(&format!("Skipping: {}", skipped.join(", ")));
+            tee.println(&format!("Skipping: {names}"));
         }
-        step::run_all(steps, &tee)
+        step::run_all(steps, &tee)?;
+        if !skipped.is_empty() {
+            tee.println(&format!("Partial run: skipped {names}"));
+        }
+        Ok(())
     })();
     record_failure(&tee, &result);
     result
@@ -226,6 +237,19 @@ mod tests {
     }
 
     #[test]
+    fn skipping_every_gate_is_refused() {
+        // A run with no gate would end "Validate OK" having run nothing.
+        let all: Vec<String> = steps(false, &[])
+            .unwrap()
+            .0
+            .iter()
+            .map(|s| s.cmd().to_owned())
+            .collect();
+        let err = steps(false, &all).err().unwrap();
+        assert!(err.contains("every gate"), "{err}");
+    }
+
+    #[test]
     fn skipping_an_unknown_gate_is_refused() {
         // A typo would otherwise skip nothing and read as a full run.
         let err = steps(false, &["covrage".into()]).err().unwrap();
@@ -250,20 +274,38 @@ mod tests {
     }
 
     #[test]
-    fn skipping_coverage_still_runs_the_workspace_tests() {
-        // Coverage is where the library runs the workspace's tests,
-        // so leaving it out must not leave them out.
-        let names = names_without(&["coverage"]);
-        let tests = names.iter().position(|n| *n == WORKSPACE_TESTS);
-        let xtask = names.iter().position(|n| *n == step::names::TEST);
-        assert_eq!(tests, xtask.map(|i| i + 1), "{names:?}");
-        assert!(!names_without(&[]).contains(&WORKSPACE_TESTS));
+    fn skipping_coverage_runs_every_crates_tests_once_in_its_place() {
+        // Coverage is where the library runs the workspace's tests, so
+        // a stand-in takes its slot. It runs xtask's tests too, so the
+        // separate xtask step goes rather than running them twice.
+        let full = names_without(&[]);
+        let expected: Vec<&str> = full
+            .iter()
+            .filter(|n| **n != step::names::TEST)
+            .map(|n| {
+                if *n == step::names::COVERAGE {
+                    WORKSPACE_TESTS
+                } else {
+                    n
+                }
+            })
+            .collect();
+        assert_eq!(names_without(&["coverage"]), expected);
     }
 
     #[test]
-    fn skipping_coverage_and_test_runs_no_tests_and_keeps_dep_age_first() {
-        // The stand-in is a `test` gate too, so `--skip test` leaves
-        // it out; nothing may land ahead of the cooldown check.
+    fn skipping_coverage_and_the_xtask_tests_by_name_runs_no_rust_tests() {
+        // The same as `--skip test`: one matching rule for name and
+        // subcommand alike.
+        let names = names_without(&["coverage", "Test (xtask only)"]);
+        assert!(!names.contains(&WORKSPACE_TESTS), "{names:?}");
+        assert!(!names.contains(&step::names::TEST), "{names:?}");
+    }
+
+    #[test]
+    fn skipping_coverage_and_test_runs_no_rust_tests_and_keeps_dep_age_first() {
+        // With Test skipped the stand-in is never added, and no step
+        // lands ahead of Dep-age, which vets what the tests compile.
         let names = names_without(&["coverage", "test"]);
         assert_eq!(names.first(), Some(&step::names::DEP_AGE), "{names:?}");
         assert!(!names.contains(&WORKSPACE_TESTS), "{names:?}");

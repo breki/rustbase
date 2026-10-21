@@ -50,16 +50,17 @@ struct Cli {
 enum XCommand {
     #[command(flatten)]
     Lib(LibCommand),
-    /// Run fmt + clippy + tests + coverage + duplication
+    /// Run every gate in order (CLAUDE.md, Definition of Done)
     Validate {
         /// Check formatting read-only (`fmt --check`)
         /// instead of auto-fixing it in place. Use in CI
         /// or before partial staging.
         #[arg(long)]
         check: bool,
-        /// Leave a gate out of this run, by its name or
-        /// subcommand (`--skip coverage --skip dupes`);
-        /// repeatable
+        /// Leave a gate out of this run, by its subcommand
+        /// (`coverage`, `dupes`, `test` for the xtask tests)
+        /// or its name; repeatable. An unknown name is refused
+        /// with the list
         #[arg(long, value_name = "GATE")]
         skip: Vec<String>,
     },
