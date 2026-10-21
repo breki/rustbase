@@ -34,8 +34,8 @@ pub(super) fn fetch_registry(
         // crates.io rejects requests without a User-Agent.
         // Bounded timeouts so a reachable-but-hanging registry
         // cannot stall the `validate` gate indefinitely: a
-        // timeout is a non-zero exit -> Unavailable -> a
-        // non-fatal warning, the intended offline degrade.
+        // timeout is a non-zero exit -> Unavailable, which
+        // leaves the dependency unchecked and fails the gate.
         .args([
             "-sSfL",
             "--connect-timeout",
@@ -58,8 +58,7 @@ pub(super) fn fetch_registry(
 
 /// `git show <base>:<rel>` in `root`. `None` when the path is
 /// absent at `base` or git can't run (no commit yet, not a
-/// repo) -- the caller degrades that to a warning, never a hard
-/// failure.
+/// repo); the caller decides what that means.
 pub(super) fn git_show(root: &Path, base: &str, rel: &str) -> Option<String> {
     let output = Command::new("git")
         .current_dir(root)

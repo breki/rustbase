@@ -1157,12 +1157,15 @@ Five `cargo xtask` commands guard the dependency tree:
   commit that leaves the lockfiles untouched. A *whole-tree* gate is
   deliberately avoided: it would flag every already-locked
   version on every routine update. A check that cannot finish
-  (unreachable registry, missing `HEAD` baseline, unreadable
-  `Cargo.lock`) **fails**, inside `validate` as well as standalone:
-  unlike `audit`, it never degrades to a warning, because a
-  dependency whose age could not be checked is exactly the one a
-  flaky connection would wave through. Offline work is not blocked
-  by it: an unchanged lockfile needs no network.
+  (unreachable registry, missing `HEAD` baseline, an unreadable or
+  unparseable lockfile) **fails**, inside `validate` as well as
+  standalone: unlike `audit`, it never degrades to a warning,
+  because a dependency whose age could not be checked is exactly
+  the one a flaky connection would wave through. Offline work is
+  not blocked by it: an unchanged lockfile needs no network. With
+  no `HEAD` at all (before the first commit, or a source tarball)
+  there is nothing to diff against and no allow-list entry can
+  help: commit first, or run `cargo xtask validate --skip dep-age`.
   **CI runs the standalone command** (the `dep-age` job in
   `.github/workflows/ci.yml`) with `--base` set to the commit the
   pull request or push started from -- in CI the checkout *is*

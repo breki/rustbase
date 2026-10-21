@@ -11,16 +11,9 @@
 //!
 //! - [`dep_age`] -- the on-demand `cargo xtask dep-age
 //!   <npm|cargo> <pkg> [version]` query for a single package.
-//! - [`check_changed_deps`] -- the `validate` gate. It checks
-//!   only the `(name, version)` pairs newly present in the
-//!   working-tree lockfiles versus `HEAD`, so it costs nothing
-//!   (no network) on the common commit that leaves the
-//!   lockfiles untouched, and fires exactly at the moment a
-//!   dependency is adopted. A *whole-tree* continuous gate is
-//!   deliberately avoided -- it would flag every already-locked
-//!   version on every routine update; the changed-deps scope
-//!   is what makes an automatic gate tolerable. Its
-//!   implementation lives in the `gate` submodule.
+//! - [`check_changed_deps`] -- the changed-dependencies gate
+//!   behind `validate` and `dep-age-check`; the `gate`
+//!   submodule's doc says what it diffs and why.
 //!
 //! Registry queries shell out to `curl` (avoids adding an
 //! HTTP stack to xtask); the date math is dependency-free so
@@ -36,6 +29,7 @@ mod preflight;
 
 use io::{fetch_registry, today_days};
 
+pub(crate) use gate::verdict;
 pub use gate::{DepAgeResult, check_changed_deps, dep_age_check};
 pub use preflight::dep_preflight;
 

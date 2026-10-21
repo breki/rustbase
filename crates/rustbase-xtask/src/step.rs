@@ -131,7 +131,7 @@ pub fn standard(cfg: &Config, check: bool) -> Vec<Step> {
     let c = cfg.clone();
     let mut steps =
         vec![Step::new(names::DEP_AGE, "dep-age-check", move || {
-            dep_age_verdict(dep_age::check_changed_deps(&c, "HEAD"))
+            dep_age::verdict(dep_age::check_changed_deps(&c, "HEAD"))
         })];
     let c = cfg.clone();
     steps.push(Step::new(names::FMT, "fmt", move || {
@@ -257,22 +257,6 @@ fn elapsed(start: Instant) -> String {
     format!("{:.1}s", start.elapsed().as_secs_f64())
 }
 
-/// The Dep-age step's result: a fresh dependency fails, and so does a
-/// check that could not finish -- unlike Audit, never a warning. An
-/// unchanged lockfile needs no network, so offline runs still pass.
-fn dep_age_verdict(r: dep_age::DepAgeResult) -> Result<String, String> {
-    if let Some(err) = r.error {
-        return Err(err);
-    }
-    if !r.warnings.is_empty() {
-        return Err(format!(
-            "dep-age could not complete: {}",
-            r.warnings.join("; ")
-        ));
-    }
-    Ok(r.detail)
-}
-
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
@@ -318,8 +302,10 @@ mod tests {
             let name = step.name();
             match name {
                 names::AUDIT => {}
-                // The empty dir has no Cargo.lock to check.
-                names::DEP_AGE => assert!(step.run().is_err()),
+                names::DEP_AGE => {
+                    let e = step.run().unwrap_err();
+                    assert!(e.contains("Cargo.lock: cannot read"), "{e}");
+                }
                 names::RECORDS => {
                     let d = step.run().unwrap();
                     assert!(
@@ -433,22 +419,5 @@ mod tests {
             "[1/1] VeryLongStepName OK"
         );
         assert!(elapsed(Instant::now()).ends_with('s'));
-    }
-
-    #[test]
-    fn dep_age_fails_when_it_cannot_finish() {
-        let incomplete = || dep_age::DepAgeResult {
-            detail: "1 changed: 0 aged, 1 unchecked".into(),
-            error: None,
-            warnings: vec!["a@1.0.0: registry unreachable".into()],
-        };
-        let err = dep_age_verdict(incomplete()).unwrap_err();
-        assert!(err.contains("registry unreachable"), "{err}");
-        let done = dep_age::DepAgeResult {
-            detail: "no dependency changes".into(),
-            error: None,
-            warnings: Vec::new(),
-        };
-        assert_eq!(dep_age_verdict(done).unwrap(), "no dependency changes");
     }
 }

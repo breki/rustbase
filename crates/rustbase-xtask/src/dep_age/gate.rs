@@ -32,7 +32,7 @@ use super::{
 use crate::Config;
 
 /// Combined outcome of the changed-deps gate. Both `error` and
-/// `warnings` fail it, inside `validate` and standalone; they are
+/// `unchecked` fail it, inside `validate` and standalone; they are
 /// kept apart because they call for different fixes.
 pub struct DepAgeResult {
     /// Human-readable detail for the step line.
@@ -41,9 +41,8 @@ pub struct DepAgeResult {
     /// cooldown.
     pub error: Option<String>,
     /// Checks that could not finish (missing baseline, unreachable
-    /// registry, unparseable response). Despite the name, these
-    /// fail the gate too.
-    pub warnings: Vec<String>,
+    /// registry, unparseable response).
+    pub unchecked: Vec<String>,
 }
 
 /// Per-dependency check outcome.
@@ -53,15 +52,15 @@ enum DepOutcome {
     Aged,
     /// Within the cooldown window (fatal); carries the reason.
     Fresh(String),
-    /// Could not be checked (network / tool / parse) -- a
-    /// non-fatal warning, mirroring the audit gate offline.
+    /// Could not be checked (network / tool / parse); fails the
+    /// gate like `Fresh`, but is reported apart from it.
     Unavailable(String),
     /// Named in the allow env var -- skipped, never fetched.
     Allowed,
 }
 
 /// Fold per-dependency outcomes into the combined result.
-/// Pure, so the fatal-vs-warning boundary is unit-tested.
+/// Pure, so the fresh-vs-unchecked split is unit-tested.
 fn classify_dep_age(
     outcomes: &[(String, DepOutcome)],
     allow_env: &str,
@@ -70,11 +69,11 @@ fn classify_dep_age(
         return DepAgeResult {
             detail: "no dependency changes".into(),
             error: None,
-            warnings: Vec::new(),
+            unchecked: Vec::new(),
         };
     }
     let mut fresh: Vec<String> = Vec::new();
-    let mut warnings: Vec<String> = Vec::new();
+    let mut unchecked: Vec<String> = Vec::new();
     let (mut aged, mut allowed) = (0usize, 0usize);
     for (label, outcome) in outcomes {
         match outcome {
@@ -82,20 +81,20 @@ fn classify_dep_age(
             DepOutcome::Allowed => allowed += 1,
             DepOutcome::Fresh(why) => fresh.push(format!("{label} ({why})")),
             DepOutcome::Unavailable(reason) => {
-                warnings.push(format!("{label}: {reason}"));
+                unchecked.push(format!("{label}: {reason}"));
             }
         }
     }
-    // `warnings.len()` is the count of Unavailable outcomes.
+    // `unchecked.len()` is the count of Unavailable outcomes.
     // Including it keeps the sub-counts reconciling with the
-    // "N changed" total in the degraded-network case (where
+    // "N changed" total when the registry is unreachable (where
     // nothing was actually checked).
     let detail = format!(
         "{} changed: {aged} aged, {allowed} allow-listed, {} fresh, \
          {} unchecked",
         outcomes.len(),
         fresh.len(),
-        warnings.len(),
+        unchecked.len(),
     );
     let error = if fresh.is_empty() {
         None
@@ -110,7 +109,7 @@ fn classify_dep_age(
     DepAgeResult {
         detail,
         error,
-        warnings,
+        unchecked,
     }
 }
 
@@ -136,8 +135,7 @@ fn parse_allow(spec: Option<&str>) -> HashSet<String> {
 /// returned: local workspace crates (no `source`, e.g. this
 /// project's own crates on a version bump) and git deps
 /// (`source = "git+..."`) have no crates.io publish date to
-/// check, so including them would spuriously warn on every
-/// release commit.
+/// check, so including them would fail every release commit.
 pub(super) fn parse_cargo_lock(text: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut name: Option<String> = None;
@@ -183,17 +181,12 @@ fn unquote(s: &str) -> String {
 /// Only entries whose `resolved` is an `http(s)` tarball URL
 /// are returned -- the root package (empty key), workspace
 /// links (`link: true`, relative `resolved`) and `file:` deps
-/// have no npm-registry publish date to check. An unparseable
-/// / older-format lockfile yields an empty list (nothing to
-/// check).
-fn parse_npm_lock(text: &str) -> Vec<(String, String)> {
-    let Ok(json) = serde_json::from_str::<Value>(text) else {
-        return Vec::new();
-    };
-    let Some(packages) = json["packages"].as_object() else {
-        return Vec::new();
-    };
-    packages
+/// have no npm-registry publish date to check. `None` for text
+/// that is not JSON or has no `packages` map (a v1 lockfile).
+fn parse_npm_lock(text: &str) -> Option<Vec<(String, String)>> {
+    let json = serde_json::from_str::<Value>(text).ok()?;
+    let packages = json["packages"].as_object()?;
+    let pairs = packages
         .iter()
         .filter(|(key, _)| !key.is_empty())
         .filter(|(_, val)| {
@@ -207,7 +200,8 @@ fn parse_npm_lock(text: &str) -> Vec<(String, String)> {
                 .as_str()
                 .map(|v| (name.to_string(), v.to_string()))
         })
-        .collect()
+        .collect();
+    Some(pairs)
 }
 
 /// `(name, version)` pairs present in `new` but not in `old`
@@ -266,14 +260,19 @@ struct Lockfile {
     rel: &'static str,
     /// Missing means "no such ecosystem" unless required.
     required: bool,
-    parser: fn(&str) -> Vec<(String, String)>,
+    /// `None` when the text is not a lockfile it can read.
+    parser: fn(&str) -> Option<Pairs>,
 }
+
+/// `(name, version)` pairs read from a lockfile.
+type Pairs = Vec<(String, String)>;
 
 const CARGO_LOCK: Lockfile = Lockfile {
     eco: Ecosystem::Cargo,
     rel: "Cargo.lock",
     required: true,
-    parser: parse_cargo_lock,
+    // Read line by line, so it never refuses a file.
+    parser: |text| Some(parse_cargo_lock(text)),
 };
 
 /// The repo-root npm tree (the template's Playwright E2E harness).
@@ -294,15 +293,15 @@ const NPM_LOCK: Lockfile = Lockfile {
 /// Diff one lockfile against `base` and append an outcome per
 /// newly-adopted dependency. A missing optional lockfile means
 /// the ecosystem is absent (skip); an unreadable or missing
-/// required one is a warning; a missing `base` baseline with
-/// the file present is surfaced as a warning (can't diff).
+/// required one is unchecked; so is the file when `base` has no
+/// baseline to diff it against.
 fn collect_changes(
     cfg: &Config,
     base: &str,
     lock: &Lockfile,
     allow: &HashSet<String>,
     outcomes: &mut Vec<(String, DepOutcome)>,
-    warnings: &mut Vec<String>,
+    unchecked: &mut Vec<String>,
 ) {
     let Lockfile {
         eco,
@@ -318,9 +317,7 @@ fn collect_changes(
             return;
         }
         Err(e) => {
-            warnings.push(format!(
-                "{rel}: cannot read ({e}) -- skipping the cooldown check"
-            ));
+            unchecked.push(format!("{rel}: cannot read ({e})"));
             return;
         }
     };
@@ -330,15 +327,34 @@ fn collect_changes(
         Some(text) => text,
         None if git_commit_exists(&cfg.root, base) => String::new(),
         None => {
-            warnings.push(format!(
-                "{rel}: no {base} baseline to diff against -- skipping \
-                 cooldown check for this lockfile"
+            // The root-commit clause is for CI, which falls back to
+            // `HEAD^` when the push names no earlier commit.
+            let hint = if base == "HEAD" {
+                "commit first"
+            } else {
+                "is that commit fetched? a shallow checkout lacks it, and \
+                 a root commit has no parent"
+            };
+            unchecked.push(format!(
+                "{rel}: no {base} baseline to diff against ({hint})"
             ));
             return;
         }
     };
-    let mut changed =
-        new_locked_versions(&parser(&baseline_text), &parser(&current_text));
+    // Unchanged adopts nothing, whatever format the file is in.
+    if current_text == baseline_text {
+        return;
+    }
+    let Some(current) = parser(&current_text) else {
+        unchecked.push(format!(
+            "{rel}: cannot parse (not JSON, or no `packages` map) -- \
+             resolve any conflict markers, or regenerate it with npm 7+"
+        ));
+        return;
+    };
+    // A baseline it cannot read counts as empty: every entry is new.
+    let baseline = parser(&baseline_text).unwrap_or_default();
+    let mut changed = new_locked_versions(&baseline, &current);
     changed.sort();
     for (name, version) in changed {
         let label = format!("{name}@{version}");
@@ -359,7 +375,7 @@ pub fn check_changed_deps(cfg: &Config, base: &str) -> DepAgeResult {
     let allow =
         parse_allow(std::env::var(&cfg.dep_age_allow_env).ok().as_deref());
     let mut outcomes: Vec<(String, DepOutcome)> = Vec::new();
-    let mut warnings: Vec<String> = Vec::new();
+    let mut unchecked: Vec<String> = Vec::new();
 
     collect_changes(
         cfg,
@@ -367,48 +383,62 @@ pub fn check_changed_deps(cfg: &Config, base: &str) -> DepAgeResult {
         &CARGO_LOCK,
         &allow,
         &mut outcomes,
-        &mut warnings,
+        &mut unchecked,
     );
-    collect_changes(cfg, base, &NPM_LOCK, &allow, &mut outcomes, &mut warnings);
+    collect_changes(
+        cfg,
+        base,
+        &NPM_LOCK,
+        &allow,
+        &mut outcomes,
+        &mut unchecked,
+    );
     collect_changes(
         cfg,
         base,
         &ROOT_NPM_LOCK,
         &allow,
         &mut outcomes,
-        &mut warnings,
+        &mut unchecked,
     );
 
     let mut result = classify_dep_age(&outcomes, &cfg.dep_age_allow_env);
-    // Baseline/parse warnings precede the per-dep warnings the
+    // Lockfile-level entries precede the per-dep ones the
     // classifier collected.
-    warnings.extend(result.warnings);
-    result.warnings = warnings;
+    unchecked.extend(result.unchecked);
+    result.unchecked = unchecked;
     result
 }
 
-/// Standalone `cargo xtask dep-age-check`. Like the audit
-/// command, this errors when the check could not complete
-/// (a human who ran it explicitly wants to know), whereas the
-/// `validate` step degrades that to a warning. `base` is the
-/// commit to diff against: `HEAD` locally; in CI, the commit the
-/// push or pull request started from.
+/// The gate's verdict, the same for `validate` and the standalone
+/// command: a fresh dependency fails, and so does a check that could
+/// not finish. A fresh error is reported alone; unchecked entries
+/// surface once no fresh one is left. `Ok` carries the step detail.
+pub(crate) fn verdict(r: DepAgeResult) -> Result<String, String> {
+    if let Some(err) = r.error {
+        return Err(err);
+    }
+    if !r.unchecked.is_empty() {
+        return Err(format!(
+            "dep-age could not complete: {}",
+            r.unchecked.join("; ")
+        ));
+    }
+    Ok(r.detail)
+}
+
+/// Standalone `cargo xtask dep-age-check`, with the `validate`
+/// step's verdict. `base` is the commit to diff against: `HEAD`
+/// locally; in CI, the commit the push or pull request started from.
 pub fn dep_age_check(cfg: &Config, base: &str) -> Result<(), String> {
     check_base_ref(base)?;
     let r = check_changed_deps(cfg, base);
-    if let Some(err) = r.error {
+    // The counts, unchecked ones included, which the fresh error hides.
+    if r.error.is_some() {
         eprintln!("  {}", r.detail);
-        return Err(err);
     }
-    for w in &r.warnings {
-        eprintln!("  warning: {w}");
-    }
-    if r.warnings.is_empty() {
-        println!("Dep-age OK ({})", r.detail);
-        Ok(())
-    } else {
-        Err("dep-age check could not complete (see warnings above)".into())
-    }
+    println!("Dep-age OK ({})", verdict(r)?);
+    Ok(())
 }
 
 /// A base ref is handed to `git show`, so one starting with `-`
@@ -430,10 +460,10 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_required_lockfile_is_a_warning_not_a_pass() {
+    fn a_missing_required_lockfile_is_unchecked_not_a_pass() {
         // An empty outcome list reads as "no dependency changes",
-        // so only the warning keeps "could not check" from passing.
-        let (mut outcomes, mut warnings) = (Vec::new(), Vec::new());
+        // so only the unchecked entry keeps it from passing.
+        let (mut outcomes, mut unchecked) = (Vec::new(), Vec::new());
         collect_changes(
             &test_cfg(),
             "HEAD",
@@ -443,16 +473,63 @@ mod tests {
             },
             &HashSet::new(),
             &mut outcomes,
-            &mut warnings,
+            &mut unchecked,
         );
         assert!(outcomes.is_empty(), "{outcomes:?}");
-        assert_eq!(warnings.len(), 1, "{warnings:?}");
-        assert!(warnings[0].contains("cannot read"), "{warnings:?}");
+        assert_eq!(unchecked.len(), 1, "{unchecked:?}");
+        assert!(unchecked[0].contains("cannot read"), "{unchecked:?}");
+        assert!(!unchecked[0].contains("skipping"), "{unchecked:?}");
+    }
+
+    #[test]
+    fn an_unparseable_npm_lockfile_is_unchecked_not_a_pass() {
+        // Conflict markers or a v1 lockfile hold no `packages` map,
+        // which must not read as "no dependency changes".
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        let cfg = Config::for_project("t", repo.0.clone());
+        for text in ["<<<<<<< HEAD\n{}", r#"{"lockfileVersion": 1}"#] {
+            std::fs::write(repo.0.join("package-lock.json"), text).unwrap();
+            let (mut outcomes, mut unchecked) = (Vec::new(), Vec::new());
+            collect_changes(
+                &cfg,
+                "HEAD",
+                &ROOT_NPM_LOCK,
+                &HashSet::new(),
+                &mut outcomes,
+                &mut unchecked,
+            );
+            assert!(outcomes.is_empty(), "{outcomes:?}");
+            assert_eq!(unchecked.len(), 1, "{text}: {unchecked:?}");
+            assert!(unchecked[0].contains("cannot parse"), "{unchecked:?}");
+            assert!(unchecked[0].contains("npm 7"), "{unchecked:?}");
+        }
+    }
+
+    #[test]
+    fn an_unchanged_lockfile_passes_whatever_its_format() {
+        // A committed v1 lockfile adopted nothing, so nothing is
+        // left unchecked.
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        let v1 = r#"{"lockfileVersion": 1, "dependencies": {}}"#;
+        std::fs::write(repo.0.join("package-lock.json"), v1).unwrap();
+        crate::test_repo::git(&repo.0, &["add", "package-lock.json"]);
+        crate::test_repo::git(&repo.0, &["commit", "-q", "-m", "v1"]);
+        let cfg = Config::for_project("t", repo.0.clone());
+        let (mut outcomes, mut unchecked) = (Vec::new(), Vec::new());
+        collect_changes(
+            &cfg,
+            "HEAD",
+            &ROOT_NPM_LOCK,
+            &HashSet::new(),
+            &mut outcomes,
+            &mut unchecked,
+        );
+        assert!(outcomes.is_empty() && unchecked.is_empty(), "{unchecked:?}");
     }
 
     #[test]
     fn a_missing_optional_lockfile_means_no_such_ecosystem() {
-        let (mut outcomes, mut warnings) = (Vec::new(), Vec::new());
+        let (mut outcomes, mut unchecked) = (Vec::new(), Vec::new());
         collect_changes(
             &test_cfg(),
             "HEAD",
@@ -462,9 +539,9 @@ mod tests {
             },
             &HashSet::new(),
             &mut outcomes,
-            &mut warnings,
+            &mut unchecked,
         );
-        assert!(outcomes.is_empty() && warnings.is_empty(), "{warnings:?}");
+        assert!(outcomes.is_empty() && unchecked.is_empty(), "{unchecked:?}");
     }
 
     const LOCK: &str = "version = 4\n\n[[package]]\nname = \"serde\"\n\
@@ -477,12 +554,29 @@ mod tests {
         let cfg = Config::for_project("t", repo.0.clone());
         let r = check_changed_deps(&cfg, "HEAD");
         assert!(
-            r.error.is_none() && r.warnings.is_empty(),
+            r.error.is_none() && r.unchecked.is_empty(),
             "{:?}",
-            r.warnings
+            r.unchecked
         );
         assert_eq!(r.detail, "no dependency changes");
         assert!(dep_age_check(&cfg, "HEAD").is_ok());
+    }
+
+    #[test]
+    fn verdict_fails_when_the_check_cannot_finish() {
+        let incomplete = DepAgeResult {
+            detail: "1 changed: 0 aged, 1 unchecked".into(),
+            error: None,
+            unchecked: vec!["a@1.0.0: registry unreachable".into()],
+        };
+        let err = verdict(incomplete).unwrap_err();
+        assert!(err.contains("registry unreachable"), "{err}");
+        let done = DepAgeResult {
+            detail: "no dependency changes".into(),
+            error: None,
+            unchecked: Vec::new(),
+        };
+        assert_eq!(verdict(done).unwrap(), "no dependency changes");
     }
 
     #[test]
@@ -490,14 +584,23 @@ mod tests {
         let repo = crate::test_repo::with_lock(LOCK, false);
         let cfg = Config::for_project("t", repo.0.clone());
         let r = check_changed_deps(&cfg, "HEAD");
-        assert_eq!(r.warnings.len(), 1, "{:?}", r.warnings);
+        assert_eq!(r.unchecked.len(), 1, "{:?}", r.unchecked);
         assert!(
-            r.warnings[0].contains("no HEAD baseline"),
+            r.unchecked[0].contains("no HEAD baseline"),
             "{:?}",
-            r.warnings
+            r.unchecked
         );
         let err = dep_age_check(&cfg, "HEAD").unwrap_err();
         assert!(err.contains("could not complete"), "{err}");
+        // The error itself names the cause and, since no allow-list
+        // entry can cover it, the way out for that base. `--skip` is
+        // the project's `validate` option, not the library's to name.
+        assert!(err.contains("no HEAD baseline"), "{err}");
+        assert!(err.contains("commit first"), "{err}");
+        assert!(!err.contains("skip"), "{err}");
+        let err = dep_age_check(&cfg, "0123abc").unwrap_err();
+        assert!(err.contains("shallow"), "{err}");
+        assert!(!err.contains("commit first"), "{err}");
         assert!(dep_age_check(&cfg, "-p").is_err());
     }
 
@@ -515,16 +618,16 @@ mod tests {
         .unwrap();
         let cfg = Config::for_project("t", repo.0.clone());
         let allow: HashSet<String> = ["left-pad@1.3.0".to_string()].into();
-        let (mut outcomes, mut warnings) = (Vec::new(), Vec::new());
+        let (mut outcomes, mut unchecked) = (Vec::new(), Vec::new());
         collect_changes(
             &cfg,
             "HEAD",
             &ROOT_NPM_LOCK,
             &allow,
             &mut outcomes,
-            &mut warnings,
+            &mut unchecked,
         );
-        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(unchecked.is_empty(), "{unchecked:?}");
         assert_eq!(
             outcomes,
             vec![("left-pad@1.3.0".into(), DepOutcome::Allowed)]
@@ -585,7 +688,7 @@ dependencies = [
             "node_modules/local":{"version":"1.0.0","link":true,
                 "resolved":"../local"}
         }}"#;
-        let mut pkgs = parse_npm_lock(lock);
+        let mut pkgs = parse_npm_lock(lock).unwrap();
         pkgs.sort();
         // Root ("") and the local link (relative `resolved`)
         // dropped; nested name is the final path segment.
@@ -599,11 +702,10 @@ dependencies = [
     }
 
     #[test]
-    fn parse_npm_lock_bad_json_is_empty() {
-        let got = parse_npm_lock("not json");
-        assert!(got.is_empty(), "{got:?}");
-        let got = parse_npm_lock("{}");
-        assert!(got.is_empty(), "{got:?}");
+    fn parse_npm_lock_refuses_bad_json_and_v1() {
+        assert_eq!(parse_npm_lock("not json"), None);
+        assert_eq!(parse_npm_lock("{}"), None);
+        assert_eq!(parse_npm_lock(r#"{"packages": {}}"#), Some(Vec::new()));
     }
 
     #[test]
@@ -644,7 +746,7 @@ dependencies = [
     fn classify_dep_age_empty_is_clean() {
         let r = classify_dep_age(&[], "ALLOW");
         assert!(r.error.is_none());
-        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        assert!(r.unchecked.is_empty(), "{:?}", r.unchecked);
         assert_eq!(r.detail, "no dependency changes");
     }
 
@@ -669,7 +771,7 @@ dependencies = [
     }
 
     #[test]
-    fn classify_dep_age_unavailable_is_warning_not_fatal() {
+    fn classify_dep_age_unavailable_is_unchecked_not_fresh() {
         let r = classify_dep_age(
             &[(
                 "a@1.0.0".into(),
@@ -678,7 +780,7 @@ dependencies = [
             "ALLOW",
         );
         assert!(r.error.is_none());
-        assert_eq!(r.warnings, vec!["a@1.0.0: network down".to_string()]);
+        assert_eq!(r.unchecked, vec!["a@1.0.0: network down".to_string()]);
         // The detail sub-counts reconcile with "1 changed".
         assert!(r.detail.contains("1 changed"));
         assert!(r.detail.contains("1 unchecked"));
