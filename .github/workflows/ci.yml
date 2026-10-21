@@ -75,8 +75,9 @@ jobs:
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE: ${{ github.event.before }}
-          # Maintainer-set repository variable; a pull request
-          # cannot approve its own fresh dependency.
+          # Maintainer-set repository variable, kept out of the pull
+          # request's reach. A pull request that edits this workflow
+          # or the gate can still bypass it: review those paths.
           RUSTBASE_DEP_AGE_ALLOW: ${{ vars.RUSTBASE_DEP_AGE_ALLOW }}
         run: |
           base="${PR_BASE:-$PUSH_BEFORE}"

@@ -33,6 +33,27 @@ pub(crate) use gate::verdict;
 pub use gate::{DepAgeResult, check_changed_deps, dep_age_check};
 pub use preflight::dep_preflight;
 
+/// How a fresh dependency is waived, for the gate's and preflight's
+/// failure messages: the allow file as committed at `base`, or the
+/// env var.
+fn allow_hint(cfg: &Config, base: &str) -> String {
+    let env = format!("{}=name@version[,...]", cfg.dep_age_allow_env);
+    // CI diffs from the pull request's base, so a waiver committed
+    // only on the branch passes locally and fails there.
+    let ci = if base == "HEAD" {
+        " (on main, for CI)"
+    } else {
+        ""
+    };
+    match &cfg.dep_age_allow_file {
+        Some(file) => format!(
+            "allow via a `name@version` line in {file} committed at \
+             {base}{ci}, or {env}"
+        ),
+        None => format!("allow via {env}"),
+    }
+}
+
 /// Do not adopt a version published fewer than this many
 /// days ago without a stated justification.
 const COOLDOWN_DAYS: i64 = 14;
@@ -365,6 +386,28 @@ fn npm_versions(json: &Value) -> Vec<(String, i64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_hint_names_the_file_at_the_base_and_the_variable() {
+        let mut cfg = Config::for_project("my-app", "/r".into());
+        let hint = allow_hint(&cfg, "3f2a1b");
+        assert!(
+            hint.contains(".dep-age-allow committed at 3f2a1b"),
+            "{hint}"
+        );
+        assert!(hint.contains("MY_APP_DEP_AGE_ALLOW=name@version"), "{hint}");
+        assert!(!hint.contains("main"), "{hint}");
+        // Locally the base is HEAD; CI only honours a waiver on main.
+        let hint = allow_hint(&cfg, "HEAD");
+        assert!(
+            hint.contains("committed at HEAD (on main, for CI)"),
+            "{hint}"
+        );
+        cfg.dep_age_allow_file = None;
+        let hint = allow_hint(&cfg, "HEAD");
+        assert!(!hint.contains(".dep-age-allow"), "{hint}");
+        assert!(hint.contains("MY_APP_DEP_AGE_ALLOW=name@version"), "{hint}");
+    }
 
     #[test]
     fn percent_encode_segment_handles_scoped_and_special() {

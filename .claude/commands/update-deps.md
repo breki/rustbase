@@ -147,11 +147,14 @@ brand-new major), **do not** silently drop it:
   date it clears the cooldown (published date + 14 days).
 - Adopt a still-fresh version **only** with an explicit,
   user-stated justification (or a security fix). When the
-  user approves, add a `pkg@ver  # reason` line to
-  `.dep-age-allow` and commit it on its own, ahead of the update
-  (the gate reads the file as committed at its base; in CI that
-  is `main`, so the waiver must land there first), or pass
-  `RUSTBASE_DEP_AGE_ALLOW=pkg@ver[,...]` for a local run. Never
+  user approves, write the waiver as a `pkg@ver  # reason` line
+  for `.dep-age-allow`. It must reach the base branch before the
+  update is pushed (CI reads the file at the pull request's base
+  or the tip before a push), and this command pushes nothing: so
+  leave `.dep-age-allow` out of the step-8 commit, and hand the
+  operator the lines to land first as their own commit, pushed or
+  merged. An uncommitted line waives nothing, so step 7 runs with
+  the same pins in `RUSTBASE_DEP_AGE_ALLOW=pkg@ver[,...]`. Never
   add an allow entry without that stated reason.
 - **Audit vs cooldown.** `npm audit fix` and a fresh RUSTSEC
   fix both want the *newest* version, which is usually still
@@ -164,7 +167,8 @@ brand-new major), **do not** silently drop it:
 ### 7. Verify
 
 Run `cargo -q xtask validate` (all gates, including `audit` and
-`dep-age-check`). If a major bump broke a gate
+`dep-age-check`), with `RUSTBASE_DEP_AGE_ALLOW` set to any pins
+step 6 approved. If a major bump broke a gate
 (`svelte-check` under a TypeScript major is the usual
 suspect), either back that one bump out to its previous
 version or surface the failure to the user -- do not
@@ -176,7 +180,9 @@ Invoke `/commit`. The change type is **`chore`** (no version
 bump). In the summary the commit body should list:
 the majors adopted, the count of Rust crates advanced, any
 `audit` warning cleared, and everything held back as too
-fresh with its age-out date.
+fresh with its age-out date. Leave `.dep-age-allow` out of this
+commit; the closing summary gives the operator its waiver lines
+to land on the base branch before pushing.
 
 ## Rules
 

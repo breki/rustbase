@@ -328,12 +328,13 @@ pub fn dep_preflight(cfg: &Config) -> Result<(), String> {
         );
         return Ok(());
     }
-    Err(failure_message(&report, cfg))
+    // Preflight diffs the working tree against `HEAD`, as `validate` does.
+    Err(failure_message(&report, &super::allow_hint(cfg, "HEAD")))
 }
 
-/// The advice for a tree preflight could not certify, naming the
-/// project's own allow file and variable.
-fn failure_message(report: &Report, cfg: &Config) -> String {
+/// The advice for a tree preflight could not certify, ending with
+/// `allow_hint`: how `validate` would take a fresh version anyway.
+fn failure_message(report: &Report, allow_hint: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !report.dead_ends.is_empty() {
         parts.push(format!(
@@ -350,11 +351,10 @@ fn failure_message(report: &Report, cfg: &Config) -> String {
     }
     format!(
         "dep-preflight could not certify the tree -- {}.\n  Wait out the \
-         cooldown, adopt the fresh version deliberately (for `cargo xtask \
-         validate`, {}; dep-preflight reads neither), or drop/adjust \
-         the dependency.",
-        parts.join("; "),
-        super::gate::allow_hint(cfg)
+         cooldown, adopt the fresh version deliberately, or drop/adjust \
+         the dependency.\n  To adopt one anyway for `cargo xtask \
+         validate`: {allow_hint}. dep-preflight reads neither.",
+        parts.join("; ")
     )
 }
 
@@ -530,7 +530,7 @@ mod tests {
     }
 
     #[test]
-    fn failure_message_names_the_projects_allow_variable() {
+    fn failure_message_ends_with_how_validate_waives_one() {
         let report = Report {
             clean: false,
             pinned: Vec::new(),
@@ -539,16 +539,15 @@ mod tests {
             warnings: Vec::new(),
             iterations: 1,
         };
-        let cfg = Config::for_project("hoard", "/r".into());
-        let msg = failure_message(&report, &cfg);
+        let msg = failure_message(&report, "allow via HINT");
+        assert!(msg.contains("foo@1.5.0"), "{msg}");
         assert!(
-            msg.contains("HOARD_DEP_AGE_ALLOW=name@version[,...]"),
+            msg.ends_with(
+                "\n  To adopt one anyway for `cargo xtask validate`: \
+                 allow via HINT. dep-preflight reads neither."
+            ),
             "{msg}"
         );
-        assert!(msg.contains(".dep-age-allow"), "{msg}");
-        assert!(msg.contains("dep-preflight reads neither"), "{msg}");
-        assert!(msg.contains("cargo xtask validate"), "{msg}");
-        assert!(!msg.contains("RUSTBASE_"), "{msg}");
     }
 
     #[test]

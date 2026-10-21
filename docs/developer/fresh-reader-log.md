@@ -18,6 +18,21 @@ work.
 
 ---
 
+### fr-2026-10-21-dep-age-hint-names-no-action
+
+**Category:** wording (output)
+
+The cooldown gate's waiver hint (`allow_hint` in
+`crates/rustbase-xtask/src/dep_age.rs`) says "committed at <base>".
+In CI the base is a past commit nobody can add to, so the hint names
+no action; it should say the waiver must reach the base branch and
+the change then needs a new push (a re-run keeps the old base).
+Locally it adds "(on main, for CI)", but the library cannot know the
+branch name: say "the base branch". The text went back and forth in
+#62's review (no "main", then "main" again), so settle it together
+with the `/security-upgrade` command file, which defines the
+operator's steps.
+
 ### fr-2026-10-20-licenses-publishable-wording
 
 **Category:** wording (output, help)

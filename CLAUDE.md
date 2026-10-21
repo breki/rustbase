@@ -1220,18 +1220,31 @@ a candidate before adding it:
 exits non-zero when the version is within the cooldown.
 
 `validate` enforces this automatically for changed deps via
-the `dep-age-check` step above. When you *do* adopt a
-fresh version with justification (or a security fix), add a
-`name@version` line, with the reason as a `#` comment, to
-**`.dep-age-allow`** at the root. The gate reads that file **as
-committed at the base it diffs against**: `HEAD` locally, the
-pull request's base on `main` in CI. So the waiver lands first,
-as its own commit on `main`, and the change adopting the version
-follows; a pull request cannot wave through its own fresh
-dependency, and git keeps the record. Prune a line once its
-version clears the cooldown. For a one-off local run, the
+the `dep-age-check` step above. When you *do* adopt a fresh
+version with justification (or a security fix), waive it in
+**`.dep-age-allow`** at the root, one line per version, the
+reason as a comment:
+
+```
+ring@0.17.9   # RUSTSEC-2026-0042; the only fix is 3 days old
+```
+
+The gate reads that file **as committed at the base it diffs
+against** -- `HEAD` locally, the pull request's base in CI, or
+the tip before a push to `main` -- so the waiver lands on the
+base branch first, as its own push or merged pull request, and
+the change adopting the version is pushed after it. A waiver in
+the same change waives nothing, and one push of both fails; a
+pull request opened earlier needs a new push, since a re-run
+keeps the old base. Being a file, every waiver stays on record
+in git; prune a line once its version clears the cooldown. A
+malformed line never fails the gate (a typo merged to `main`
+must not block every later change, including its fix); it is
+printed with any failing run's message instead.
+
+For a run before the waiver is committed, the
 **`RUSTBASE_DEP_AGE_ALLOW`** env var (`name@version`,
-comma-separated) still works -- e.g.
+comma-separated) waives locally -- e.g.
 `RUSTBASE_DEP_AGE_ALLOW=serde@1.0.999 cargo xtask validate` --
 and CI also reads it from the maintainer-set repository variable
 of that name (Settings, then Variables).
@@ -1247,8 +1260,9 @@ update is exactly when a freshly-published (possibly
 compromised) transitive release slips in. The recommended
 workflow: run the update, then either wait out the cooldown
 before committing, or, once you've reviewed the flagged
-versions, bulk-approve them with
+versions, bulk-approve them: one `.dep-age-allow` line each,
+landed first as above (for the local run before then,
 `RUSTBASE_DEP_AGE_ALLOW=a@1.2.3,b@4.5.6,... cargo xtask
-validate`. Prefer scoped updates (`cargo update -p <crate>`)
+validate`). Prefer scoped updates (`cargo update -p <crate>`)
 over a blanket `cargo update` so the flagged set stays small
 and reviewable.

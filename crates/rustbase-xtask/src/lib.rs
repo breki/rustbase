@@ -183,14 +183,17 @@ pub struct Config {
     /// `git` and `cargo` run.
     pub root: PathBuf,
     /// Name of the environment variable listing comma-separated
-    /// `name@version` dependencies allowed through the cooldown.
+    /// `name@version` dependencies allowed through the cooldown, on
+    /// top of `dep_age_allow_file`; for a one-off run.
     /// `for_project("hoard", ...)` names it `HOARD_DEP_AGE_ALLOW`.
     pub dep_age_allow_env: String,
-    /// The committed allow-list file, relative to `root`: one
-    /// `name@version` per line, `#` comments. The cooldown gate reads
-    /// it as committed at the base it diffs against, so a change
-    /// cannot waive its own fresh dependency.
-    pub dep_age_allow_file: String,
+    /// The committed allow-list file, one `name@version` per line with
+    /// `#` comments; `None` reads none. Unlike the other paths here it
+    /// is a git path: from the repository top, `/`-separated, never
+    /// absolute. The cooldown gate reads it as committed at the base it
+    /// diffs against, so a waiver added in the change under check
+    /// waives nothing.
+    pub dep_age_allow_file: Option<String>,
     /// User-Agent sent to package registries (crates.io refuses
     /// requests without one).
     pub user_agent: String,
@@ -234,7 +237,7 @@ impl Config {
             name: project.to_owned(),
             root,
             dep_age_allow_env: format!("{prefix}_DEP_AGE_ALLOW"),
-            dep_age_allow_file: ".dep-age-allow".to_owned(),
+            dep_age_allow_file: Some(".dep-age-allow".to_owned()),
             user_agent: format!("{project}-xtask-dep-age"),
             thresholds: Thresholds::default(),
             canon: canon::Rules::default(),
