@@ -116,8 +116,11 @@ hint prints the real name).
 Waive only a genuine security fix from the package's own upstream,
 since step 3 builds and runs it: check that the advisory names this
 version as the fix, and ask the operator to confirm the release
-appears in the package's own repository (a tag or release note);
-this command reaches no website itself.
+appears in the package's own repository (a tag or release note).
+Give them the page to open, e.g. `https://github.com/<owner>/<repo>/tags`.
+This command reaches no website itself, so a read-only lookup
+(`gh api repos/<owner>/<repo>/releases`) runs only when the operator
+asks for it.
 
 ### 3. Verify
 
@@ -166,7 +169,9 @@ the code.
 1. **Find the version production runs.** Never assume it matches
    the tree. `cargo xtask deploy` ships only an annotated `vX.Y.Z`
    tag matching the crate version, and the deployed `/api/status`
-   reports that version: ask the operator for it (with
+   reports that version. A derived project may serve another route:
+   find it (`git grep -n '"/status"'`) before naming it, then ask the
+   operator for the version it reports (with
    `AskUserQuestion`), then read the lockfile production was built
    from with `git show vX.Y.Z:Cargo.lock`. The frontend's
    `package-lock.json` at the same tag is only a best guess: deploy

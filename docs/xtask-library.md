@@ -263,7 +263,13 @@ stayed, it took on eight gates it had never run (Canon, Records,
 Scripts, Doc and the four frontend gates), its `DEFERRED` list is
 Deny alone -- hoard is closed-source and keeps no licence policy for
 `deny.toml` to check -- and the comparison (step 4) found three
-things its vendored gates did that the library does not.
+things its vendored gates did that the library does not. jutro came
+fifth (breki/jutro#32, after its security upgrades in
+breki/jutro#31), from template 0.10.0 and before its template sync,
+on `rustbase-xtask` 0.2.4: it kept sixteen modules of its own, took
+on five gates (Dep-age, Canon, Records, Scripts, Doc) with Deny
+deferred, and its comparison (step 4) found six things its vendored
+gates did that the library does not, filed as #67, #68 and #69.
 
 **Before step 1**, bring everything outside `xtask/` up to the
 template with `/template-sync`, with `xtask/` still excluded: steps
@@ -291,15 +297,29 @@ bullets. The steps, in the order clockdump took them:
    subcommand becomes an `XCommand` variant in `main.rs` beside the
    flattened `LibCommand`, and its gate a step placed with
    `step::insert_after` in `validate.rs` ("Optional xtask features"
-   in `CLAUDE.md`), and both files join step 9's merged list. In
-   hoard:
+   in `CLAUDE.md`), and both files join step 9's merged list. The
+   cases met so far, each with the project it came from:
    - A project module named like a template one (hoard's five
      `deploy*.rs`) is kept in place of the template's, under the same
      feature; step 9 lists it as kept, never synced.
    - A helper a project module imported from the old `helpers.rs`
      moves into that module (hoard's `cross.rs` took its cargo
-     runner); the library's process helpers are private.
+     runner); the library's process helpers are private. A helper
+     two kept modules share stays in `helpers.rs` (jutro's
+     `cargo_bin` and `discover_workspace_crates`).
    - A test-only module is declared `#[cfg(test)] mod`.
+   - An exception to "take every file": a project that does not
+     deploy by push but provisions its host with a `deploy-setup` of
+     its own keeps its `deploy_config.rs`, `deploy_remote.rs` and
+     `deploy_setup.rs` in place of the template's, takes neither
+     `deploy.rs` nor `deploy_guard.rs`, and keeps the `deploy`
+     feature with `main.rs` dispatching only `deploy-setup` (jutro,
+     which ships by self-upgrade).
+   - A project gate that hard-codes `frontend/` reads
+     `tasks_config().frontend_dir` instead, so it scans the folder
+     the library's frontend gates check (jutro's `module-size`, which
+     caps module length; its architecture lint is a separate gate,
+     `lint`).
 2. **`xtask/Cargo.toml`**: take the template's, then leave the
    feature groups the project does not use out of `default` and drop
    the `path` from the library dependency, leaving
@@ -307,12 +327,18 @@ bullets. The steps, in the order clockdump took them:
    downstream has no copy of the crate; the xtask `frontend` feature
    adds the library's `frontend` one). The rest of the file is
    needed: `clean-cache` names the optional `windows-sys`
-   dependency, and the Deny gate wants the `license` field.
+   dependency, and the Deny gate wants the `license` field. The
+   template's has no `rust-version`; dropping an old one can surface
+   Clippy lints it held back (jutro's 1.85 hid four `collapsible_if`
+   let-chain suggestions). Those fixes belong to the migration,
+   because the migration removed the cap; a lint that a newer stable
+   toolchain alone brings gets its own commit (step 8).
 3. **`helpers.rs`**: `Config::for_project("<name>", ...)`, which keeps
    the `<NAME>_DEP_AGE_ALLOW` variable. Drop the template's canon
-   exemptions, which name template paths, and the test that asserts
-   them; keep `audit_npm_dir` and `frontend_dir` only with a
-   frontend. A project that
+   exemptions, which name template paths, and rewrite the test that
+   asserts them for the project's own entries, or drop it with them
+   when there are none; keep `audit_npm_dir` and `frontend_dir` only
+   with a frontend. A project that
    vendored canon carries its own exemptions over, as exact paths:
    the library matches a path exactly, or a whole folder when it
    ends in `/`, where bombyx's copy matched any prefix. A project
@@ -327,7 +353,12 @@ bullets. The steps, in the order clockdump took them:
    docs: hoard added `docs/developer/DIARY.md`,
    `docs/developer/artisan-resolved.md` and
    `docs/developer/redteam-resolved.md` with `extend`. Entries must be
-   paths under `docs/`.
+   paths under `docs/`; jutro also exempted
+   `docs/developer/updater-provenance.md`, a record of closed
+   findings. Records reads `Config::record_files`, whose default
+   names `fresh-reader-log.md`: a project with other reviewer logs
+   sets its own list (jutro: no fresh-reader, plus `mobileux-log.md`
+   and `dogfooder-log.md`).
 4. **`validate.rs`**: the gates the old vendored `validate.rs` did
    not run can be left out, so the migration keeps the gates the
    project had. Compare its steps with `step::names` in
@@ -345,7 +376,11 @@ bullets. The steps, in the order clockdump took them:
    enough for the cooldown; the fixes were newer than those pins, so
    breki/hoard#2 raised the pins to fixed versions that had since
    aged. Scripts was worth taking because kozmotic's release job runs
-   a script by path.
+   a script by path. Deferring Deny breaks the template's test
+   `frontend_steps_follow_the_feature_and_sit_after_deny`, which
+   unwraps Deny's position and so panics. The frontend gates then
+   follow the last kept gate before Deny (Doc, unless Doc is
+   deferred too); rewrite the test to find that gate (jutro).
 
    Names are not behaviour. Compare each vendored gate module with
    its library counterpart for anything the library does not do -- a
@@ -373,6 +408,17 @@ bullets. The steps, in the order clockdump took them:
      `main.rs` and `validate.rs`, not the library. The template's
      `validate` takes `--skip <gate>` (#48, see `/validate`), so a
      project drops its own skip option unless it does more.
+
+   jutro's comparison found six, none needing code in `validate.rs`
+   today; its canon names the workarounds:
+   - **`audit`** has no deadline on `cargo audit` / `npm audit`, and
+     its npm verdict reads `total` alone, so a 0 total with severity
+     counts passes (#67). A hung audit: `validate --skip audit`.
+   - **`fmt --check`** and **`frontend-test` path filters** are gone
+     (#68). Use `cargo fmt --all -- --check`, and `npm run test --
+     <filters>` run inside the frontend folder.
+   - **`dep-age`** passes a yanked crate version, and reads npm's
+     `created` / `modified` keys as versions (#69). No workaround.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
    to `[workspace.metadata.coverage] ignore` in the root
    `Cargo.toml`.
@@ -395,6 +441,23 @@ bullets. The steps, in the order clockdump took them:
      cannot fetch (`dep-age-ci-unreachable-base` in `docs/todo.md`).
      The allow-list name in it -- the `env:` key and the `vars.`
      name -- becomes `<NAME>_DEP_AGE_ALLOW`.
+   - On record, with `rustbase-xtask` 0.2.2 or later: a
+     `.dep-age-allow` line, committed ahead of the migration, since
+     the gate reads the file at its base.
+
+   Which covers what: the committed line covers every run, local or
+   CI, whose base already holds it; the env var covers runs before
+   that; the repository variable is CI's equivalent of the env var.
+   jutro has no CI and committed the line, so the waiver is in its
+   history rather than in one machine's shell.
+
+   A lockfile the project gitignores is absent at every base, so
+   Dep-age checks every package in it on every run, which needs the
+   network and fails on any version inside the cooldown. Track it,
+   and once committed it is checked only when it changes. jutro's
+   root Playwright `package-lock.json` also held a 7-day-old
+   Playwright, so its package was pinned to the newest aged version
+   as well.
 8. **Run `validate`.** Failures in the project's own code from a
    newer toolchain (clockdump: Clippy 1.99's `assert_is_empty`) are
    their own commit.
@@ -454,7 +517,13 @@ bullets. The steps, in the order clockdump took them:
      each entry to an `### <id>` heading with its fields directly
      under it: `Category`, `Summary`, `Source`, `Issue`, `Depends on`
      and `Supersedes` stay fields (`CLAUDE.md`, Record files), and
-     any other label becomes prose.
+     any other label becomes prose: jutro's logs opened entries with
+     `**Commit context:**`, now plain `Commit context:`. Uppercase
+     counter ids (`RT-154`) are lowercased, citations included. A
+     bullet todo list (jutro's `## Pending` / `## Done`) is converted
+     by a throwaway script the migrator writes, not one shipped here:
+     jutro's kept each of its 52 bodies, put a linked planning doc as
+     the first body line, and dropped the Done section.
    - A project with a frontend: copy the template's `dupes` script
      (`"jscpd src"` in `frontend/package.json`) and
      `frontend/.jscpd.json`, and add jscpd as a dev dependency at a
@@ -465,7 +534,7 @@ bullets. The steps, in the order clockdump took them:
      change any doc or command that relies on it for the frontend to
      run `cargo xtask frontend-fmt` too.
 
-The other downstreams (jutro, trmnl-bellwether, ledgerstone) follow
+The other downstreams (trmnl-bellwether, ledgerstone) follow
 the same steps.
 
 ## Proposed follow-up issues
