@@ -23,9 +23,10 @@ use crate::{Config, Strictness, is_missing_subcommand};
 struct CargoAudit {
     /// Number of vulnerabilities (fatal).
     vulnerabilities: u64,
-    /// Number of advisory warnings (informational).
+    /// Number of cargo-audit's advisory warnings (unsound,
+    /// unmaintained, yanked: informational, never fatal).
     warnings: u64,
-    /// One line per vulnerability, for the failure message.
+    /// One line per RUSTSEC vulnerability, for the failure message.
     advisories: Vec<String>,
 }
 
@@ -38,7 +39,8 @@ struct NpmAudit {
     high: u64,
     /// Critical-severity count (for the summary line).
     critical: u64,
-    /// One line per vulnerable package, for the failure message.
+    /// One line per vulnerable npm package (a line can name several
+    /// advisories), for the failure message.
     advisories: Vec<String>,
 }
 
@@ -50,9 +52,10 @@ struct AuditResult {
     /// `Some` **only** on a positive vulnerability finding.
     error: Option<String>,
     /// Why a check could not finish (a tool missing, the network
-    /// unreachable, an unparseable response).
+    /// unreachable, an unparseable response) -- not cargo-audit's
+    /// advisory warnings, which only reach `detail` as a count.
     warnings: Vec<String>,
-    /// One line per vulnerability found, listed under the error.
+    /// The cargo and npm advisory lines, listed under the error.
     advisories: Vec<String>,
 }
 
@@ -109,7 +112,8 @@ fn read_cargo_audit(out: &Captured) -> Result<CargoAudit, String> {
 }
 
 /// Parse the `vulnerabilities.count` and total `warnings` from
-/// `cargo audit --json` stdout.
+/// `cargo audit --json` stdout, and turn each entry of
+/// `vulnerabilities.list` into one line (`rustsec_line`).
 fn parse_cargo_audit(stdout: &str) -> Result<CargoAudit, String> {
     let j: Value = serde_json::from_str(stdout)
         .map_err(|e| format!("failed to parse cargo audit JSON: {e}"))?;
@@ -133,9 +137,34 @@ fn parse_cargo_audit(stdout: &str) -> Result<CargoAudit, String> {
     })
 }
 
-/// `RUSTSEC-<id> <crate> <version>: <title> (patched: <ranges>)`.
+/// A JSON string field, or `?` when the tool left it out, made safe
+/// for the terminal by `visible`.
+fn text(v: &Value) -> String {
+    visible(v.as_str().unwrap_or("?"))
+}
+
+/// Printable ASCII (space to `~`) passes through; every other
+/// character becomes its escape (`\u{e9}`, `\n`). Advisory text comes
+/// from outside and reaches the terminal and `target/validate.log`,
+/// so no escape sequence, line break or bidi mark may move the
+/// cursor, reorder a line or add one. An allow-list holds by
+/// construction, where a list of risky characters fails on the one
+/// it forgets.
+fn visible(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if (' '..='~').contains(&c) {
+            out.push(c);
+        } else {
+            out.extend(c.escape_default());
+        }
+    }
+    out
+}
+
+/// `<advisory id> <crate> <version>: <title> (patched: <ranges>)`,
+/// the id as cargo-audit gives it (`RUSTSEC-2021-0003`).
 fn rustsec_line(v: &Value) -> String {
-    let text = |p: &Value| p.as_str().unwrap_or("?").to_owned();
     let patched: Vec<String> = v["versions"]["patched"]
         .as_array()
         .map_or_else(Vec::new, |a| a.iter().map(text).collect());
@@ -153,9 +182,11 @@ fn rustsec_line(v: &Value) -> String {
     )
 }
 
-/// Parse `metadata.vulnerabilities` from `npm audit --json`. npm
-/// exits non-zero when it finds vulnerabilities but still writes
-/// the report, so the exit status is not consulted.
+/// Parse the counts in `metadata.vulnerabilities` from `npm audit
+/// --json`, and turn each entry of the top-level `vulnerabilities`
+/// map into one line (`npm_line`). npm exits non-zero when it finds
+/// vulnerabilities but still writes the report, so the exit status
+/// is not consulted.
 fn parse_npm_audit(stdout: &str) -> Result<NpmAudit, String> {
     let j: Value = serde_json::from_str(stdout)
         .map_err(|e| format!("failed to parse npm audit JSON: {e}"))?;
@@ -179,16 +210,19 @@ fn parse_npm_audit(stdout: &str) -> Result<NpmAudit, String> {
 /// `npm <package> <range> <severity>: <advisories> (<fix>)`. A `via`
 /// entry is an advisory (its GHSA id and title) or, for a package that
 /// is vulnerable only through a dependency, that dependency's name.
+/// npm's advisory object has no id field: the GHSA id is the last
+/// segment of its `url` (`.../advisories/GHSA-xvch-5gv4-984h`).
 fn npm_line(name: &str, e: &Value) -> String {
-    let text = |p: &Value| p.as_str().unwrap_or("?").to_owned();
+    let name = visible(name);
     let via: Vec<String> = e["via"].as_array().map_or_else(Vec::new, |a| {
         a.iter()
             .map(|v| {
                 if let Some(dep) = v.as_str() {
-                    return format!("via {dep}");
+                    return format!("via {}", visible(dep));
                 }
                 let url = text(&v["url"]);
-                let id = url.rsplit('/').next().unwrap_or("?");
+                let id =
+                    url.rsplit_once('/').map_or(url.as_str(), |(_, id)| id);
                 format!("{id} {}", text(&v["title"]))
             })
             .collect()
@@ -197,8 +231,8 @@ fn npm_line(name: &str, e: &Value) -> String {
         Value::Bool(true) => "fix available".to_owned(),
         Value::Object(f) => format!(
             "fix: {}@{}{}",
-            f.get("name").and_then(Value::as_str).unwrap_or(name),
-            f.get("version").and_then(Value::as_str).unwrap_or("?"),
+            f.get("name").map_or_else(|| name.clone(), text),
+            f.get("version").map_or_else(|| "?".to_owned(), text),
             if f.get("isSemVerMajor") == Some(&Value::Bool(true)) {
                 ", a major bump"
             } else {
@@ -207,11 +241,15 @@ fn npm_line(name: &str, e: &Value) -> String {
         ),
         _ => "no fix".to_owned(),
     };
+    let via = if via.is_empty() {
+        String::new()
+    } else {
+        format!(": {}", via.join("; "))
+    };
     format!(
-        "npm {name} {} {}: {} ({fix})",
+        "npm {name} {} {}{via} ({fix})",
         text(&e["range"]),
         text(&e["severity"]),
-        via.join("; ")
     )
 }
 
@@ -287,6 +325,8 @@ fn verdict(r: AuditResult, strictness: Strictness) -> Result<String, String> {
             format!("; also: {unfinished}")
         };
         let mut msg = format!("{err} ({}){also}", r.detail);
+        // Every advisory, uncapped, unlike other gates' diagnostics: on
+        // a security finding each line is something to act on.
         for line in &r.advisories {
             msg.push_str("\n  ");
             msg.push_str(line);
@@ -365,6 +405,84 @@ mod tests {
                  Prototype Pollution in minimist (fix: minimist@1.2.8)",
                 "npm optimist * critical: via minimist (no fix)",
             ]
+        );
+    }
+
+    #[test]
+    fn an_advisory_with_no_fix_says_so() {
+        let v: Value = serde_json::from_str(
+            r#"{"advisory":{"id":"RUSTSEC-1","title":"t"},
+                "versions":{"patched":[]},
+                "package":{"name":"c","version":"1.0.0"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            rustsec_line(&v),
+            "RUSTSEC-1 c 1.0.0: t (no patched version)"
+        );
+    }
+
+    #[test]
+    fn every_npm_fix_and_via_shape_has_its_wording() {
+        let line = |json: &str| {
+            npm_line("p", &serde_json::from_str::<Value>(json).unwrap())
+        };
+        let base = r#""range":"<2","severity":"high""#;
+        assert_eq!(
+            line(&format!(r#"{{{base},"via":["q"],"fixAvailable":true}}"#)),
+            "npm p <2 high: via q (fix available)"
+        );
+        assert_eq!(
+            line(&format!(
+                r#"{{{base},"via":["q"],"fixAvailable":{{"name":"p",
+                "version":"2.0.0","isSemVerMajor":true}}}}"#
+            )),
+            "npm p <2 high: via q (fix: p@2.0.0, a major bump)"
+        );
+        // A `via` advisory with no URL still shows its title.
+        assert_eq!(
+            line(&format!(r#"{{{base},"via":[{{"title":"t"}}]}}"#)),
+            "npm p <2 high: ? t (no fix)"
+        );
+        // No `via` at all leaves no stray space before the fix.
+        assert_eq!(
+            line(&format!(r#"{{{base},"via":[]}}"#)),
+            "npm p <2 high (no fix)"
+        );
+    }
+
+    #[test]
+    fn control_characters_in_advisory_text_stay_on_one_visible_line() {
+        // External text must not move the cursor, recolour, or add a
+        // fake line to the listing the operator acts on.
+        let v: Value = serde_json::from_str(
+            r#"{"advisory":{"id":"RUSTSEC-1",
+                "title":"x\u001b[2K\r  RUSTSEC-0 ok\nmore"},
+                "versions":{"patched":[]},
+                "package":{"name":"c","version":"1"}}"#,
+        )
+        .unwrap();
+        let line = rustsec_line(&v);
+        assert!(!line.chars().any(char::is_control), "{line:?}");
+        assert!(line.contains(r"x\u{1b}[2K\r  RUSTSEC-0 ok\nmore"), "{line}");
+        let e: Value = serde_json::from_str(
+            r#"{"range":"*","severity":"high","via":["d\u001bep"],
+                "fixAvailable":{"name":"p\nq","version":"2"}}"#,
+        )
+        .unwrap();
+        let line = npm_line("n\ra", &e);
+        assert!(!line.chars().any(char::is_control), "{line:?}");
+        // A bidi override would reverse what follows on the line (the
+        // patched range); a line separator breaks it in some editors.
+        let line = visible("a\u{202e}b\u{2028}c\u{2066}d");
+        assert_eq!(line, r"a\u{202e}b\u{2028}c\u{2066}d");
+        // Only printable ASCII passes, so no list of risky characters
+        // can miss one (U+061C, the Arabic letter mark, is one a list
+        // of risky characters easily leaves out).
+        assert_eq!(visible("caf\u{e9}\u{61c}1.2"), r"caf\u{e9}\u{61c}1.2");
+        assert_eq!(
+            visible(r#">=1.6.1, <2 "q" \x ~"#),
+            r#">=1.6.1, <2 "q" \x ~"#
         );
     }
 

@@ -285,7 +285,8 @@ and this project adheres to
 - A failing cargo xtask audit lists each vulnerability on a line of its own --
   the RUSTSEC id, crate, version, title and patched ranges; or the npm package,
   affected range, severity, GHSA advisory and available fix -- instead of only
-  counting them (#62).
+  counting them. Advisory text comes from outside, so anything but printable
+  ASCII is shown escaped (`\u{e9}`) (#62).
 
 ### Fixed
 

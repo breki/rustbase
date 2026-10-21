@@ -1140,10 +1140,12 @@ Five `cargo xtask` commands guard the dependency tree:
   unmaintained / yanked -- are reported, not fatal). The failure
   lists each vulnerability on a line of its own: the RUSTSEC id,
   crate, version, title and patched ranges, or the npm package,
-  affected range, severity, advisory and fix. It runs
-  late in `validate`, so **`validate` needs `cargo-audit`
-  installed (`cargo install cargo-audit`) and network access**
-  to the advisory DB / npm registry.
+  affected range, severity, advisory and fix. It needs
+  `cargo-audit` (`cargo install cargo-audit`) and network access
+  to the advisory DB / npm registry. Without either, the
+  standalone `cargo xtask audit` **fails**, but inside `validate`
+  (which runs it late) it only **warns** and the gate passes --
+  which is why `/release` also runs the standalone command.
 - **`cargo xtask dep-age <npm|cargo> <package> [version]`**
   reports how many days ago a version was published (on-demand,
   a single package). Add **`--latest-aged`** to instead print
