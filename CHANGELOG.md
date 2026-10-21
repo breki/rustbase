@@ -270,6 +270,10 @@ and this project adheres to
 - The starter crates rustbase and rustbase-web carry publish = false, so a stray
   cargo publish cannot upload the template placeholders; a project that
   publishes its own crate removes it.
+- A failing frontend gate names target/frontend-<gate>.log, which holds the
+  whole run of its tool (both streams, rewritten each run), so the failing test
+  names and counts the short report cuts are one file away. The gates still
+  parse nothing (#55).
 
 ### Fixed
 
