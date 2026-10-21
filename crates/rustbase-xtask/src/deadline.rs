@@ -26,18 +26,21 @@ pub(crate) enum Waited<S> {
 }
 
 /// Poll `child` every `poll` until it exits or `limit` has passed,
-/// killing it in the second case.
+/// killing it in the second case. A `limit` too large for the clock
+/// waits for the child alone.
 pub(crate) fn wait_until<C: Poll>(
     child: &mut C,
     limit: Duration,
     poll: Duration,
 ) -> io::Result<Waited<C::Status>> {
-    let deadline = Instant::now() + limit;
+    // A limit past the clock's range is no limit.
+    let deadline = Instant::now().checked_add(limit);
     loop {
         if let Some(status) = child.try_wait()? {
             return Ok(Waited::Exited(status));
         }
-        let left = deadline.saturating_duration_since(Instant::now());
+        let left = deadline
+            .map_or(poll, |d| d.saturating_duration_since(Instant::now()));
         if left.is_zero() {
             child.kill()?;
             return Ok(Waited::TimedOut);
@@ -112,6 +115,16 @@ mod tests {
         let mut c = Fake::new(Some(0));
         let w = wait_until(&mut c, Duration::ZERO, POLL).unwrap();
         assert_eq!(w, Waited::Exited(0));
+    }
+
+    #[test]
+    fn a_limit_too_large_to_reach_waits_without_a_deadline() {
+        // `Instant + Duration` panics past the clock's range; such a
+        // limit means "no limit".
+        let mut c = Fake::new(Some(3));
+        let w = wait_until(&mut c, Duration::MAX, POLL).unwrap();
+        assert_eq!(w, Waited::Exited(0));
+        assert!(!c.killed);
     }
 
     #[test]

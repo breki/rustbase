@@ -372,10 +372,14 @@ and this project adheres to
   setup creates) and the next deploy failed (#10).
 - `cargo xtask audit` no longer hangs on an advisory DB or npm registry that
   accepts the connection and never answers: each audit is stopped after three
-  minutes and counts as a check that could not finish (a failure standalone, a
-  warning inside `validate`). npm's verdict takes the larger of its reported
-  total and the sum of its severity counts, so a report with a 0 or missing
-  `total` beside non-zero counts fails (#67).
+  minutes (its whole process tree on Windows) and counts as a check that could
+  not finish (a failure standalone, a warning inside `validate`).
+  `RUSTBASE_AUDIT_TIMEOUT_SECS` (`<PROJECT>_AUDIT_TIMEOUT_SECS` in a derived
+  project) sets a longer limit, for a machine's first run, which downloads the
+  whole RustSec advisory database. npm's verdict takes the larger of
+  its reported total and the sum of its severity counts, so a report with a 0
+  or missing `total` beside non-zero counts fails, and a count that is not a
+  whole number makes the report unreadable (#67).
 
 ### Removed
 
