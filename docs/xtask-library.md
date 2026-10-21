@@ -424,7 +424,8 @@ bullets. The steps, in the order clockdump took them:
      exhaustively, which is now `#[non_exhaustive]`. A project that
      only flattens `LibCommand` in changes nothing.
    - **`dep-age`** passes a yanked crate version, and reads npm's
-     `created` / `modified` keys as versions (#69). No workaround.
+     `created` / `modified` keys as versions, up to 0.2.4 (#69). No
+     workaround there; the next release, 0.3.0, fails both.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
    to `[workspace.metadata.coverage] ignore` in the root
    `Cargo.toml`.

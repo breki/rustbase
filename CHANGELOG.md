@@ -391,6 +391,10 @@ and this project adheres to
   its reported total and the sum of its severity counts, so a report with a 0
   or missing `total` beside non-zero counts fails, and a count that is not a
   whole number makes the report unreadable (#67).
+- `cargo xtask dep-age` and `dep-age-check` fail a yanked crate version whatever
+  its age; the gate reports it as refused, beside dependencies within the
+  cooldown. `dep-age npm <pkg> created` (or `modified`) is refused rather than
+  reading the package's own timestamp as a publish date (#69).
 
 ### Removed
 

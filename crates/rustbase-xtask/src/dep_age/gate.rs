@@ -18,10 +18,10 @@
 //! workflow.
 //!
 //! What can fail a run is scoped to the lockfile changes: a fresh
-//! dependency, or one that could not be checked. A problem in the
-//! allow file never fails a run alone -- a typo merged to the base
-//! branch must not block every later change, including its fix --
-//! and is printed with any failing run's message instead.
+//! dependency, a yanked one, or one that could not be checked. A
+//! problem in the allow file never fails a run alone -- a typo merged
+//! to the base branch must not block every later change, including
+//! its fix -- and is printed with any failing run's message instead.
 //!
 //! The shared registry-fetch and date-verdict machinery lives
 //! in the parent [`super`] module; this submodule imports it.
@@ -33,8 +33,8 @@ use serde_json::Value;
 
 use super::io::{git_commit_exists, git_show, git_show_bytes};
 use super::{
-    COOLDOWN_DAYS, Ecosystem, age_in_days, cargo_version_date, fetch_registry,
-    npm_version_date, parse_iso_date, today_days,
+    COOLDOWN_DAYS, DateError, Ecosystem, age_in_days, cargo_version_date,
+    fetch_registry, npm_version_date, parse_iso_date, today_days,
 };
 use crate::Config;
 
@@ -45,7 +45,7 @@ pub struct DepAgeResult {
     /// Human-readable detail for the step line.
     pub detail: String,
     /// `Some` only when a changed dependency is within the
-    /// cooldown.
+    /// cooldown or refused (a yanked crate version).
     pub error: Option<String>,
     /// Checks that could not finish (missing baseline, unreachable
     /// registry, unparseable response).
@@ -59,11 +59,23 @@ enum DepOutcome {
     Aged,
     /// Within the cooldown window (fatal); carries the reason.
     Fresh(String),
+    /// Withdrawn by the registry (a yanked crate); fatal, and reported
+    /// with `Fresh`, whatever its age.
+    Refused(String),
     /// Could not be checked (network / tool / parse); fails the
     /// gate like `Fresh`, but is reported apart from it.
     Unavailable(String),
     /// Named in the allow file or env var -- skipped, never fetched.
     Allowed,
+}
+
+impl From<DateError> for DepOutcome {
+    fn from(e: DateError) -> Self {
+        match e {
+            DateError::Refused(why) => Self::Refused(why),
+            DateError::NotFound(why) => Self::Unavailable(why),
+        }
+    }
 }
 
 /// Fold per-dependency outcomes into the combined result.
@@ -81,6 +93,7 @@ fn classify_dep_age(
         };
     }
     let mut fresh: Vec<String> = Vec::new();
+    let mut refused: Vec<String> = Vec::new();
     let mut unchecked: Vec<String> = Vec::new();
     let (mut aged, mut allowed) = (0usize, 0usize);
     for (label, outcome) in outcomes {
@@ -88,6 +101,9 @@ fn classify_dep_age(
             DepOutcome::Aged => aged += 1,
             DepOutcome::Allowed => allowed += 1,
             DepOutcome::Fresh(why) => fresh.push(format!("{label} ({why})")),
+            DepOutcome::Refused(why) => {
+                refused.push(format!("{label} ({why})"));
+            }
             DepOutcome::Unavailable(reason) => {
                 unchecked.push(format!("{label}: {reason}"));
             }
@@ -99,21 +115,29 @@ fn classify_dep_age(
     // nothing was actually checked).
     let detail = format!(
         "{} changed: {aged} aged, {allowed} allow-listed, {} fresh, \
-         {} unchecked",
+         {} refused, {} unchecked",
         outcomes.len(),
         fresh.len(),
+        refused.len(),
         unchecked.len(),
     );
-    let error = if fresh.is_empty() {
-        None
-    } else {
-        Some(format!(
+    let mut errors = Vec::new();
+    if !refused.is_empty() {
+        errors.push(format!(
+            "dependencies refused: {}\n  the registry withdrew them; pick \
+             another version",
+            refused.join("; ")
+        ));
+    }
+    if !fresh.is_empty() {
+        errors.push(format!(
             "dependencies within the {COOLDOWN_DAYS}-day cooldown: {}\n  \
              adopt only with a stated justification (security fixes \
              exempt); {allow_hint}",
             fresh.join("; ")
-        ))
-    };
+        ));
+    }
+    let error = (!errors.is_empty()).then(|| errors.join("\n"));
     DepAgeResult {
         detail,
         error,
@@ -331,7 +355,7 @@ fn check_one(
     };
     let published = match dated {
         Ok((_, p)) => p,
-        Err(e) => return DepOutcome::Unavailable(e),
+        Err(e) => return e.into(),
     };
     match parse_iso_date(&published) {
         Ok(days) => {
@@ -1018,6 +1042,43 @@ dependencies = [
         assert!(err.contains("published 2d ago"));
         assert!(r.detail.contains("1 fresh"));
         assert!(r.detail.contains("1 aged"));
+    }
+
+    #[test]
+    fn classify_dep_age_refused_is_fatal_beside_fresh() {
+        let yanked = "cargo: version 1.1.0 is yanked";
+        let r = classify_dep_age(
+            &[("a@1.1.0".into(), DepOutcome::Refused(yanked.into()))],
+            "ALLOW",
+        );
+        let err = r.error.unwrap();
+        assert!(err.starts_with("dependencies refused: a@1.1.0"), "{err}");
+        assert!(err.contains(yanked), "{err}");
+        assert!(r.unchecked.is_empty(), "{:?}", r.unchecked);
+        assert!(r.detail.contains("1 refused"), "{}", r.detail);
+        // Beside a fresh one, both are named in the one error.
+        let r = classify_dep_age(
+            &[
+                ("a@1.1.0".into(), DepOutcome::Refused(yanked.into())),
+                (
+                    "b@2.0.0".into(),
+                    DepOutcome::Fresh("published 2d ago".into()),
+                ),
+            ],
+            "ALLOW",
+        );
+        let err = r.error.unwrap();
+        assert!(err.contains("b@2.0.0") && err.contains("a@1.1.0"), "{err}");
+        // A refusal from the date lookup is a verdict; a date it could
+        // not find leaves the dependency unchecked.
+        assert_eq!(
+            DepOutcome::from(DateError::Refused(yanked.into())),
+            DepOutcome::Refused(yanked.into())
+        );
+        assert_eq!(
+            DepOutcome::from(DateError::NotFound("gone".into())),
+            DepOutcome::Unavailable("gone".into())
+        );
     }
 
     #[test]

@@ -1164,7 +1164,8 @@ Five `cargo xtask` commands guard the dependency tree:
   the report unreadable.
 - **`cargo xtask dep-age <npm|cargo> <package> [version]`**
   reports how many days ago a version was published (on-demand,
-  a single package). Add **`--latest-aged`** to instead print
+  a single package); a yanked crate version fails, whatever its
+  age. Add **`--latest-aged`** to instead print
   the **highest** version that has cleared the cooldown
   (selected by version, not publish date) -- the pin target the
   `/update-deps` workflow feeds to `cargo update --precise` /
@@ -1180,7 +1181,9 @@ Five `cargo xtask` commands guard the dependency tree:
   a dependency is adopted and costs nothing -- no network -- on a
   commit that leaves the lockfiles untouched. A *whole-tree* gate is
   deliberately avoided: it would flag every already-locked
-  version on every routine update. A check that cannot finish
+  version on every routine update. A changed dependency locked to
+  a yanked crate version fails as *refused*, whatever its age;
+  `.dep-age-allow` still waives it. A check that cannot finish
   (unreachable registry, missing `HEAD` baseline, an unreadable or
   unparseable lockfile) **fails**, inside `validate` as well as
   standalone: unlike `audit`, it never degrades to a warning,

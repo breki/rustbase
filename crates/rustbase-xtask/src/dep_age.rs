@@ -149,12 +149,42 @@ fn percent_encode_segment(s: &str) -> String {
     out
 }
 
+/// Why a version's publish date was not returned.
+#[derive(Debug, PartialEq, Eq)]
+enum DateError {
+    /// The registry withdrew the version: a verdict, not a failure to
+    /// look it up.
+    Refused(String),
+    /// The document has no date for it.
+    NotFound(String),
+}
+
+impl std::fmt::Display for DateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refused(s) | Self::NotFound(s) => f.write_str(s),
+        }
+    }
+}
+
+impl From<DateError> for String {
+    fn from(e: DateError) -> Self {
+        e.to_string()
+    }
+}
+
+impl From<&str> for DateError {
+    fn from(s: &str) -> Self {
+        Self::NotFound(s.to_owned())
+    }
+}
+
 /// Resolve (version, publish-date) from an npm registry
 /// document. `version` defaults to `dist-tags.latest`.
 fn npm_version_date(
     json: &Value,
     version: Option<&str>,
-) -> Result<(String, String), String> {
+) -> Result<(String, String), DateError> {
     let resolved = match version {
         Some(v) => v.to_string(),
         None => json["dist-tags"]["latest"]
@@ -162,19 +192,30 @@ fn npm_version_date(
             .ok_or("npm: missing dist-tags.latest")?
             .to_string(),
     };
+    // `time` also holds the package's own timestamps under these keys.
+    if resolved == "created" || resolved == "modified" {
+        return Err(DateError::NotFound(format!(
+            "npm: '{resolved}' is a time key, not a version"
+        )));
+    }
     let date = json["time"][&resolved]
         .as_str()
-        .ok_or_else(|| format!("npm: no publish time for version {resolved}"))?
+        .ok_or_else(|| {
+            DateError::NotFound(format!(
+                "npm: no publish time for version {resolved}"
+            ))
+        })?
         .to_string();
     Ok((resolved, date))
 }
 
 /// Resolve (version, publish-date) from a crates.io crate
-/// document. `version` defaults to `crate.max_stable_version`.
+/// document. `version` defaults to `crate.max_stable_version`. A
+/// yanked version is refused, whatever its age.
 fn cargo_version_date(
     json: &Value,
     version: Option<&str>,
-) -> Result<(String, String), String> {
+) -> Result<(String, String), DateError> {
     let resolved = match version {
         Some(v) => v.to_string(),
         None => json["crate"]["max_stable_version"]
@@ -189,10 +230,21 @@ fn cargo_version_date(
     let entry = versions
         .iter()
         .find(|v| v["num"].as_str() == Some(resolved.as_str()))
-        .ok_or_else(|| format!("cargo: version {resolved} not found"))?;
+        .ok_or_else(|| {
+            DateError::NotFound(format!("cargo: version {resolved} not found"))
+        })?;
+    if entry["yanked"].as_bool() == Some(true) {
+        return Err(DateError::Refused(format!(
+            "cargo: version {resolved} is yanked"
+        )));
+    }
     let date = entry["created_at"]
         .as_str()
-        .ok_or_else(|| format!("cargo: no created_at for version {resolved}"))?
+        .ok_or_else(|| {
+            DateError::NotFound(format!(
+                "cargo: no created_at for version {resolved}"
+            ))
+        })?
         .to_string();
     Ok((resolved, date))
 }
@@ -533,6 +585,38 @@ mod tests {
         )
         .unwrap();
         assert!(cargo_version_date(&json, Some("9.9.9")).is_err());
+    }
+
+    #[test]
+    fn a_yanked_crate_version_is_refused() {
+        // Old enough to pass the cooldown, so only the yank can fail it.
+        let json: Value = serde_json::from_str(
+            r#"{"crate":{"max_stable_version":"1.0.0"},
+                "versions":[{"num":"1.1.0","created_at":"2019-05-05T00:00:00Z",
+                             "yanked":true},
+                            {"num":"1.0.0","created_at":"2019-01-01T00:00:00Z",
+                             "yanked":false}]}"#,
+        )
+        .unwrap();
+        let err = cargo_version_date(&json, Some("1.1.0")).unwrap_err();
+        assert!(err.to_string().contains("1.1.0 is yanked"), "{err}");
+        assert!(cargo_version_date(&json, Some("1.0.0")).is_ok());
+    }
+
+    #[test]
+    fn npms_time_keys_are_not_versions() {
+        let json: Value = serde_json::from_str(
+            r#"{"dist-tags":{"latest":"1.0.0"},
+                "time":{"created":"2019-01-01T00:00:00Z",
+                        "modified":"2026-07-15T00:00:00Z",
+                        "1.0.0":"2019-01-02T00:00:00Z"}}"#,
+        )
+        .unwrap();
+        for key in ["created", "modified"] {
+            let err = npm_version_date(&json, Some(key)).unwrap_err();
+            assert!(err.to_string().contains("not a version"), "{err}");
+        }
+        assert!(npm_version_date(&json, Some("1.0.0")).is_ok());
     }
 
     #[test]
