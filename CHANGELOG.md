@@ -332,10 +332,11 @@ and this project adheres to
   before listing them, so a run of transient Windows locks reads differently
   from a real failure. One entry can give two errors (measuring it, then
   deleting it), so the counts are of errors, not entries (#45).
-- cargo xtask deploy no longer nests the new frontend inside the old one. Its
-  check for the existing frontend-dist ran without sudo and could not see into
-  the mode-750 deploy directory, so the first deploy kept serving the old
-  frontend and the next one failed (#10).
+- cargo xtask deploy no longer nests the new frontend inside the existing
+  frontend-dist. Its check for that directory ran without sudo and could not
+  see into the mode-750 deploy directory, so a deploy left the site serving
+  whatever was there before (on a freshly set-up host, the empty directory
+  setup creates) and the next deploy failed (#10).
 
 ### Removed
 

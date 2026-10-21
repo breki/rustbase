@@ -10,7 +10,8 @@ into a crates.io library behind each project's thin `xtask`, one
 module at a time, starting from the dependency-cooldown prototype on
 branch `feat/xtask-lib-dep-age`. Make feature selection work without
 code edits before extracting the coupled modules (done in
-breki/rustbase#5). Leave deploy project-owned until last.
+breki/rustbase#5). Deploy stays project-owned (decided in #10; see
+the `deploy*` row under module classification).
 
 ## Evidence
 
@@ -135,8 +136,9 @@ For `validate` and the subcommands this is in place (#8):
 `step::standard` is the library's gate list in order, and a project
 inserts its own steps before `step::run_all` runs them;
 `cli::LibCommand` is the library's subcommands, which a project's
-CLI flattens into its own and dispatches with `cli::run`. Deploy
-stays project-owned and has no hooks (#10).
+CLI flattens into its own and dispatches with `cli::run`. Deploy is
+an ordinary project subcommand of this kind; the library offers
+nothing deploy-specific (#10).
 
 ### Distribution and versioning
 
@@ -212,7 +214,7 @@ the library is a possible later step, not part of this plan.
 | `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
 | `validate` | step runner; each gate supplies its `step()` (done, #5). The runner, the `Step` type and the standard gate list moved into the library as `step` (#8); a project inserts its own steps, and the library's feature-gated ones (`frontend::steps`, #44) |
 | `frontend*` | extracted (#44): `frontend`, behind the library's `frontend` feature (default off), with its four `frontend-*` subcommands in `cli::FrontendCommand`; the folder is `Config::frontend_dir`, found from `root`. The JS tools stay the project's npm dev dependencies |
-| `deploy*` | keep (#10): no downstream runs the template's push deploy. bombyx, clockdump and kozmotic carry it unused (no `.deploy`, no `deploy/`); hoard rewrote it, with its own guard and ssh helper, and jutro replaced it with a self-updater and has no tag guard. Each candidate piece had one user at most, so hooks would be shaped around hoard alone (checked 2026-10-21). The self-upgrade engine jutro copied from silkboard is a separate question, for a crate of its own rather than this library (#58) |
+| `deploy*` | keep (#10). The template's deploy is a push: `cargo xtask deploy` ships the source over ssh, builds on the host and swaps the files in. No downstream runs it. bombyx, clockdump and kozmotic carry it unused (no `.deploy`, no `deploy/`); hoard rewrote it, with its own `deploy_guard` and `deploy_remote`; jutro replaced it with a binary that upgrades itself, and has no deploy guard. The candidate pieces -- `deploy_remote` (ssh/scp), the deploy guard (`deploy_guard`), the staged swap and the post-start check -- each had one user at most, so hooks would be shaped around hoard alone (checked 2026-10-21). The self-upgrade engine jutro copied from silkboard, another downstream app, is a separate question, for a crate of its own rather than this library (#58) |
 | `backfeed`, `feedback`, `sync` | template-maintenance tools; stay in the template |
 
 Downstream-only modules, evaluated for the library (#8). Each uses
