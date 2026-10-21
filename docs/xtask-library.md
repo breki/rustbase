@@ -350,13 +350,15 @@ bullets. The steps, in the order clockdump took them:
      a `Step` calling `cargo_test::run` in Coverage's slot. Never
      ahead of Dep-age: the test build compiles the dependencies
      Dep-age has not vetted yet.
-   - **A stricter gate replaces the library's step.** Setting
-     `<NAME>_DEP_AGE_STRICT=1`, or `CI=true`, already makes Dep-age
-     fail when a changed dependency cannot be checked. hoard has no
-     CI and wanted every local run strict without an environment
-     variable, so it replaces the step in place:
+   - **A stricter gate replaces the library's step.** hoard has no
+     CI and wanted every local run to fail when a changed dependency
+     cannot be checked, which `rustbase-xtask` 0.1.0 did only under
+     `<NAME>_DEP_AGE_STRICT=1` or `CI=true`. So it replaces the step
+     in place:
      `steps[i] = Step::new(names::DEP_AGE, "dep-age-check", ...)` at
-     `i = step::position(&steps, names::DEP_AGE)`.
+     `i = step::position(&steps, names::DEP_AGE)`. Since #47 the
+     library's Dep-age fails that way in every project, so a project
+     on a release with #47 drops that replacement.
    - **Options the old `validate` took** live in the project's
      `main.rs` and `validate.rs`, not the library. Until #48 (open)
      adds a general `--skip` to the template, a project carries its

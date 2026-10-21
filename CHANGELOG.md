@@ -187,7 +187,9 @@ and this project adheres to
 - Command files invoke `cargo -q xtask ...`, so cargo compile progress no longer
   precedes a command's output; their `allowed-tools` grant both spellings.
 - `validate`'s dependency-cooldown step fails, instead of warning, when the
-  check cannot finish and `RUSTBASE_DEP_AGE_STRICT=1` or `CI=true` is set (#1).
+  check cannot finish -- an unreachable registry, a missing `HEAD` baseline, an
+  unreadable lockfile -- in every run, with no variable to switch it (#1, #47).
+  An unchanged lockfile still needs no network and passes.
 - `/update-deps` resolves npm `ERESOLVE` with an escalation ladder (scoped
   installs, a hand-edited range, `--legacy-peer-deps`, then a full reset)
   instead of resetting the lockfile first, which re-floated every transitive
@@ -224,9 +226,7 @@ and this project adheres to
   does not parse, beside the diff.
 - The `validate` runner, its `Step` type and the standard gate list moved into
   the shared library (`step::standard`, `step::run_all`); a project inserts its
-  own steps into the list. The cooldown step's strict-mode variable is now named
-  after the project like the allow-list one (`<PROJECT>_DEP_AGE_STRICT`, still
-  `RUSTBASE_DEP_AGE_STRICT` here), and the npm project the audit step covers is
+  own steps into the list. The npm project the audit step covers is
   `Config::audit_npm_dir`.
 - The library's subcommands moved into it as `cli::LibCommand` (behind its
   `clap` feature), dispatched by `cli::run`; a project's `xtask` flattens them

@@ -184,10 +184,6 @@ pub struct Config {
     /// `name@version` dependencies allowed through the cooldown.
     /// `for_project("hoard", ...)` names it `HOARD_DEP_AGE_ALLOW`.
     pub dep_age_allow_env: String,
-    /// Name of the environment variable that, set to `1`, makes the
-    /// cooldown step fail when it cannot finish instead of warning
-    /// (as `CI=true` does).
-    pub dep_age_strict_env: String,
     /// User-Agent sent to package registries (crates.io refuses
     /// requests without one).
     pub user_agent: String,
@@ -214,8 +210,8 @@ impl Config {
     }
 
     /// The defaults for a project called `project`: `project` as
-    /// `name`, `<PROJECT>_DEP_AGE_ALLOW` and `<PROJECT>_DEP_AGE_STRICT`,
-    /// `<project>-xtask-dep-age`, the default [`Thresholds`], canon
+    /// `name`, `<PROJECT>_DEP_AGE_ALLOW`, `<project>-xtask-dep-age`,
+    /// the default [`Thresholds`], canon
     /// [`Rules`](canon::Rules) and [record files](records::DEFAULT_FILES),
     /// no npm project to audit, and `crates/<project>/Cargo.toml` as
     /// the version manifest.
@@ -225,7 +221,6 @@ impl Config {
             name: project.to_owned(),
             root,
             dep_age_allow_env: format!("{prefix}_DEP_AGE_ALLOW"),
-            dep_age_strict_env: format!("{prefix}_DEP_AGE_STRICT"),
             user_agent: format!("{project}-xtask-dep-age"),
             thresholds: Thresholds::default(),
             canon: canon::Rules::default(),
@@ -358,7 +353,6 @@ mod tests {
     fn project_defaults_derive_the_env_var_and_user_agent() {
         let cfg = Config::for_project("my-app", PathBuf::from("/w"));
         assert_eq!(cfg.dep_age_allow_env, "MY_APP_DEP_AGE_ALLOW");
-        assert_eq!(cfg.dep_age_strict_env, "MY_APP_DEP_AGE_STRICT");
         assert_eq!(cfg.audit_npm_dir, None);
         let mut npm = Config::for_project("p", PathBuf::from("/w"));
         npm.audit_npm_dir = Some("frontend".into());

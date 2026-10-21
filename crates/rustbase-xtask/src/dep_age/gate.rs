@@ -31,18 +31,18 @@ use super::{
 };
 use crate::Config;
 
-/// Combined outcome of the changed-deps gate, shaped like the
-/// template's `AuditResult` so `validate` treats the two
-/// network gates the same way (fatal error vs non-fatal
-/// warnings that degrade an offline run rather than block it).
+/// Combined outcome of the changed-deps gate. Both `error` and
+/// `warnings` fail it, inside `validate` and standalone; they are
+/// kept apart because they call for different fixes.
 pub struct DepAgeResult {
     /// Human-readable detail for the step line.
     pub detail: String,
     /// `Some` only when a changed dependency is within the
-    /// cooldown (always fatal).
+    /// cooldown.
     pub error: Option<String>,
-    /// Non-fatal problems (missing baseline, unreachable
-    /// registry, unparseable response).
+    /// Checks that could not finish (missing baseline, unreachable
+    /// registry, unparseable response). Despite the name, these
+    /// fail the gate too.
     pub warnings: Vec<String>,
 }
 
