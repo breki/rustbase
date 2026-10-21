@@ -144,7 +144,8 @@ pub fn run(cfg: &Config, gate: Gate) -> Result<Outcome, Failure> {
 
 /// [`run`], passing `extra` to the gate's script after `--`:
 /// `frontend-test`'s path filters, and any Vitest options given after
-/// its own `--`. A filtered test run that finds no test file fails.
+/// its own `--`. A test run given any of them fails when it finds no
+/// test file.
 ///
 /// # Errors
 /// As [`run`].
@@ -171,30 +172,37 @@ pub(crate) fn run_with_args(
     }
 }
 
-/// Vitest's override of a config's `passWithNoTests: true`, which lets
-/// a frontend with no tests yet pass the gate but would also pass a
-/// filter that matched no file.
+/// Turns off the template config's `passWithNoTests: true`
+/// (`frontend/vitest.config.js`). That setting lets a frontend with no
+/// tests yet pass the gate; this flag, added only to a run given
+/// arguments, makes a filter that matches nothing fail.
 const NO_PASS_WITHOUT_TESTS: &str = "--passWithNoTests=false";
 
 /// `npm`'s arguments for `gate`, with `extra` behind the `--` that
-/// stops npm reading them as its own. A filtered test run leads with
-/// [`NO_PASS_WITHOUT_TESTS`] unless the caller set the option itself,
-/// since Vitest refuses it twice.
+/// stops npm reading them as its own. A test run given any leads with
+/// [`NO_PASS_WITHOUT_TESTS`] unless the caller set the option itself:
+/// Vitest exits with an error when the option is given twice (seen on
+/// 4.1).
 fn npm_args(gate: Gate, extra: &[impl AsRef<str>]) -> Vec<&str> {
     let mut args = vec!["run", gate.script()];
     if !extra.is_empty() {
         args.push("--");
-        let own = extra.iter().any(|a| {
-            let a = a.as_ref();
-            a.starts_with("--passWithNoTests")
-                || a.starts_with("--no-passWithNoTests")
-        });
-        if gate == Gate::Test && !own {
+        if gate == Gate::Test
+            && !extra.iter().any(|a| sets_pass_with_no_tests(a.as_ref()))
+        {
             args.push(NO_PASS_WITHOUT_TESTS);
         }
         args.extend(extra.iter().map(AsRef::as_ref));
     }
     args
+}
+
+/// Whether `arg` sets Vitest's `passWithNoTests` itself. The kebab
+/// spelling `--pass-with-no-tests` is left out on purpose: Vitest reads
+/// it as a separate option, so it never clashes with the added flag.
+fn sets_pass_with_no_tests(arg: &str) -> bool {
+    arg.starts_with("--passWithNoTests")
+        || arg.starts_with("--no-passWithNoTests")
 }
 
 /// Write a finished run's whole output to `target/<subcommand>.log`
@@ -405,10 +413,9 @@ mod tests {
     }
 
     #[test]
-    fn a_filtered_test_run_that_matches_nothing_fails() {
-        // The config passes a run with no test files; a filtered run
-        // should not, unless the caller says otherwise: Vitest refuses
-        // the option given twice.
+    fn a_test_run_with_arguments_overrides_pass_with_no_tests() {
+        // Unless the caller set the option: Vitest errors when it is
+        // given twice.
         for own in [
             "--passWithNoTests",
             "--passWithNoTests=true",

@@ -18,6 +18,29 @@ work.
 
 ---
 
+### fr-2026-10-21-frontend-test-filters-holds-options
+
+**Category:** naming
+
+**Summary:** `FrontendTest { filters }` also holds the Vitest options
+
+`cli::FrontendCommand::FrontendTest`'s `filters` field receives the
+Vitest options given after `--` (`-t name`) as well as path filters, so
+a reader treats every element as a path. A name covering both, or one
+sentence in its clap help, would say so. Clap help is what `--help`
+prints, so stage 3 logged it rather than editing it.
+
+### fr-2026-10-21-frontend-test-help-own-option
+
+**Category:** documentation
+
+**Summary:** `frontend-test --help` omits the `--passWithNoTests` exception
+
+The help on `FrontendTest { filters }` says a run given arguments fails
+when it finds no test file, but not that passing `--passWithNoTests`
+yourself turns that off. `.claude/commands/validate.md` says it; the
+help, being clap `///` text, was logged rather than edited.
+
 ### fr-2026-10-21-audit-warnings-means-unfinished
 
 **Category:** naming

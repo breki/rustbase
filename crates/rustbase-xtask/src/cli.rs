@@ -390,9 +390,9 @@ pub enum FrontendCommand {
     /// when there is no frontend
     FrontendTest {
         /// Run only the test files whose path contains one of
-        /// these (passed to vitest), failing when none does; put
-        /// vitest options after `--`, as in
-        /// `frontend-test -- -t name`
+        /// these (passed to vitest); put vitest options after
+        /// `--`, as in `frontend-test -- -t name`. Given any, the
+        /// run fails when it finds no test file
         filters: Vec<String>,
     },
 }

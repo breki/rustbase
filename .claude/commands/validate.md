@@ -30,10 +30,13 @@ xtask's tests in the Test gate and every other crate's in Coverage):
 
 The frontend tests are their own gate, `frontend-test`. Run alone, it
 takes path filters: `cargo xtask frontend-test <filters>` runs only the
-test files whose path contains one, and fails when no file matches;
-vitest options go after `--` (`cargo xtask frontend-test -- -t <name>`).
-A `-t` name that matches no test still passes: vitest counts the file
-as skipped.
+test files whose path contains one; vitest options go after `--`
+(`cargo xtask frontend-test -- -t <name>`). Given filters or options,
+the run fails when it finds no test file at all, unless you pass
+`--passWithNoTests` yourself. The check is per run:
+a filter that matches nothing beside one that matches still passes, and
+so does a `-t` name that matches no test (vitest counts the file as
+skipped).
 
 ## Output
 
@@ -62,9 +65,10 @@ output.
 
 A frontend gate also keeps its tool's whole output, both streams, in
 `target/frontend-<gate>.log` (`fmt`, `check`, `dupes`, `test`),
-rewritten each run. Its first two lines are the run's npm arguments,
-as a Rust list rather than a command to paste, so a filtered run shows
-its filters, then the exit status. A failure's report shows only the
+rewritten each run. Line one is the run's npm arguments, as a Rust list
+rather than a command to paste: a test run given arguments shows them,
+after the `--passWithNoTests=false` xtask adds. Line two is the exit
+status. A failure's report shows only the
 last few lines of the tool's output, so failing test names and counts
 printed earlier are only in that log. The report's first line names the
 file; under `validate` it follows the `FAILED` step line and the
