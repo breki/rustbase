@@ -169,12 +169,3 @@ offered to every downstream; bombyx matched `docs/developer/*-log.md` as a
 glob. Record only, no change: `feedback.rs` removes `_None yet._` only as the
 first line of a section, bombyx's anywhere in it; the placeholder only ever
 appears first, so no file behaves differently.
-
-### frontend-test-filter-no-match
-
-**Summary:** A frontend-test filter that matches no file passes
-
-frontend/vitest.config.js sets passWithNoTests: true, so `cargo xtask
-frontend-test <typo>` prints "No test files found" and reports OK. Decide
-whether a filtered run should fail when it ran nothing (found while working
-on #68).

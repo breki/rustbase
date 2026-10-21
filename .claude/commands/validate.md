@@ -30,8 +30,10 @@ xtask's tests in the Test gate and every other crate's in Coverage):
 
 The frontend tests are their own gate, `frontend-test`. Run alone, it
 takes path filters: `cargo xtask frontend-test <filters>` runs only the
-test files whose path contains one; vitest options go after `--`
-(`cargo xtask frontend-test -- -t <name>`).
+test files whose path contains one, and fails when no file matches;
+vitest options go after `--` (`cargo xtask frontend-test -- -t <name>`).
+A `-t` name that matches no test still passes: vitest counts the file
+as skipped.
 
 ## Output
 
