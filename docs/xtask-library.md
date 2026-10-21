@@ -254,20 +254,22 @@ runs every library gate, adding Scripts, which its vendored
 the library found no lost gate behaviour. hoard came fourth
 (breki/hoard#3, after its npm security fixes in breki/hoard#2), the
 first with modules of its own and a frontend: its deploy pipeline
-stayed, it adopted eight gates and left Deny out, and the comparison
-found three things its vendored gates did that the library does not
-(step 4).
+stayed, it took on eight gates it had never run (Canon, Records,
+Scripts, Doc and the four frontend gates), its `DEFERRED` list is
+Deny alone -- hoard is closed-source and keeps no licence policy for
+`deny.toml` to check -- and the comparison (step 4) found three
+things its vendored gates did that the library does not.
 
 **Before step 1**, bring everything outside `xtask/` up to the
-template with `/template-sync`. The downstream's own copy of that
-command (`.claude/commands/template-sync.md`) and the divergences in
-its `docs/developer/template-feedback.md` may still say to skip
-`xtask/`; step 9 changes that. When that sync is large, it can wait
-as its own change, as kozmotic's did. The cost: the project keeps its
-own command files (`/commit`, `/release`, CI), so check each one that
-runs `validate`,
-`cargo test` or `cargo clippy` against step 9's bullets. The steps,
-in the order clockdump took them:
+template with `/template-sync`, with `xtask/` still excluded: steps
+1-4 replace it. The downstream's own copy of that command
+(`.claude/commands/template-sync.md`) and the divergences in its
+`docs/developer/template-feedback.md` may say to skip `xtask/`; step
+9 changes that. When that sync is large, it can wait as its own
+change, as kozmotic's did. Then the project's own command files
+(`/commit`, `/release`, CI) stay as they are, so check each one that
+runs `validate`, `cargo test` or `cargo clippy` against step 9's
+bullets. The steps, in the order clockdump took them:
 
 1. **Copy the template's `xtask/src`** from the commit tagged
    `rustbase-xtask-vX.Y.Z` for the version you will pin, not from
@@ -287,7 +289,7 @@ in the order clockdump took them:
    hoard:
    - A project module named like a template one (hoard's five
      `deploy*.rs`) is kept in place of the template's, under the same
-     feature, and named as a divergence so a sync keeps it.
+     feature; step 9 lists it as kept, never synced.
    - A helper a project module imported from the old `helpers.rs`
      moves into that module (hoard's `cross.rs` took its cargo
      runner); the library's process helpers are private.
@@ -309,9 +311,15 @@ in the order clockdump took them:
    whose docs named `RUSTBASE_DEP_AGE_ALLOW` (bombyx's `CLAUDE.md`,
    `/update-deps`, supply-chain doc) renames it there. Limits a
    vendored gate hard-coded become `Config::thresholds` fields (hoard:
-   `coverage_overall = 95.0`, `dupes_crate = 6.0`), and record
-   archives that cite closed IDs as history (hoard's `DIARY.md`,
-   `*-resolved.md`) join `canon.citation_exempt`.
+   `coverage_overall = 95.0`, `dupes_crate = 6.0`). Canon fails on a
+   backlog ID cited in `docs/` that no record file holds any more (a
+   closed entry is deleted), so archives that cite such IDs as
+   history are pushed onto `canon.citation_exempt`, which already
+   holds the reviewer logs, `template-feedback.md` and the issue
+   docs: hoard added `docs/developer/DIARY.md`,
+   `docs/developer/artisan-resolved.md` and
+   `docs/developer/redteam-resolved.md` with `extend`. Entries must be
+   paths under `docs/`.
 4. **`validate.rs`**: the gates the old vendored `validate.rs` did
    not run can be left out, so the migration keeps the gates the
    project had. Compare its steps with `step::names` in
@@ -324,21 +332,35 @@ in the order clockdump took them:
    startup. Adopt the left-out gates later, one change each, or
    some now, as kozmotic did with three. Dep-age needs the CI job and
    variable in step 7. Audit needs its findings fixed first (kozmotic
-   had 10 TLS advisories; hoard 16 npm ones, held below their fixes
-   by its own `overrides` cooldown pins). Scripts was worth taking
-   because kozmotic's release job runs a script by path.
+   had 10 TLS advisories; hoard 16 npm ones). hoard's
+   `frontend/package.json` `overrides` pinned packages to versions old
+   enough for the cooldown; the fixes were newer than those pins, so
+   breki/hoard#2 raised the pins to fixed versions that had since
+   aged. Scripts was worth taking because kozmotic's release job runs
+   a script by path.
 
-   Three behaviours of hoard's vendored gates needed code here:
+   Names are not behaviour. Compare each vendored gate module with
+   its library counterpart for anything the library does not do -- a
+   check, a flag, a stricter default -- before deleting it (a
+   subagent can do this from the old modules in git). hoard's
+   comparison found three, each needing code in `validate.rs`:
    - **The library runs the workspace tests only inside Coverage**;
      its Test step is `xtask` alone. A project that drops Coverage,
-     or lets an operator skip it, puts a workspace-test step in
-     Coverage's slot -- before Dep-age is never acceptable.
-   - **A stricter gate replaces the library's step** at its
-     position (`step::position`): hoard's Dep-age fails when a
-     changed dependency cannot be checked, where the library warns.
-   - **Options the old `validate` took** (hoard's `--skip-coverage`)
-     live in the project's `main.rs` and `validate.rs`, not the
-     library (#48 takes a general `--skip` into the template).
+     or lets an operator skip it (hoard's `--skip-coverage`), inserts
+     a `Step` calling `cargo_test::run` in Coverage's slot. Never
+     ahead of Dep-age: the test build compiles the dependencies
+     Dep-age has not vetted yet.
+   - **A stricter gate replaces the library's step.** Setting
+     `<NAME>_DEP_AGE_STRICT=1`, or `CI=true`, already makes Dep-age
+     fail when a changed dependency cannot be checked. hoard has no
+     CI and wanted every local run strict without an environment
+     variable, so it replaces the step in place:
+     `steps[i] = Step::new(names::DEP_AGE, "dep-age-check", ...)` at
+     `i = step::position(&steps, names::DEP_AGE)`.
+   - **Options the old `validate` took** live in the project's
+     `main.rs` and `validate.rs`, not the library. Until #48 (open)
+     adds a general `--skip` to the template, a project carries its
+     own, as hoard does.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
    to `[workspace.metadata.coverage] ignore` in the root
    `Cargo.toml`.
@@ -381,6 +403,11 @@ in the order clockdump took them:
      crate doc comment (bombyx).
    - Any other file holding a project module.
 
+   Kept, never synced: a project module that replaces a template one
+   (step 1; hoard's `deploy*.rs`). Record it in the same command file,
+   and as an Open divergence in `template-feedback.md`, which
+   `/template-sync` reads to recommend skipping a change.
+
    Also fix these:
    - A `CLAUDE.md` that says the frontend or deploy subsystem was
      removed, or that nothing in `xtask` knows npm: say the groups are
@@ -410,14 +437,21 @@ in the order clockdump took them:
      `template-feedback.md` are record files too, read by Records
      and by Canon's backlog check: hoard's `## <id> — title` entries
      with `- **Date:**` bullets left Canon an empty backlog, and its
-     date-only `### 2026-05-18` headings failed Records. Convert them
-     to `### <id>` with `**Category:**`/`**Summary:**` directly under
-     it; other fields become prose.
-   - A project with a frontend: the frontend duplication gate runs
-     an npm `dupes` script with `frontend/.jscpd.json`, so jscpd
-     becomes a dev dependency (hoard had run it through `npx`), and
-     jscpd 5 scans `.svelte` files, which older versions skipped. And
-     `cargo xtask fmt` formats Rust only; Prettier is `frontend-fmt`.
+     date-only `### 2026-05-18` headings failed Records. Canon's
+     backlog is the `### <id>` headings of the record files. Convert
+     each entry to an `### <id>` heading with its fields directly
+     under it: `Category`, `Summary`, `Source`, `Issue`, `Depends on`
+     and `Supersedes` stay fields (`CLAUDE.md`, Record files), and
+     any other label becomes prose.
+   - A project with a frontend: copy the template's `dupes` script
+     (`"jscpd src"` in `frontend/package.json`) and
+     `frontend/.jscpd.json`, and add jscpd as a dev dependency at a
+     version past the cooldown (hoard had run it through `npx`). Expect
+     new findings: jscpd 5 scans `.svelte` files, which older versions
+     skipped (hoard went from 1.1% to 14.5% and excluded them for now,
+     breki/hoard#1). And `cargo xtask fmt` now formats Rust only:
+     change any doc or command that relies on it for the frontend to
+     run `cargo xtask frontend-fmt` too.
 
 The other downstreams (jutro, trmnl-bellwether, ledgerstone) follow
 the same steps.
