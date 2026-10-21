@@ -10,7 +10,8 @@ into a crates.io library behind each project's thin `xtask`, one
 module at a time, starting from the dependency-cooldown prototype on
 branch `feat/xtask-lib-dep-age`. Make feature selection work without
 code edits before extracting the coupled modules (done in
-breki/rustbase#5). Leave deploy project-owned until last.
+breki/rustbase#5). Deploy stays project-owned (decided in #10; see
+the `deploy*` row under module classification).
 
 ## Evidence
 
@@ -129,15 +130,15 @@ library can expose the same groups as its own optional features.
 
 Projects need to add, not only configure: extra subcommands (jutro's
 `worktree`, hoard's `cross`), extra `validate` steps (jutro's
-architecture lint), and for deploy, extra config keys and
-hooks before install, before start and during setup. The library
-provides the step and subcommand types; projects implement them.
+architecture lint). The library provides the step and subcommand
+types; projects implement them.
 For `validate` and the subcommands this is in place (#8):
 `step::standard` is the library's gate list in order, and a project
 inserts its own steps before `step::run_all` runs them;
 `cli::LibCommand` is the library's subcommands, which a project's
-CLI flattens into its own and dispatches with `cli::run`. Deploy's
-hooks are #10.
+CLI flattens into its own and dispatches with `cli::run`. Deploy is
+an ordinary project subcommand of this kind; the library offers
+nothing deploy-specific (#10).
 
 ### Distribution and versioning
 
@@ -213,7 +214,7 @@ the library is a possible later step, not part of this plan.
 | `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
 | `validate` | step runner; each gate supplies its `step()` (done, #5). The runner, the `Step` type and the standard gate list moved into the library as `step` (#8); a project inserts its own steps, and the library's feature-gated ones (`frontend::steps`, #44) |
 | `frontend*` | extracted (#44): `frontend`, behind the library's `frontend` feature (default off), with its four `frontend-*` subcommands in `cli::FrontendCommand`; the folder is `Config::frontend_dir`, found from `root`. The JS tools stay the project's npm dev dependencies |
-| `deploy*` | last; generic pieces (remote run, tag guard, staging, crash check) only, with hooks |
+| `deploy*` | keep (#10). The template's deploy is a push: `cargo xtask deploy` ships the source over ssh, builds on the host and swaps the files in. No downstream runs it. bombyx, clockdump and kozmotic carry it unused (no `.deploy`, no `deploy/`); hoard rewrote it, with its own `deploy_guard` and `deploy_remote`; jutro replaced it with a binary that upgrades itself, and has no deploy guard. The candidate pieces -- `deploy_remote` (ssh/scp), the deploy guard (`deploy_guard`), the staged swap and the post-start check -- each had one user at most, so hooks would be shaped around hoard alone (checked 2026-10-21). The self-upgrade engine jutro copied from silkboard, another downstream app, is a separate question, for a crate of its own rather than this library (#58) |
 | `backfeed`, `feedback`, `sync` | template-maintenance tools; stay in the template |
 
 Downstream-only modules, evaluated for the library (#8). Each uses
@@ -476,10 +477,10 @@ the same steps.
 4. Extract the output parsers (`check`, `clippy_cmd`, `test_cmd`,
    `fmt_cmd`) and `changelog`/`todo` (done: #7; `todo` uses bombyx's
    layout only).
-5. Extension points for project subcommands and steps (done: #8;
-   deploy hooks are #10).
+5. Extension points for project subcommands and steps (done: #8).
 6. Migrate the downstreams (#9): clockdump (breki/clockdump#1),
    kozmotic (breki/kozmotic#1), bombyx (breki/bombyx#196) and hoard
    (breki/hoard#3) done; jutro, trmnl-bellwether and ledgerstone
    remain.
-7. Deploy: decide what, if anything, is shared.
+7. Deploy: decide what, if anything, is shared (done: #10, nothing;
+   see `deploy*` under module classification).

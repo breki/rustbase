@@ -83,9 +83,14 @@ Both invocations run the same `xtask` binary, which:
 1. Builds the frontend locally (`npm run build`)
 2. Tars the Rust source and `scp`s it to the remote
 3. Builds the release binary on the remote
-4. Stops the service, installs binary + frontend
-   (atomic swap)
-5. Restarts and verifies the service (3 retries)
+4. Stages the frontend in `~/frontend-dist-tmp` on the
+   remote
+5. Stops the service, installs the binary, swaps the
+   frontend in by two renames, starts the service and
+   checks it is active (3 attempts)
+
+The numbers match the `[N/5]` lines the command prints.
+The service is down only during step 5.
 
 The first build takes ~4 minutes (downloading +
 compiling all dependencies). Incremental builds take
@@ -161,9 +166,19 @@ ssh <host> "sudo ls -la /opt/rustbase/"
 ```
 
 The `rustbase` user owns everything under
-`/opt/rustbase/`. The deploy user (configured via
-`rpi_user`) needs `sudo` to copy files into the deploy
-path.
+`/opt/rustbase/`, and setup makes the directory mode
+750. The deploy user (configured via `rpi_user`) needs
+`sudo` to copy files into the deploy path, and even to
+list it: a plain `ls /opt/rustbase` shows nothing.
+
+**Leftovers after a failed deploy**: `~/frontend-dist-tmp`
+(the staged frontend) and `frontend-dist-new` /
+`frontend-dist-old` under `/opt/rustbase/` (the halves of
+the swap). The next deploy removes all three. Delete them
+by hand only when `/opt/rustbase/frontend-dist` exists: a
+deploy that failed between the two renames leaves the
+live frontend in `frontend-dist-new` or
+`frontend-dist-old`.
 
 **Port conflict**:
 ```bash
