@@ -38,19 +38,24 @@ pub use preflight::dep_preflight;
 /// env var.
 fn allow_hint(cfg: &Config, base: &str) -> String {
     let env = format!("{}=name@version[,...]", cfg.dep_age_allow_env);
-    // CI diffs from the pull request's base, so a waiver committed
-    // only on the branch passes locally and fails there.
-    let ci = if base == "HEAD" {
-        " (on main, for CI)"
-    } else {
-        ""
+    let Some(file) = &cfg.dep_age_allow_file else {
+        return format!("allow via {env}");
     };
-    match &cfg.dep_age_allow_file {
-        Some(file) => format!(
-            "allow via a `name@version` line in {file} committed at \
-             {base}{ci}, or {env}"
-        ),
-        None => format!("allow via {env}"),
+    // Locally the base is HEAD; CI diffs from the change's base
+    // branch, so a waiver only on the change's own branch passes here
+    // and fails there. The library cannot know that branch's name.
+    if base == "HEAD" {
+        format!(
+            "allow via a `name@version` line in {file}, committed (and \
+             landed on the base branch before this change is pushed, for \
+             CI), or {env}"
+        )
+    } else {
+        format!(
+            "allow via a `name@version` line in {file} landed on the base \
+             branch (this run read it at {base}), then push again, since a \
+             re-run keeps the old base; or {env}"
+        )
     }
 }
 
@@ -388,21 +393,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_hint_names_the_file_at_the_base_and_the_variable() {
+    fn the_hint_names_the_action_for_the_base_it_ran_against() {
+        // The library cannot know the branch name, so it says "the base
+        // branch", and it names what to do rather than a commit.
         let mut cfg = Config::for_project("my-app", "/r".into());
         let hint = allow_hint(&cfg, "3f2a1b");
-        assert!(
-            hint.contains(".dep-age-allow committed at 3f2a1b"),
-            "{hint}"
-        );
-        assert!(hint.contains("MY_APP_DEP_AGE_ALLOW=name@version"), "{hint}");
-        assert!(!hint.contains("main"), "{hint}");
-        // Locally the base is HEAD; CI only honours a waiver on main.
+        for part in [
+            ".dep-age-allow",
+            "on the base branch",
+            "push again",
+            "3f2a1b",
+            "MY_APP_DEP_AGE_ALLOW=name@version",
+        ] {
+            assert!(hint.contains(part), "{part}: {hint}");
+        }
         let hint = allow_hint(&cfg, "HEAD");
-        assert!(
-            hint.contains("committed at HEAD (on main, for CI)"),
-            "{hint}"
-        );
+        for part in ["committed", "base branch", "before"] {
+            assert!(hint.contains(part), "{part}: {hint}");
+        }
+        for hint in [allow_hint(&cfg, "HEAD"), allow_hint(&cfg, "3f2a1b")] {
+            assert!(!hint.contains("main"), "{hint}");
+        }
         cfg.dep_age_allow_file = None;
         let hint = allow_hint(&cfg, "HEAD");
         assert!(!hint.contains(".dep-age-allow"), "{hint}");

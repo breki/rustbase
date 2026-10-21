@@ -741,6 +741,7 @@ a fresh empty `[Unreleased]` above it.
 | `/todo` | Capture a work item into `docs/todo.md` (no implementation) |
 | `/implement` | Plan + implement a captured item; keeps a working `docs/issues/<slug>.md` until done |
 | `/update-deps` | Upgrade third-party deps (Rust + frontend) to the newest versions outside the 14-day cooldown |
+| `/security-upgrade` | Patch what `cargo xtask audit` flags through the `.dep-age-allow` waiver, then assess whether production is exposed |
 | `/simplify` | Review changed code for quality |
 | `/architect` | Project overview and architecture guide |
 | `/web-dev` | Axum, Svelte 5, Vite, Playwright patterns |

@@ -185,6 +185,10 @@ and this project adheres to
   stays on record in git. Malformed lines are listed when a run fails anyway,
   never failing a run on their own. The RUSTBASE_DEP_AGE_ALLOW variable still
   works (#62).
+- /security-upgrade: patch what cargo xtask audit flags, waiving a still-fresh
+  fix through .dep-age-allow (landed on the base branch first), then judge from
+  the deployed release whether production is exposed and file any hardening of
+  our own code separately (#62).
 
 ### Changed
 
@@ -287,6 +291,10 @@ and this project adheres to
   affected range, severity, GHSA advisory and available fix -- instead of only
   counting them. Advisory text comes from outside, so anything but printable
   ASCII is shown escaped (`\u{e9}`) (#62).
+- The cooldown gate's waiver hint names the action instead of a commit: locally,
+  commit the .dep-age-allow line and land it on the base branch before pushing;
+  in CI, land it there and push again, since a re-run keeps the old base. It no
+  longer names a branch (#62).
 
 ### Fixed
 
