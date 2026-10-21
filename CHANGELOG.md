@@ -177,6 +177,14 @@ and this project adheres to
   transaction, recovery, retry, the versioned state file and the command layer.
   Each application declares its policy type, adapter id, usage and legacy-state
   rule once in an App trait (#58).
+- A committed .dep-age-allow file waives a fresh dependency for the cooldown
+  gate (one name@version per line, # comments). The gate reads it as committed
+  at the base it diffs against -- HEAD locally; in CI the pull request's base,
+  or for a push to main the tip before the push -- so a waiver added in the same
+  change waives nothing, and the waiver
+  stays on record in git. Malformed lines are listed when a run fails anyway,
+  never failing a run on their own. The RUSTBASE_DEP_AGE_ALLOW variable still
+  works (#62).
 
 ### Changed
 

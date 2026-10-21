@@ -60,16 +60,22 @@ pub(super) fn fetch_registry(
 /// absent at `base` or git can't run (no commit yet, not a
 /// repo); the caller decides what that means.
 pub(super) fn git_show(root: &Path, base: &str, rel: &str) -> Option<String> {
+    String::from_utf8(git_show_bytes(root, base, rel)?).ok()
+}
+
+/// `git show <base>:<rel>` as raw bytes, for a caller that reports a
+/// file that is not UTF-8 rather than taking it as absent.
+pub(super) fn git_show_bytes(
+    root: &Path,
+    base: &str,
+    rel: &str,
+) -> Option<Vec<u8>> {
     let output = Command::new("git")
         .current_dir(root)
         .args(["show", &format!("{base}:{rel}")])
         .output()
         .ok()?;
-    if output.status.success() {
-        String::from_utf8(output.stdout).ok()
-    } else {
-        None
-    }
+    output.status.success().then_some(output.stdout)
 }
 
 /// True when `base` names a commit in `root`'s repository, so a

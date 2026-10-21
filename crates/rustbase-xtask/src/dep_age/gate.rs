@@ -13,8 +13,15 @@
 //! registry dependency, transitive ones included. A
 //! lockfile-churning update (`cargo update` / `npm update`)
 //! therefore can flag many fresh transitive versions at once;
-//! see `Config::dep_age_allow_env` and the supply-chain notes in
-//! `CLAUDE.md` for the intended workflow.
+//! see `Config::dep_age_allow_file`, `Config::dep_age_allow_env`
+//! and the supply-chain notes in `CLAUDE.md` for the intended
+//! workflow.
+//!
+//! What can fail a run is scoped to the lockfile changes: a fresh
+//! dependency, or one that could not be checked. A problem in the
+//! allow file never fails a run alone -- a typo merged to the base
+//! branch must not block every later change, including its fix --
+//! and is printed with any failing run's message instead.
 //!
 //! The shared registry-fetch and date-verdict machinery lives
 //! in the parent [`super`] module; this submodule imports it.
@@ -24,7 +31,7 @@ use std::fs;
 
 use serde_json::Value;
 
-use super::io::{git_commit_exists, git_show};
+use super::io::{git_commit_exists, git_show, git_show_bytes};
 use super::{
     COOLDOWN_DAYS, Ecosystem, age_in_days, cargo_version_date, fetch_registry,
     npm_version_date, parse_iso_date, today_days,
@@ -55,15 +62,16 @@ enum DepOutcome {
     /// Could not be checked (network / tool / parse); fails the
     /// gate like `Fresh`, but is reported apart from it.
     Unavailable(String),
-    /// Named in the allow env var -- skipped, never fetched.
+    /// Named in the allow file or env var -- skipped, never fetched.
     Allowed,
 }
 
 /// Fold per-dependency outcomes into the combined result.
 /// Pure, so the fresh-vs-unchecked split is unit-tested.
+/// `allow_hint` ends a fresh failure, saying how to waive one.
 fn classify_dep_age(
     outcomes: &[(String, DepOutcome)],
-    allow_env: &str,
+    allow_hint: &str,
 ) -> DepAgeResult {
     if outcomes.is_empty() {
         return DepAgeResult {
@@ -102,7 +110,7 @@ fn classify_dep_age(
         Some(format!(
             "dependencies within the {COOLDOWN_DAYS}-day cooldown: {}\n  \
              adopt only with a stated justification (security fixes \
-             exempt); allow via {allow_env}=name@version[,...]",
+             exempt); {allow_hint}",
             fresh.join("; ")
         ))
     };
@@ -111,6 +119,91 @@ fn classify_dep_age(
         error,
         unchecked,
     }
+}
+
+/// The waived `name@version` labels -- the env list, and the allow
+/// file as committed at `base` (none when it is absent there) -- and
+/// the problems found reading the file.
+fn allowed(
+    cfg: &Config,
+    base: &str,
+    env: Option<&str>,
+) -> (HashSet<String>, Vec<String>) {
+    let mut allow = parse_allow(env);
+    let Some(file) = &cfg.dep_age_allow_file else {
+        return (allow, Vec::new());
+    };
+    // `git show <base>:<file>` takes a path from the repository top;
+    // an empty one would print the tree listing instead.
+    if file.is_empty() || file.starts_with('/') || file.contains('\\') {
+        let problem = format!(
+            "dep_age_allow_file {file:?} is not a `/`-separated path from \
+             the repository top"
+        );
+        return (allow, vec![problem]);
+    }
+    let mut problems = Vec::new();
+    if let Some(bytes) = git_show_bytes(&cfg.root, base, file) {
+        match String::from_utf8(bytes) {
+            Ok(text) => {
+                let (pins, bad) = parse_allow_file(file, &text);
+                allow.extend(pins);
+                problems = bad;
+            }
+            Err(_) => problems.push(format!(
+                "{file}: not UTF-8 (saved as UTF-16?), so none of its \
+                 lines waive anything"
+            )),
+        }
+    }
+    (allow, problems)
+}
+
+/// Print the allow file's problems with a run that already fails,
+/// so a waiver that did not take effect is visible there. They
+/// never fail a run on their own: see the module doc.
+fn attach_allow_problems(
+    mut result: DepAgeResult,
+    problems: &[String],
+) -> DepAgeResult {
+    if let Some(error) = &mut result.error {
+        for problem in problems {
+            error.push_str("\n  ");
+            error.push_str(problem);
+        }
+    } else if !result.unchecked.is_empty() {
+        result.unchecked.extend_from_slice(problems);
+    }
+    result
+}
+
+/// One `name@version` per line; `#` starts a comment. A line of any
+/// other shape is returned as a problem naming its line number. The
+/// version follows the last `@`, so an npm `@scope/pkg@1.2.3` fits.
+fn parse_allow_file(file: &str, text: &str) -> (HashSet<String>, Vec<String>) {
+    let mut pins = HashSet::new();
+    let mut problems = Vec::new();
+    // A UTF-8 byte-order mark, as some Windows editors write, is not
+    // part of the first line.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    for (n, line) in text.lines().enumerate() {
+        let pin = line.split('#').next().unwrap_or("").trim();
+        if pin.is_empty() {
+            continue;
+        }
+        let shaped = !pin.contains(|c: char| {
+            c.is_whitespace() || c.is_control() || c == ','
+        }) && pin
+            .rsplit_once('@')
+            .is_some_and(|(name, ver)| !name.is_empty() && !ver.is_empty());
+        if shaped {
+            pins.insert(pin.to_owned());
+        } else {
+            problems
+                .push(format!("{file}:{}: not name@version: {pin:?}", n + 1));
+        }
+    }
+    (pins, problems)
 }
 
 /// Parse the comma-separated allow list into a set of
@@ -372,8 +465,8 @@ fn collect_changes(
 /// lockfiles versus `base` (`validate` passes `HEAD`). Free (no
 /// network) when the lockfiles are unchanged.
 pub fn check_changed_deps(cfg: &Config, base: &str) -> DepAgeResult {
-    let allow =
-        parse_allow(std::env::var(&cfg.dep_age_allow_env).ok().as_deref());
+    let env = std::env::var(&cfg.dep_age_allow_env).ok();
+    let (allow, problems) = allowed(cfg, base, env.as_deref());
     let mut outcomes: Vec<(String, DepOutcome)> = Vec::new();
     let mut unchecked: Vec<String> = Vec::new();
 
@@ -402,12 +495,12 @@ pub fn check_changed_deps(cfg: &Config, base: &str) -> DepAgeResult {
         &mut unchecked,
     );
 
-    let mut result = classify_dep_age(&outcomes, &cfg.dep_age_allow_env);
+    let mut result = classify_dep_age(&outcomes, &super::allow_hint(cfg, base));
     // Lockfile-level entries precede the per-dep ones the
     // classifier collected.
     unchecked.extend(result.unchecked);
     result.unchecked = unchecked;
-    result
+    attach_allow_problems(result, &problems)
 }
 
 /// The gate's verdict, the same for `validate` and the standalone
@@ -743,6 +836,163 @@ dependencies = [
     }
 
     #[test]
+    fn the_allow_file_takes_one_pin_per_line_and_names_bad_lines() {
+        let (a, problems) = parse_allow_file(
+            ".dep-age-allow",
+            "# security fixes still in the cooldown\n\
+             ring@0.17.9   # RUSTSEC-2026-0042\n\
+             \n   @scope/pkg@1.2.3\n#old@1.0.0\n\
+             ring@0.17.9, serde@1.0.999\n\
+             ring 0.17.9\n@1.0.0\nring@\nr\0i@1\n",
+        );
+        let mut a: Vec<_> = a.into_iter().collect();
+        a.sort();
+        assert_eq!(a, ["@scope/pkg@1.2.3", "ring@0.17.9"]);
+        assert_eq!(problems.len(), 5, "{problems:?}");
+        assert!(
+            problems[0].starts_with(".dep-age-allow:6: "),
+            "{problems:?}"
+        );
+        assert!(problems[0].contains("not name@version"), "{problems:?}");
+    }
+
+    #[test]
+    fn the_allow_file_counts_as_committed_at_the_base() {
+        // A pin added in the working tree, or in a commit after the
+        // base, does not count: in CI the base is the pull request's
+        // base, so a waiver added in the change itself waives nothing.
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        let cfg = Config::for_project("t", repo.0.clone());
+        let file = repo.0.join(".dep-age-allow");
+        std::fs::write(&file, "ring@0.17.9 # fix\n").unwrap();
+        crate::test_repo::git(&repo.0, &["add", "."]);
+        crate::test_repo::git(&repo.0, &["commit", "-q", "-m", "waive"]);
+        std::fs::write(&file, "ring@0.17.9\nserde@1.0.999\n").unwrap();
+        let (a, problems) = allowed(&cfg, "HEAD", Some("anyhow@1.0.80"));
+        assert!(problems.is_empty(), "{problems:?}");
+        assert!(a.contains("ring@0.17.9"), "{a:?}");
+        assert!(a.contains("anyhow@1.0.80"), "{a:?}");
+        assert!(!a.contains("serde@1.0.999"), "{a:?}");
+        // At the first commit the file did not exist: only the env.
+        let (a, _) = allowed(&cfg, "HEAD~1", None);
+        assert!(a.is_empty(), "{a:?}");
+    }
+
+    #[test]
+    fn an_allow_file_setting_that_is_no_git_path_is_reported() {
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        let mut cfg = Config::for_project("t", repo.0.clone());
+        for bad in ["", "/abs/allow", "sub\\allow"] {
+            cfg.dep_age_allow_file = Some(bad.to_owned());
+            let (a, problems) = allowed(&cfg, "HEAD", None);
+            assert!(a.is_empty(), "{bad:?}: {a:?}");
+            assert_eq!(problems.len(), 1, "{bad:?}: {problems:?}");
+        }
+        cfg.dep_age_allow_file = None;
+        let (a, problems) = allowed(&cfg, "HEAD", Some("x@1.0.0"));
+        assert_eq!((a.len(), problems.len()), (1, 0));
+    }
+
+    #[test]
+    fn a_malformed_allow_file_never_fails_an_unchanged_tree() {
+        // A typo merged to main must not block every later change,
+        // including the one that fixes it.
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        let cfg = Config::for_project("t", repo.0.clone());
+        std::fs::write(repo.0.join(".dep-age-allow"), "ring 0.17.9\n").unwrap();
+        crate::test_repo::git(&repo.0, &["add", "."]);
+        crate::test_repo::git(&repo.0, &["commit", "-q", "-m", "typo"]);
+        let r = check_changed_deps(&cfg, "HEAD");
+        assert!(r.error.is_none(), "{:?}", r.error);
+        assert!(r.unchecked.is_empty(), "{:?}", r.unchecked);
+        assert_eq!(r.detail, "no dependency changes");
+    }
+
+    #[test]
+    fn allow_file_problems_ride_only_on_a_failing_run() {
+        let problems = vec![".dep-age-allow:3: not name@version: \"x\"".into()];
+        let fresh = DepAgeResult {
+            detail: "1 changed".into(),
+            error: Some("dependencies within the cooldown: b@2".into()),
+            unchecked: Vec::new(),
+        };
+        let err = attach_allow_problems(fresh, &problems).error.unwrap();
+        assert!(err.ends_with(&format!("\n  {}", problems[0])), "{err}");
+        let clean = DepAgeResult {
+            detail: "no dependency changes".into(),
+            error: None,
+            unchecked: Vec::new(),
+        };
+        let r = attach_allow_problems(clean, &problems);
+        assert!(r.error.is_none(), "{:?}", r.error);
+        assert!(r.unchecked.is_empty(), "{:?}", r.unchecked);
+        // A waiver also covers a dependency that cannot be checked, so
+        // a run failing only on unchecked entries lists them too.
+        let unchecked_only = DepAgeResult {
+            detail: "1 changed".into(),
+            error: None,
+            unchecked: vec!["gone@1.0.0: registry request failed".into()],
+        };
+        let r = attach_allow_problems(unchecked_only, &problems);
+        assert!(r.error.is_none(), "{:?}", r.error);
+        assert_eq!(r.unchecked.len(), 2, "{:?}", r.unchecked);
+        assert_eq!(r.unchecked[1], problems[0]);
+    }
+
+    #[test]
+    fn an_allow_file_that_is_not_utf8_is_reported_not_dropped() {
+        // Windows PowerShell 5.1 writes UTF-16LE for `>`.
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        let cfg = Config::for_project("t", repo.0.clone());
+        // PowerShell starts the file with the UTF-16LE mark FF FE.
+        let utf16: Vec<u8> = [0xFF, 0xFE]
+            .into_iter()
+            .chain("ring@0.17.9\n".encode_utf16().flat_map(u16::to_le_bytes))
+            .collect();
+        std::fs::write(repo.0.join(".dep-age-allow"), utf16).unwrap();
+        crate::test_repo::git(&repo.0, &["add", "."]);
+        crate::test_repo::git(&repo.0, &["commit", "-q", "-m", "utf16"]);
+        let (pins, problems) = allowed(&cfg, "HEAD", None);
+        assert!(pins.is_empty(), "{pins:?}");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("not UTF-8"), "{problems:?}");
+    }
+
+    #[test]
+    fn a_byte_order_mark_does_not_spoil_the_first_line() {
+        for first in ["# waivers\n", "ring@0.17.9\n"] {
+            let text = format!("\u{feff}{first}serde@1.0.999\n");
+            let (pins, problems) = parse_allow_file(".dep-age-allow", &text);
+            assert!(problems.is_empty(), "{first:?}: {problems:?}");
+            assert!(pins.contains("serde@1.0.999"), "{pins:?}");
+            if first.starts_with("ring") {
+                assert!(pins.contains("ring@0.17.9"), "{pins:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_dep_waived_in_the_committed_file_passes_the_gate() {
+        // Allowed dependencies are never fetched: no network here.
+        let repo = crate::test_repo::with_lock(LOCK, true);
+        let cfg = Config::for_project("t", repo.0.clone());
+        std::fs::write(repo.0.join(".dep-age-allow"), "zz-waived@9.9.9\n")
+            .unwrap();
+        crate::test_repo::git(&repo.0, &["add", "."]);
+        crate::test_repo::git(&repo.0, &["commit", "-q", "-m", "waive"]);
+        let lock = format!(
+            "{LOCK}\n[[package]]\nname = \"zz-waived\"\nversion = \
+             \"9.9.9\"\nsource = \"registry+https://github.com/rust-lang/\
+             crates.io-index\"\n"
+        );
+        std::fs::write(repo.0.join("Cargo.lock"), lock).unwrap();
+        let r = check_changed_deps(&cfg, "HEAD");
+        assert!(r.error.is_none(), "{:?}", r.error);
+        assert!(r.unchecked.is_empty(), "{:?}", r.unchecked);
+        assert!(r.detail.contains("1 allow-listed"), "{}", r.detail);
+    }
+
+    #[test]
     fn classify_dep_age_empty_is_clean() {
         let r = classify_dep_age(&[], "ALLOW");
         assert!(r.error.is_none());
@@ -760,11 +1010,11 @@ dependencies = [
                     DepOutcome::Fresh("published 2d ago".into()),
                 ),
             ],
-            "MY_ALLOW",
+            "allow via MY_ALLOW",
         );
         let err = r.error.unwrap();
         assert!(err.contains("b@2.0.0"));
-        assert!(err.contains("MY_ALLOW=name@version"), "{err}");
+        assert!(err.ends_with("; allow via MY_ALLOW"), "{err}");
         assert!(err.contains("published 2d ago"));
         assert!(r.detail.contains("1 fresh"));
         assert!(r.detail.contains("1 aged"));
