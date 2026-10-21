@@ -35,6 +35,10 @@ before planning any work:
   grep for the symbol or string the issue says is missing.
 - Are the numbers still current? Counts, versions and file
   sizes all decay. Re-measure rather than repeating the figure.
+- Did it really exist here? An issue that says something "went
+  missing" or "regressed" may be written from a downstream
+  project's history. Read the last release tag:
+  `git show <tag>:<path>`.
 
 If the issue cites a slug in `docs/todo.md` or a planning doc
 under `docs/issues/`, read those too: the issue body is a summary
