@@ -138,18 +138,20 @@ fn classify(has_package_json: bool, has_node_modules: bool) -> Action {
 /// When the frontend exists but is not installed, npm cannot run,
 /// or the script fails.
 pub fn run(cfg: &Config, gate: Gate) -> Result<Outcome, Failure> {
-    run_with_args(cfg, gate, &[])
+    let none: [&str; 0] = [];
+    run_with_args(cfg, gate, &none)
 }
 
-/// [`run`], passing `extra` to the gate's script after `--`: for the
-/// test gate, Vitest's file filters.
+/// [`run`], passing `extra` to the gate's script after `--`, unchanged:
+/// `frontend-test`'s path filters, and any Vitest options given after
+/// its own `--`.
 ///
 /// # Errors
 /// As [`run`].
-pub fn run_with_args(
+pub(crate) fn run_with_args(
     cfg: &Config,
     gate: Gate,
-    extra: &[&str],
+    extra: &[impl AsRef<str>],
 ) -> Result<Outcome, Failure> {
     let Some(dir) = cfg.frontend_dir.as_ref().map(|d| cfg.root.join(d)) else {
         return Ok(Outcome::NotConfigured);
@@ -161,8 +163,9 @@ pub fn run_with_args(
         Action::Skip => Ok(Outcome::Skipped),
         Action::NotInstalled => Err(not_installed(&dir).into()),
         Action::Run => {
-            let c = process::npm(&dir, &npm_args(gate, extra))?;
-            let log = write_log(&cfg.root, gate, extra, &c);
+            let args = npm_args(gate, extra);
+            let c = process::npm(&dir, &args)?;
+            let log = write_log(&cfg.root, gate, &args, &c);
             outcome(gate, &c, log.as_deref().map_err(String::as_str))
         }
     }
@@ -170,11 +173,11 @@ pub fn run_with_args(
 
 /// `npm`'s arguments for `gate`, with `extra` behind the `--` that
 /// stops npm reading them as its own.
-fn npm_args<'a>(gate: Gate, extra: &[&'a str]) -> Vec<&'a str> {
+fn npm_args(gate: Gate, extra: &[impl AsRef<str>]) -> Vec<&str> {
     let mut args = vec!["run", gate.script()];
     if !extra.is_empty() {
         args.push("--");
-        args.extend_from_slice(extra);
+        args.extend(extra.iter().map(AsRef::as_ref));
     }
     args
 }
@@ -184,14 +187,13 @@ fn npm_args<'a>(gate: Gate, extra: &[&'a str]) -> Vec<&'a str> {
 /// absolute path, made so even when `root` is relative. The file is
 /// for reading: nothing parses it.
 ///
-/// When two runs of the same subcommand overlap (Prettier's fix and
-/// `--check` modes share `frontend-fmt.log`), the later run's log is
-/// the one left; its first two lines give that run's script and exit
-/// status.
+/// Prettier's fix and `--check` modes both write `frontend-fmt.log`,
+/// and the last run to finish replaces it. Its first two lines say
+/// which run it was: the npm arguments, then the exit status.
 fn write_log(
     root: &Path,
     gate: Gate,
-    extra: &[&str],
+    args: &[&str],
     c: &Captured,
 ) -> Result<PathBuf, String> {
     let path = root
@@ -199,12 +201,11 @@ fn write_log(
         .join(format!("{}.log", gate.subcommand()));
     let path = std::path::absolute(&path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
+    // Rust's string-literal escaping, not a shell's: it keeps each
+    // argument whole whatever it holds.
     let text = format!(
-        "$ npm {}\n{}\n--- stdout ---\n{}\n--- stderr ---\n{}",
-        npm_args(gate, extra).join(" "),
-        c.status,
-        c.stdout,
-        c.stderr
+        "$ npm {args:?}\n{}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        c.status, c.stdout, c.stderr
     );
     path.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
@@ -319,15 +320,25 @@ mod tests {
         let path = dir.0.join("target/frontend-test.log");
         let first = failed("RUN v4\n FAIL a.test.ts\n", "AssertionError\n");
         assert_eq!(
-            write_log(&dir.0, Gate::Test, &[], &first),
+            write_log(&dir.0, Gate::Test, &["run", "test"], &first),
             Ok(path.clone())
         );
         let text = fs::read_to_string(&path).unwrap();
-        for part in ["npm run test", "exit status: 1", "FAIL a.test.ts"] {
+        for part in [
+            r#"$ npm ["run", "test"]"#,
+            "exit status: 1",
+            "FAIL a.test.ts",
+        ] {
             assert!(text.contains(part), "{part}: {text}");
         }
         assert!(text.contains("AssertionError"), "{text}");
-        write_log(&dir.0, Gate::Test, &[], &passed("all passed\n")).unwrap();
+        write_log(
+            &dir.0,
+            Gate::Test,
+            &["run", "test"],
+            &passed("all passed\n"),
+        )
+        .unwrap();
         let text = fs::read_to_string(&path).unwrap();
         assert!(text.contains("exit status: 0"), "{text}");
         assert!(text.contains("all passed"), "{text}");
@@ -342,13 +353,15 @@ mod tests {
         let dir = crate::test_repo::empty_dir();
         fs::write(dir.0.join("target"), "").unwrap();
         let err =
-            write_log(&dir.0, Gate::Check, &[], &failed("", "")).unwrap_err();
+            write_log(&dir.0, Gate::Check, &["run", "check"], &failed("", ""))
+                .unwrap_err();
         assert!(err.contains("target"), "{err}");
         // The folder exists but the write fails: the log is a folder.
         let dir = crate::test_repo::empty_dir();
         fs::create_dir_all(dir.0.join("target/frontend-check.log")).unwrap();
         let err =
-            write_log(&dir.0, Gate::Check, &[], &failed("", "")).unwrap_err();
+            write_log(&dir.0, Gate::Check, &["run", "check"], &failed("", ""))
+                .unwrap_err();
         assert!(err.contains("frontend-check.log"), "{err}");
     }
 
@@ -361,14 +374,15 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let up = "../".repeat(cwd.components().count() - 1);
         let rel = PathBuf::from(up).join(dir.0.strip_prefix("/").unwrap());
-        let path = write_log(&rel, Gate::Test, &[], &passed("")).unwrap();
+        let path =
+            write_log(&rel, Gate::Test, &["run", "test"], &passed("")).unwrap();
         assert!(path.is_absolute(), "{}", path.display());
         assert!(path.is_file(), "{}", path.display());
     }
 
     #[test]
     fn extra_arguments_reach_the_script_after_a_separator() {
-        assert_eq!(npm_args(Gate::Test, &[]), ["run", "test"]);
+        assert_eq!(npm_args(Gate::Test, &[""; 0]), ["run", "test"]);
         assert_eq!(
             npm_args(Gate::Test, &["src/a", "b.test"]),
             ["run", "test", "--", "src/a", "b.test"]
@@ -378,10 +392,26 @@ mod tests {
     #[test]
     fn the_log_names_the_arguments_the_run_had() {
         let dir = crate::test_repo::empty_dir();
-        let path =
-            write_log(&dir.0, Gate::Test, &["src/a"], &passed("")).unwrap();
+        let args = npm_args(Gate::Test, &["src/a"]);
+        let path = write_log(&dir.0, Gate::Test, &args, &passed("")).unwrap();
         let text = fs::read_to_string(&path).unwrap();
-        assert!(text.starts_with("$ npm run test -- src/a\n"), "{text}");
+        let first = text.lines().next().unwrap();
+        assert_eq!(first, r#"$ npm ["run", "test", "--", "src/a"]"#);
+    }
+
+    #[test]
+    fn the_log_header_keeps_each_argument_whole() {
+        // A space, an empty argument, a quote and a trailing backslash
+        // each read back as one argument.
+        let dir = crate::test_repo::empty_dir();
+        let args = npm_args(Gate::Test, &["my dir", "", "a\"b", r"src\d\"]);
+        let path = write_log(&dir.0, Gate::Test, &args, &passed("")).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        let first = text.lines().next().unwrap();
+        assert_eq!(
+            first,
+            r#"$ npm ["run", "test", "--", "my dir", "", "a\"b", "src\\d\\"]"#
+        );
     }
 
     #[test]

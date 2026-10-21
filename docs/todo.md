@@ -176,4 +176,5 @@ appears first, so no file behaves differently.
 
 frontend/vitest.config.js sets passWithNoTests: true, so `cargo xtask
 frontend-test <typo>` prints "No test files found" and reports OK. Decide
-whether a filtered run should fail when it ran nothing (found working #68).
+whether a filtered run should fail when it ran nothing (found while working
+on #68).

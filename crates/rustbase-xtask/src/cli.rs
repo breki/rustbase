@@ -370,6 +370,7 @@ fn run_test(
 /// The frontend gates' subcommands, flattened into [`LibCommand`].
 #[cfg(feature = "frontend")]
 #[derive(Debug, Subcommand)]
+#[non_exhaustive]
 pub enum FrontendCommand {
     /// Type-check the frontend (svelte-check); skips
     /// cleanly when there is no frontend
@@ -389,7 +390,8 @@ pub enum FrontendCommand {
     /// when there is no frontend
     FrontendTest {
         /// Run only the test files whose path contains one of
-        /// these (passed to vitest)
+        /// these (passed to vitest); put vitest options after
+        /// `--`, as in `frontend-test -- -t name`
         filters: Vec<String>,
     },
 }
@@ -398,20 +400,14 @@ pub enum FrontendCommand {
 #[cfg(feature = "frontend")]
 fn run_frontend(c: &FrontendCommand, cfg: &Config) -> Result<(), String> {
     use frontend::{Gate, Outcome};
-    let (gate, extra) = match c {
-        FrontendCommand::FrontendCheck => (Gate::Check, Vec::new()),
-        FrontendCommand::FrontendFmt { check: true } => {
-            (Gate::FmtCheck, Vec::new())
-        }
-        FrontendCommand::FrontendFmt { check: false } => {
-            (Gate::Fmt, Vec::new())
-        }
-        FrontendCommand::FrontendDupes => (Gate::Dupes, Vec::new()),
-        FrontendCommand::FrontendTest { filters } => {
-            (Gate::Test, filters.iter().map(String::as_str).collect())
-        }
+    let (gate, extra): (Gate, &[String]) = match c {
+        FrontendCommand::FrontendCheck => (Gate::Check, &[]),
+        FrontendCommand::FrontendFmt { check: true } => (Gate::FmtCheck, &[]),
+        FrontendCommand::FrontendFmt { check: false } => (Gate::Fmt, &[]),
+        FrontendCommand::FrontendDupes => (Gate::Dupes, &[]),
+        FrontendCommand::FrontendTest { filters } => (Gate::Test, filters),
     };
-    match frontend::run_with_args(cfg, gate, &extra)
+    match frontend::run_with_args(cfg, gate, extra)
         .map_err(|f| f.report(STANDALONE_LINES))?
     {
         Outcome::Skipped => println!("{} {}", gate.name(), frontend::SKIPPED),

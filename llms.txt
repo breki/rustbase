@@ -21,6 +21,7 @@ cargo xtask check             # type-check all targets (compiles tests, runs non
 cargo xtask test [filter]     # tests only
 cargo xtask clippy            # lint (+ xtask: all features off, each alone)
 cargo xtask fmt [--check]     # format code (--check: read-only)
+cargo xtask frontend-test [filters] [-- vitest opts]  # frontend unit tests
 cargo xtask coverage          # coverage check (>=90% workspace, >=85% per module)
 cargo xtask dupes             # code duplication check (<=6%)
 cargo xtask deploy            # build + sync + restart on remote Linux+systemd host

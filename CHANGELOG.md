@@ -189,9 +189,11 @@ and this project adheres to
   fix through .dep-age-allow (landed on the base branch first), then judge from
   the deployed release whether production is exposed and file any hardening of
   our own code separately (#62).
-- `cargo xtask fmt --check` checks formatting read-only, and `cargo xtask
-  frontend-test <filters>` runs only the frontend test files whose path contains
-  a filter; both went missing when the gates moved into `rustbase-xtask` (#68).
+- `cargo xtask fmt --check` checks formatting read-only, outside `validate`, and
+  `cargo xtask frontend-test <filters>` runs only the frontend test files whose
+  path contains a filter (vitest options go after `--`). Both come from the
+  downstream project jutro, which lost them when it moved onto `rustbase-xtask`
+  (#68).
 
 ### Changed
 
@@ -298,6 +300,11 @@ and this project adheres to
   commit the .dep-age-allow line and land it on the base branch before pushing;
   in CI, land it there and push again, since a re-run keeps the old base. It no
   longer names a branch (#62).
+- rustbase-xtask API, breaking against its 0.2.4 release (so its next release is
+  0.3.0): `cli::LibCommand::Fmt` and `cli::FrontendCommand::FrontendTest` became
+  struct variants for `--check` and the filters, and `FrontendCommand` is now
+  `#[non_exhaustive]`. A project that only flattens `LibCommand` into its own
+  command enum changes nothing (#68).
 
 ### Fixed
 

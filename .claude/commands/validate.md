@@ -30,7 +30,8 @@ xtask's tests in the Test gate and every other crate's in Coverage):
 
 The frontend tests are their own gate, `frontend-test`. Run alone, it
 takes path filters: `cargo xtask frontend-test <filters>` runs only the
-test files whose path contains one.
+test files whose path contains one; vitest options go after `--`
+(`cargo xtask frontend-test -- -t <name>`).
 
 ## Output
 
@@ -59,9 +60,11 @@ output.
 
 A frontend gate also keeps its tool's whole output, both streams, in
 `target/frontend-<gate>.log` (`fmt`, `check`, `dupes`, `test`),
-rewritten each run. A failure's report shows only the last few lines
-of the tool's output, so failing test names and counts printed
-earlier are only in that log. The report's first line names the
+rewritten each run. Its first two lines are the run's npm arguments,
+as a Rust list rather than a command to paste, so a filtered run shows
+its filters, then the exit status. A failure's report shows only the
+last few lines of the tool's output, so failing test names and counts
+printed earlier are only in that log. The report's first line names the
 file; under `validate` it follows the `FAILED` step line and the
 "iterate with" line.
 
