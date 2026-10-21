@@ -18,6 +18,30 @@ work.
 
 ---
 
+### fr-2026-10-22-yanked-messages-blame-the-registry
+
+**Category:** wording (failure messages)
+**Issue:** #69
+
+`dep-age-check`'s "the registry withdrew them" (`dep_age/gate.rs`,
+`classify_dep_age`) and `dep-preflight`'s "withdrawn by the registry"
+(`dep_age/preflight.rs`, `failure_message`) say crates.io removed the
+version. Its publisher yanked it; read as a takedown, the message sends
+the operator after a malware scare. Say "yanked by its publisher". The
+comments were fixed; the printed text is behaviour, so stage 3 logged it.
+
+### fr-2026-10-22-preflight-reads-neither
+
+**Category:** wording (failure messages)
+**Issue:** #69
+
+`dep-preflight`'s failure ends "dep-preflight reads neither." after the
+waiver hint, which names only the env var when no allow file is
+configured, so "neither" points at one thing. Name them: "dep-preflight
+reads neither the allow file nor the env var". When a yanked crate and a
+fresh dead end fail together, the "Wait out the cooldown" line also reads
+as applying to the yanked one.
+
 ### fr-2026-10-21-frontend-test-filters-holds-options
 
 **Category:** naming

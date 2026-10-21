@@ -393,8 +393,10 @@ and this project adheres to
   whole number makes the report unreadable (#67).
 - `cargo xtask dep-age` and `dep-age-check` fail a yanked crate version whatever
   its age; the gate reports it as refused, beside dependencies within the
-  cooldown. `dep-age npm <pkg> created` (or `modified`) is refused rather than
-  reading the package's own timestamp as a publish date (#69).
+  cooldown, and `dep-preflight` names it as yanked instead of advising a wait.
+  `dep-age npm` refuses `created` / `modified` and versions npm has
+  unpublished, rather than reporting the date `time` keeps for them; the gate
+  lists these as unchecked, which fails it too (#69).
 
 ### Removed
 

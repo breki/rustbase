@@ -59,8 +59,8 @@ enum DepOutcome {
     Aged,
     /// Within the cooldown window (fatal); carries the reason.
     Fresh(String),
-    /// Withdrawn by the registry (a yanked crate); fatal, and reported
-    /// with `Fresh`, whatever its age.
+    /// Yanked by its publisher on crates.io; fatal whatever its age,
+    /// and listed in its own paragraph of the same error as `Fresh`.
     Refused(String),
     /// Could not be checked (network / tool / parse); fails the
     /// gate like `Fresh`, but is reported apart from it.
@@ -69,10 +69,12 @@ enum DepOutcome {
     Allowed,
 }
 
+/// Only a yank is a verdict. Every `NotFound`, npm's refusals included,
+/// leaves the dependency unchecked, which fails the gate all the same.
 impl From<DateError> for DepOutcome {
     fn from(e: DateError) -> Self {
         match e {
-            DateError::Refused(why) => Self::Refused(why),
+            DateError::Yanked { .. } => Self::Refused("yanked".into()),
             DateError::NotFound(why) => Self::Unavailable(why),
         }
     }
@@ -80,7 +82,8 @@ impl From<DateError> for DepOutcome {
 
 /// Fold per-dependency outcomes into the combined result.
 /// Pure, so the fresh-vs-unchecked split is unit-tested.
-/// `allow_hint` ends a fresh failure, saying how to waive one.
+/// `allow_hint` ends a fresh or refused failure, saying how to waive
+/// one.
 fn classify_dep_age(
     outcomes: &[(String, DepOutcome)],
     allow_hint: &str,
@@ -125,7 +128,7 @@ fn classify_dep_age(
     if !refused.is_empty() {
         errors.push(format!(
             "dependencies refused: {}\n  the registry withdrew them; pick \
-             another version",
+             another version, or {allow_hint}",
             refused.join("; ")
         ));
     }
@@ -528,9 +531,10 @@ pub fn check_changed_deps(cfg: &Config, base: &str) -> DepAgeResult {
 }
 
 /// The gate's verdict, the same for `validate` and the standalone
-/// command: a fresh dependency fails, and so does a check that could
-/// not finish. A fresh error is reported alone; unchecked entries
-/// surface once no fresh one is left. `Ok` carries the step detail.
+/// command: a fresh or refused (yanked) dependency fails, and so does
+/// a check that could not finish. A fresh or refused error is reported
+/// alone; unchecked entries surface once neither is left. `Ok` carries
+/// the step detail.
 pub(crate) fn verdict(r: DepAgeResult) -> Result<String, String> {
     if let Some(err) = r.error {
         return Err(err);
@@ -1046,20 +1050,21 @@ dependencies = [
 
     #[test]
     fn classify_dep_age_refused_is_fatal_beside_fresh() {
-        let yanked = "cargo: version 1.1.0 is yanked";
-        let r = classify_dep_age(
-            &[("a@1.1.0".into(), DepOutcome::Refused(yanked.into()))],
-            "ALLOW",
-        );
+        let refused = || DepOutcome::Refused("yanked".into());
+        let r = classify_dep_age(&[("a@1.1.0".into(), refused())], "ALLOW");
         let err = r.error.unwrap();
-        assert!(err.starts_with("dependencies refused: a@1.1.0"), "{err}");
-        assert!(err.contains(yanked), "{err}");
+        assert!(
+            err.starts_with("dependencies refused: a@1.1.0 (yanked)"),
+            "{err}"
+        );
+        // A waiver covers a yanked version too: it is never fetched.
+        assert!(err.ends_with("or ALLOW"), "{err}");
         assert!(r.unchecked.is_empty(), "{:?}", r.unchecked);
         assert!(r.detail.contains("1 refused"), "{}", r.detail);
         // Beside a fresh one, both are named in the one error.
         let r = classify_dep_age(
             &[
-                ("a@1.1.0".into(), DepOutcome::Refused(yanked.into())),
+                ("a@1.1.0".into(), refused()),
                 (
                     "b@2.0.0".into(),
                     DepOutcome::Fresh("published 2d ago".into()),
@@ -1069,11 +1074,15 @@ dependencies = [
         );
         let err = r.error.unwrap();
         assert!(err.contains("b@2.0.0") && err.contains("a@1.1.0"), "{err}");
-        // A refusal from the date lookup is a verdict; a date it could
-        // not find leaves the dependency unchecked.
+    }
+
+    #[test]
+    fn a_yank_is_a_verdict_and_a_missing_date_leaves_it_unchecked() {
         assert_eq!(
-            DepOutcome::from(DateError::Refused(yanked.into())),
-            DepOutcome::Refused(yanked.into())
+            DepOutcome::from(DateError::Yanked {
+                version: "1.1.0".into()
+            }),
+            DepOutcome::Refused("yanked".into())
         );
         assert_eq!(
             DepOutcome::from(DateError::NotFound("gone".into())),

@@ -15,6 +15,17 @@ red team review is warranted before continuing feature work.
 
 ---
 
+### rt-2026-10-22-preflight-convergence-printed-twice
+
+**Category:** usability (failure reports)
+**Issue:** #69
+
+When `dep-preflight` stops at its round ceiling, "did not converge within
+N rounds" prints twice: as a warning (`Report.warnings`) and as a cause in
+`failure_message`. Drop the warning push at that exit, since the message
+now carries it. Found in /review round 3 of #69, after the last round, so
+left for later rather than changed unreviewed.
+
 ### rt-2026-10-21-frontend-failure-key-lines
 
 **Category:** usability (failure reports)

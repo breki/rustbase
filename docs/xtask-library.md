@@ -423,9 +423,13 @@ bullets. The steps, in the order clockdump took them:
      which became struct variants, or matches `FrontendCommand`
      exhaustively, which is now `#[non_exhaustive]`. A project that
      only flattens `LibCommand` in changes nothing.
-   - **`dep-age`** passes a yanked crate version, and reads npm's
-     `created` / `modified` keys as versions, up to 0.2.4 (#69). No
-     workaround there; the next release, 0.3.0, fails both.
+   - **`dep-age`**, up to 0.2.4, passes a yanked crate version, reads
+     npm's `created` / `modified` keys as versions, and reports an
+     unpublished npm version as published (#69). For the yanked case,
+     run `cargo audit` itself and read its yanked warnings (`cargo
+     xtask audit` only counts them); for the npm cases, check the
+     version against `npm view <pkg> versions`. The next release,
+     0.3.0, fails all three.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
    to `[workspace.metadata.coverage] ignore` in the root
    `Cargo.toml`.

@@ -617,9 +617,9 @@ just when the code compiles:
     DB degrades to a warning
 12. **Dependency cooldown** (`cargo xtask dep-age-check`) --
     fails when a dependency added or bumped since `HEAD` was
-    published within the 14-day window, or when its age cannot
-    be checked (never a warning); unchanged lockfiles make it a
-    no-op
+    published within the 14-day window, when it is a yanked crate
+    version, or when its age cannot be checked (never a warning);
+    unchanged lockfiles make it a no-op
 13. **Canon claims** (`cargo xtask canon-check`) -- reads
     `CLAUDE.md`, `.claude/commands/` and `.claude/agents/`
     and fails on any of five things:
@@ -1165,7 +1165,8 @@ Five `cargo xtask` commands guard the dependency tree:
 - **`cargo xtask dep-age <npm|cargo> <package> [version]`**
   reports how many days ago a version was published (on-demand,
   a single package); a yanked crate version fails, whatever its
-  age. Add **`--latest-aged`** to instead print
+  age, and so does an npm version that is not published. Add
+  **`--latest-aged`** to instead print
   the **highest** version that has cleared the cooldown
   (selected by version, not publish date) -- the pin target the
   `/update-deps` workflow feeds to `cargo update --precise` /
@@ -1204,8 +1205,9 @@ Five `cargo xtask` commands guard the dependency tree:
   the gate) and, for each one still inside the cooldown, pins
   it down to its newest aged version with
   `cargo update --precise`, looping until the whole changed set
-  is aged or no aged version fits the resolved requirements.
-  Every step touches only the registry index and the lockfile,
+  is aged or no aged version fits the resolved requirements. A
+  crate locked to a yanked version is named as yanked, since no
+  wait helps it. Every step touches only the registry index and the lockfile,
   so no crate tarball is fetched and no build script runs until
   the tree is clean. Use it as a front door: `cargo add <dep>`
   (updates the lockfile, no compile) -> `cargo xtask
