@@ -251,17 +251,25 @@ had vendored fewer of them than clockdump. bombyx came third
 its migration was mostly deletion (about -6,600 lines of `xtask`). It
 runs every library gate, adding Scripts, which its vendored
 `validate` lacked (step 4), and a module-by-module comparison with
-the library found no lost gate behaviour.
+the library found no lost gate behaviour. hoard came fourth
+(breki/hoard#3, after its npm security fixes in breki/hoard#2), the
+first with modules of its own and a frontend: its deploy pipeline
+stayed, it took on eight gates it had never run (Canon, Records,
+Scripts, Doc and the four frontend gates), its `DEFERRED` list is
+Deny alone -- hoard is closed-source and keeps no licence policy for
+`deny.toml` to check -- and the comparison (step 4) found three
+things its vendored gates did that the library does not.
 
 **Before step 1**, bring everything outside `xtask/` up to the
-template with `/template-sync`. The downstream's own copy of that
-command (`.claude/commands/template-sync.md`) and the divergences in
-its `docs/developer/template-feedback.md` may still say to skip
-`xtask/`; step 9 changes that. When that sync is large, it can wait
-as its own change, as kozmotic's did. The cost: the project keeps its own command files
-(`/commit`, `/release`, CI), so check each one that runs `validate`,
-`cargo test` or `cargo clippy` against step 9's bullets. The steps,
-in the order clockdump took them:
+template with `/template-sync`, with `xtask/` still excluded: steps
+1-4 replace it. The downstream's own copy of that command
+(`.claude/commands/template-sync.md`) and the divergences in its
+`docs/developer/template-feedback.md` may say to skip `xtask/`; step
+9 changes that. When that sync is large, it can wait as its own
+change, as kozmotic's did. Then the project's own command files
+(`/commit`, `/release`, CI) stay as they are, so check each one that
+runs `validate`, `cargo test` or `cargo clippy` against step 9's
+bullets. The steps, in the order clockdump took them:
 
 1. **Copy the template's `xtask/src`** from the commit tagged
    `rustbase-xtask-vX.Y.Z` for the version you will pin, not from
@@ -277,9 +285,15 @@ in the order clockdump took them:
    subcommand becomes an `XCommand` variant in `main.rs` beside the
    flattened `LibCommand`, and its gate a step placed with
    `step::insert_after` in `validate.rs` ("Optional xtask features"
-   in `CLAUDE.md`), and both files join step 9's merged list.
-   clockdump had no such module, so this part has not been run
-   yet.
+   in `CLAUDE.md`), and both files join step 9's merged list. In
+   hoard:
+   - A project module named like a template one (hoard's five
+     `deploy*.rs`) is kept in place of the template's, under the same
+     feature; step 9 lists it as kept, never synced.
+   - A helper a project module imported from the old `helpers.rs`
+     moves into that module (hoard's `cross.rs` took its cargo
+     runner); the library's process helpers are private.
+   - A test-only module is declared `#[cfg(test)] mod`.
 2. **`xtask/Cargo.toml`**: take the template's, then leave the
    feature groups the project does not use out of `default` and drop
    the `path` from the library dependency, leaving
@@ -295,7 +309,17 @@ in the order clockdump took them:
    the library matches a path exactly, or a whole folder when it
    ends in `/`, where bombyx's copy matched any prefix. A project
    whose docs named `RUSTBASE_DEP_AGE_ALLOW` (bombyx's `CLAUDE.md`,
-   `/update-deps`, supply-chain doc) renames it there.
+   `/update-deps`, supply-chain doc) renames it there. Limits a
+   vendored gate hard-coded become `Config::thresholds` fields (hoard:
+   `coverage_overall = 95.0`, `dupes_crate = 6.0`). Canon fails on a
+   backlog ID cited in `docs/` that no record file holds any more (a
+   closed entry is deleted), so archives that cite such IDs as
+   history are pushed onto `canon.citation_exempt`, which already
+   holds the reviewer logs, `template-feedback.md` and the issue
+   docs: hoard added `docs/developer/DIARY.md`,
+   `docs/developer/artisan-resolved.md` and
+   `docs/developer/redteam-resolved.md` with `extend`. Entries must be
+   paths under `docs/`.
 4. **`validate.rs`**: the gates the old vendored `validate.rs` did
    not run can be left out, so the migration keeps the gates the
    project had. Compare its steps with `step::names` in
@@ -308,14 +332,43 @@ in the order clockdump took them:
    startup. Adopt the left-out gates later, one change each, or
    some now, as kozmotic did with three. Dep-age needs the CI job and
    variable in step 7. Audit needs its findings fixed first (kozmotic
-   had 10 TLS advisories). Scripts was worth taking because
-   kozmotic's release job runs a script by path.
+   had 10 TLS advisories; hoard 16 npm ones). hoard's
+   `frontend/package.json` `overrides` pinned packages to versions old
+   enough for the cooldown; the fixes were newer than those pins, so
+   breki/hoard#2 raised the pins to fixed versions that had since
+   aged. Scripts was worth taking because kozmotic's release job runs
+   a script by path.
+
+   Names are not behaviour. Compare each vendored gate module with
+   its library counterpart for anything the library does not do -- a
+   check, a flag, a stricter default -- before deleting it (a
+   subagent can do this from the old modules in git). hoard's
+   comparison found three, each needing code in `validate.rs`:
+   - **The library runs the workspace tests only inside Coverage**;
+     its Test step is `xtask` alone. A project that drops Coverage,
+     or lets an operator skip it (hoard's `--skip-coverage`), inserts
+     a `Step` calling `cargo_test::run` in Coverage's slot. Never
+     ahead of Dep-age: the test build compiles the dependencies
+     Dep-age has not vetted yet.
+   - **A stricter gate replaces the library's step.** Setting
+     `<NAME>_DEP_AGE_STRICT=1`, or `CI=true`, already makes Dep-age
+     fail when a changed dependency cannot be checked. hoard has no
+     CI and wanted every local run strict without an environment
+     variable, so it replaces the step in place:
+     `steps[i] = Step::new(names::DEP_AGE, "dep-age-check", ...)` at
+     `i = step::position(&steps, names::DEP_AGE)`.
+   - **Options the old `validate` took** live in the project's
+     `main.rs` and `validate.rs`, not the library. Until #48 (open)
+     adds a general `--skip` to the template, a project carries its
+     own, as hoard does.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
    to `[workspace.metadata.coverage] ignore` in the root
    `Cargo.toml`.
 6. **`clippy.toml`**: the first `cargo xtask clippy` names each
    `doc-valid-idents` entry the template's `xtask` needs (clockdump
-   lacked `CommonMark`); add them.
+   lacked `CommonMark`); add them. Check that the list starts with
+   `".."`: without it the list replaces clippy's defaults, and words
+   like `TypeScript` are flagged (hoard).
 7. **The cooldown.** A library version inside the 14 days needs the
    allow-list, with a stated reason:
    - Locally, on each run:
@@ -350,6 +403,11 @@ in the order clockdump took them:
      crate doc comment (bombyx).
    - Any other file holding a project module.
 
+   Kept, never synced: a project module that replaces a template one
+   (step 1; hoard's `deploy*.rs`). Record it in the same command file,
+   and as an Open divergence in `template-feedback.md`, which
+   `/template-sync` reads to recommend skipping a change.
+
    Also fix these:
    - A `CLAUDE.md` that says the frontend or deploy subsystem was
      removed, or that nothing in `xtask` knows npm: say the groups are
@@ -361,7 +419,7 @@ in the order clockdump took them:
      quotations, which bombyx's vendored copy skipped, and that
      sentence is what exempts one (`CLAUDE.md`, Canon claims).
 
-   Three edits go beyond the docs:
+   These edits go beyond the docs:
    - The library's `validate` formats files in place unless given
      `--check`. A `/commit` or `/release` that validates after
      staging needs `--check`, or it fixes the working tree while the
@@ -375,9 +433,28 @@ in the order clockdump took them:
      heading per item, a `**Summary:**` line, then a body (the
      template's `docs/todo.md` introduction). `cargo xtask todo` reads
      only that, and `todo list` names what it refuses in a converted
-     file. Done items leave the file.
+     file. Done items leave the file. Reviewer logs and
+     `template-feedback.md` are record files too, read by Records
+     and by Canon's backlog check: hoard's `## <id> — title` entries
+     with `- **Date:**` bullets left Canon an empty backlog, and its
+     date-only `### 2026-05-18` headings failed Records. Canon's
+     backlog is the `### <id>` headings of the record files. Convert
+     each entry to an `### <id>` heading with its fields directly
+     under it: `Category`, `Summary`, `Source`, `Issue`, `Depends on`
+     and `Supersedes` stay fields (`CLAUDE.md`, Record files), and
+     any other label becomes prose.
+   - A project with a frontend: copy the template's `dupes` script
+     (`"jscpd src"` in `frontend/package.json`) and
+     `frontend/.jscpd.json`, and add jscpd as a dev dependency at a
+     version past the cooldown (hoard had run it through `npx`). Expect
+     new findings: jscpd 5 scans `.svelte` files, which older versions
+     skipped (hoard went from 1.1% to 14.5% and excluded them for now,
+     breki/hoard#1). And `cargo xtask fmt` now formats Rust only:
+     change any doc or command that relies on it for the frontend to
+     run `cargo xtask frontend-fmt` too.
 
-The other downstreams (hoard, jutro) follow the same steps.
+The other downstreams (jutro, trmnl-bellwether, ledgerstone) follow
+the same steps.
 
 ## Proposed follow-up issues
 
@@ -393,6 +470,7 @@ The other downstreams (hoard, jutro) follow the same steps.
 5. Extension points for project subcommands and steps (done: #8;
    deploy hooks are #10).
 6. Migrate the downstreams (#9): clockdump (breki/clockdump#1),
-   kozmotic (breki/kozmotic#1) and bombyx (breki/bombyx#196) done;
-   hoard and jutro remain.
+   kozmotic (breki/kozmotic#1), bombyx (breki/bombyx#196) and hoard
+   (breki/hoard#3) done; jutro, trmnl-bellwether and ledgerstone
+   remain.
 7. Deploy: decide what, if anything, is shared.
