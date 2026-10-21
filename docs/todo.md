@@ -170,11 +170,13 @@ glob. Record only, no change: `feedback.rs` removes `_None yet._` only as the
 first line of a section, bombyx's anywhere in it; the placeholder only ever
 appears first, so no file behaves differently.
 
-### frontend-test-filter-no-match
+### frontend-test-dead-filter
 
-**Summary:** A frontend-test filter that matches no file passes
+**Summary:** A dead frontend-test filter passes beside one that matches
 
-frontend/vitest.config.js sets passWithNoTests: true, so `cargo xtask
-frontend-test <typo>` prints "No test files found" and reports OK. Decide
-whether a filtered run should fail when it ran nothing (found while working
-on #68).
+Vitest counts the files a run matched across the whole run, not per filter, so
+its no-tests check (the --passWithNoTests=false that frontend-test adds) fails
+only when no filter matched. `cargo xtask frontend-test App zzznomatch` reports
+OK without saying zzznomatch matched nothing. Making each filter count needs a
+check per filter, for example `vitest list --filesOnly <filter>` before the run.
+Found while reviewing commit bd8fb5f (the no-match fix).

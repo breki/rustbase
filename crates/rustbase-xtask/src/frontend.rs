@@ -142,9 +142,10 @@ pub fn run(cfg: &Config, gate: Gate) -> Result<Outcome, Failure> {
     run_with_args(cfg, gate, &none)
 }
 
-/// [`run`], passing `extra` to the gate's script after `--`, unchanged:
+/// [`run`], passing `extra` to the gate's script after `--`:
 /// `frontend-test`'s path filters, and any Vitest options given after
-/// its own `--`.
+/// its own `--`. A test run given any of them fails when it finds no
+/// test file.
 ///
 /// # Errors
 /// As [`run`].
@@ -171,15 +172,37 @@ pub(crate) fn run_with_args(
     }
 }
 
+/// Turns off the template config's `passWithNoTests: true`
+/// (`frontend/vitest.config.js`). That setting lets a frontend with no
+/// tests yet pass the gate; this flag, added only to a run given
+/// arguments, makes a filter that matches nothing fail.
+const NO_PASS_WITHOUT_TESTS: &str = "--passWithNoTests=false";
+
 /// `npm`'s arguments for `gate`, with `extra` behind the `--` that
-/// stops npm reading them as its own.
+/// stops npm reading them as its own. A test run given any leads with
+/// [`NO_PASS_WITHOUT_TESTS`] unless the caller set the option itself:
+/// Vitest exits with an error when the option is given twice (seen on
+/// 4.1).
 fn npm_args(gate: Gate, extra: &[impl AsRef<str>]) -> Vec<&str> {
     let mut args = vec!["run", gate.script()];
     if !extra.is_empty() {
         args.push("--");
+        if gate == Gate::Test
+            && !extra.iter().any(|a| sets_pass_with_no_tests(a.as_ref()))
+        {
+            args.push(NO_PASS_WITHOUT_TESTS);
+        }
         args.extend(extra.iter().map(AsRef::as_ref));
     }
     args
+}
+
+/// Whether `arg` sets Vitest's `passWithNoTests` itself. The kebab
+/// spelling `--pass-with-no-tests` is left out on purpose: Vitest reads
+/// it as a separate option, so it never clashes with the added flag.
+fn sets_pass_with_no_tests(arg: &str) -> bool {
+    arg.starts_with("--passWithNoTests")
+        || arg.starts_with("--no-passWithNoTests")
 }
 
 /// Write a finished run's whole output to `target/<subcommand>.log`
@@ -384,8 +407,35 @@ mod tests {
     fn extra_arguments_reach_the_script_after_a_separator() {
         assert_eq!(npm_args(Gate::Test, &[""; 0]), ["run", "test"]);
         assert_eq!(
+            npm_args(Gate::Check, &["src/a"]),
+            ["run", "check", "--", "src/a"]
+        );
+    }
+
+    #[test]
+    fn a_test_run_with_arguments_overrides_pass_with_no_tests() {
+        // Unless the caller set the option: Vitest errors when it is
+        // given twice.
+        for own in [
+            "--passWithNoTests",
+            "--passWithNoTests=true",
+            "--no-passWithNoTests",
+        ] {
+            assert_eq!(
+                npm_args(Gate::Test, &["src/a", own]),
+                ["run", "test", "--", "src/a", own]
+            );
+        }
+        assert_eq!(
             npm_args(Gate::Test, &["src/a", "b.test"]),
-            ["run", "test", "--", "src/a", "b.test"]
+            [
+                "run",
+                "test",
+                "--",
+                NO_PASS_WITHOUT_TESTS,
+                "src/a",
+                "b.test"
+            ]
         );
     }
 
@@ -396,7 +446,10 @@ mod tests {
         let path = write_log(&dir.0, Gate::Test, &args, &passed("")).unwrap();
         let text = fs::read_to_string(&path).unwrap();
         let first = text.lines().next().unwrap();
-        assert_eq!(first, r#"$ npm ["run", "test", "--", "src/a"]"#);
+        assert_eq!(
+            first,
+            r#"$ npm ["run", "test", "--", "--passWithNoTests=false", "src/a"]"#
+        );
     }
 
     #[test]
@@ -410,7 +463,7 @@ mod tests {
         let first = text.lines().next().unwrap();
         assert_eq!(
             first,
-            r#"$ npm ["run", "test", "--", "my dir", "", "a\"b", "src\\d\\"]"#
+            r#"$ npm ["run", "test", "--", "--passWithNoTests=false", "my dir", "", "a\"b", "src\\d\\"]"#
         );
     }
 

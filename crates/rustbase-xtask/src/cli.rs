@@ -391,7 +391,8 @@ pub enum FrontendCommand {
     FrontendTest {
         /// Run only the test files whose path contains one of
         /// these (passed to vitest); put vitest options after
-        /// `--`, as in `frontend-test -- -t name`
+        /// `--`, as in `frontend-test -- -t name`. Given any, the
+        /// run fails when it finds no test file
         filters: Vec<String>,
     },
 }

@@ -191,7 +191,8 @@ and this project adheres to
   our own code separately (#62).
 - `cargo xtask fmt --check` checks formatting read-only, outside `validate`, and
   `cargo xtask frontend-test <filters>` runs only the frontend test files whose
-  path contains a filter (vitest options go after `--`). Both come from the
+  path contains a filter (vitest options go after `--`); given filters or vitest
+  options, a run that finds no test file at all fails. Both come from the
   downstream project jutro, which lost them when it moved onto `rustbase-xtask`
   (#68).
 
