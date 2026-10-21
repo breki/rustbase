@@ -48,8 +48,8 @@ Validate OK (28.8s)
 
 The same lines, and a failure's report, are also in
 `target/validate.log`, rewritten each run. Warnings a gate prints
-itself (Dep-age or Audit when the network is down, for example)
-appear on the terminal only. A second run while one is still
+itself (Audit when the network is down, for example) appear on the
+terminal only. A second run while one is still
 going is refused; the `target/validate.log.lock` file left behind
 is harmless. A run that cannot open the log for another reason
 warns and is not logged, so the file then holds an earlier run's

@@ -343,24 +343,28 @@ bullets. The steps, in the order clockdump took them:
    its library counterpart for anything the library does not do -- a
    check, a flag, a stricter default -- before deleting it (a
    subagent can do this from the old modules in git). hoard's
-   comparison found three, each needing code in `validate.rs`:
+   comparison found three; the first still needs code in
+   `validate.rs`, and later library and template releases made the
+   other two unnecessary:
    - **The library runs the workspace tests only inside Coverage**;
      its Test step is `xtask` alone. A project that drops Coverage,
      or lets an operator skip it (hoard's `--skip-coverage`), inserts
      a `Step` calling `cargo_test::run` in Coverage's slot. Never
      ahead of Dep-age: the test build compiles the dependencies
      Dep-age has not vetted yet.
-   - **A stricter gate replaces the library's step.** Setting
-     `<NAME>_DEP_AGE_STRICT=1`, or `CI=true`, already makes Dep-age
-     fail when a changed dependency cannot be checked. hoard has no
-     CI and wanted every local run strict without an environment
-     variable, so it replaces the step in place:
+   - **A stricter gate replaces the library's step.** hoard has no
+     CI and wanted every local run to fail when a changed dependency
+     cannot be checked, which `rustbase-xtask` 0.1.0 did only under
+     `<NAME>_DEP_AGE_STRICT=1` or `CI=true`. So it replaces the step
+     in place:
      `steps[i] = Step::new(names::DEP_AGE, "dep-age-check", ...)` at
-     `i = step::position(&steps, names::DEP_AGE)`.
+     `i = step::position(&steps, names::DEP_AGE)`. From
+     `rustbase-xtask` 0.2.0 Dep-age fails that way in every project
+     (#47), so a project on 0.2.0 drops that replacement.
    - **Options the old `validate` took** live in the project's
-     `main.rs` and `validate.rs`, not the library. Until #48 (open)
-     adds a general `--skip` to the template, a project carries its
-     own, as hoard does.
+     `main.rs` and `validate.rs`, not the library. The template's
+     `validate` takes `--skip <gate>` (#48, see `/validate`), so a
+     project drops its own skip option unless it does more.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
    to `[workspace.metadata.coverage] ignore` in the root
    `Cargo.toml`.

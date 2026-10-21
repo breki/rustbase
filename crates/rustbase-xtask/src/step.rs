@@ -129,10 +129,9 @@ impl std::fmt::Debug for Step {
 /// A project's static gates belong after Deny.
 pub fn standard(cfg: &Config, check: bool) -> Vec<Step> {
     let c = cfg.clone();
-    let strict = dep_age_strict(cfg, |k| std::env::var(k).ok());
     let mut steps =
         vec![Step::new(names::DEP_AGE, "dep-age-check", move || {
-            dep_age_verdict(dep_age::check_changed_deps(&c, "HEAD"), strict)
+            dep_age::verdict(dep_age::check_changed_deps(&c, "HEAD"))
         })];
     let c = cfg.clone();
     steps.push(Step::new(names::FMT, "fmt", move || {
@@ -258,36 +257,6 @@ fn elapsed(start: Instant) -> String {
     format!("{:.1}s", start.elapsed().as_secs_f64())
 }
 
-/// The Dep-age step's result: a fresh dependency always fails; a
-/// check that could not finish fails only when `strict`, and warns
-/// otherwise so an offline run is not blocked.
-fn dep_age_verdict(
-    r: dep_age::DepAgeResult,
-    strict: bool,
-) -> Result<String, String> {
-    if let Some(err) = r.error {
-        return Err(err);
-    }
-    if strict && !r.warnings.is_empty() {
-        return Err(format!(
-            "dep-age could not complete: {}",
-            r.warnings.join("; ")
-        ));
-    }
-    for w in &r.warnings {
-        eprintln!("  warning: {w}");
-    }
-    Ok(r.detail)
-}
-
-/// Strict when `cfg.dep_age_strict_env` is `1` or under CI
-/// (`CI=true`, which GitHub Actions sets). `env` is injected so the
-/// tests need no process environment.
-fn dep_age_strict(cfg: &Config, env: impl Fn(&str) -> Option<String>) -> bool {
-    env(&cfg.dep_age_strict_env).as_deref() == Some("1")
-        || env("CI").as_deref() == Some("true")
-}
-
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
@@ -333,8 +302,10 @@ mod tests {
             let name = step.name();
             match name {
                 names::AUDIT => {}
-                // Strict, and so failing, under CI.
-                names::DEP_AGE => drop(step.run()),
+                names::DEP_AGE => {
+                    let e = step.run().unwrap_err();
+                    assert!(e.contains("Cargo.lock: cannot read"), "{e}");
+                }
                 names::RECORDS => {
                     let d = step.run().unwrap();
                     assert!(
@@ -448,36 +419,5 @@ mod tests {
             "[1/1] VeryLongStepName OK"
         );
         assert!(elapsed(Instant::now()).ends_with('s'));
-    }
-
-    #[test]
-    fn dep_age_warnings_fail_only_when_strict() {
-        let incomplete = || dep_age::DepAgeResult {
-            detail: "0 changed".into(),
-            error: None,
-            warnings: vec!["registry unreachable".into()],
-        };
-        assert!(dep_age_verdict(incomplete(), false).is_ok());
-        let err = dep_age_verdict(incomplete(), true).unwrap_err();
-        assert!(err.contains("registry unreachable"), "{err}");
-    }
-
-    #[test]
-    fn dep_age_strictness_comes_from_ci_or_the_project_variable() {
-        let env = |pairs: &'static [(&str, &str)]| {
-            move |k: &str| {
-                pairs
-                    .iter()
-                    .find(|(n, _)| *n == k)
-                    .map(|(_, v)| (*v).into())
-            }
-        };
-        let c = cfg();
-        assert_eq!(c.dep_age_strict_env, "P_DEP_AGE_STRICT");
-        assert!(!dep_age_strict(&c, env(&[])));
-        assert!(dep_age_strict(&c, env(&[("CI", "true")])));
-        assert!(dep_age_strict(&c, env(&[("P_DEP_AGE_STRICT", "1")])));
-        assert!(!dep_age_strict(&c, env(&[("P_DEP_AGE_STRICT", "0")])));
-        assert!(!dep_age_strict(&c, env(&[("CI", "false")])));
     }
 }

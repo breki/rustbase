@@ -187,7 +187,13 @@ and this project adheres to
 - Command files invoke `cargo -q xtask ...`, so cargo compile progress no longer
   precedes a command's output; their `allowed-tools` grant both spellings.
 - `validate`'s dependency-cooldown step fails, instead of warning, when the
-  check cannot finish and `RUSTBASE_DEP_AGE_STRICT=1` or `CI=true` is set (#1).
+  check cannot finish -- an unreachable registry, a missing `HEAD` baseline, an
+  unreadable lockfile, or an npm lockfile it cannot parse (conflict markers, a
+  v1 lockfile), which used to read as "no dependency changes" and pass -- in
+  every run, with no variable to switch it (#1, #47). With no `HEAD` at all the
+  error says to commit first, and `validate --skip dep-age` leaves the gate out.
+  An unchanged lockfile, whatever its format, still needs no network and
+  passes.
 - `/update-deps` resolves npm `ERESOLVE` with an escalation ladder (scoped
   installs, a hand-edited range, `--legacy-peer-deps`, then a full reset)
   instead of resetting the lockfile first, which re-floated every transitive
@@ -224,15 +230,18 @@ and this project adheres to
   does not parse, beside the diff.
 - The `validate` runner, its `Step` type and the standard gate list moved into
   the shared library (`step::standard`, `step::run_all`); a project inserts its
-  own steps into the list. The cooldown step's strict-mode variable is now named
-  after the project like the allow-list one (`<PROJECT>_DEP_AGE_STRICT`, still
-  `RUSTBASE_DEP_AGE_STRICT` here), and the npm project the audit step covers is
+  own steps into the list. The npm project the audit step covers is
   `Config::audit_npm_dir`.
 - The library's subcommands moved into it as `cli::LibCommand` (behind its
   `clap` feature), dispatched by `cli::run`; a project's `xtask` flattens them
   into its own command enum and keeps only its own commands (`validate`, the
   frontend, deploy, template tools, clean-cache). The thirteen wrapper modules
   under `xtask/src/` are gone.
+- rustbase-xtask API, breaking against its 0.1.0 release (so its next release is
+  0.2.0): `Config::dep_age_strict_env` is removed, since Dep-age no longer has a
+  strict mode, and `DepAgeResult::warnings` is renamed `unchecked`, since its
+  entries now fail the gate. A project that replaced the Dep-age step to make it
+  strict, as the downstream project hoard did, can drop that replacement (#47).
 
 ### Fixed
 
@@ -251,8 +260,8 @@ and this project adheres to
   (or the new `fresh-reader-log.md`) as a sync candidate.
 - xtask tests pass Rust 1.99 Clippy's `assert_is_empty` lint, which turned the
   gate red on the unpinned `stable` channel.
-- `cargo xtask dep-age-check` reports an unreadable `Cargo.lock` as a warning
-  instead of passing with "no dependency changes" (#1).
+- `cargo xtask dep-age-check` fails on an unreadable `Cargo.lock` instead of
+  passing with "no dependency changes" (#1).
 - Frontend tooling clears all 9 npm audit advisories (5 high): `vitest` pinned
   to 4.1.11, transitive `brace-expansion`, `devalue`, `nanoid`, `postcss`,
   `postcss-selector-parser`, `source-map-js` and `undici` moved to patched

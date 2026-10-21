@@ -614,8 +614,9 @@ just when the code compiles:
     DB degrades to a warning
 12. **Dependency cooldown** (`cargo xtask dep-age-check`) --
     fails when a dependency added or bumped since `HEAD` was
-    published within the 14-day window; unchanged lockfiles
-    make it a no-op
+    published within the 14-day window, or when its age cannot
+    be checked (never a warning); unchanged lockfiles make it a
+    no-op
 13. **Canon claims** (`cargo xtask canon-check`) -- reads
     `CLAUDE.md`, `.claude/commands/` and `.claude/agents/`
     and fails on any of five things:
@@ -1155,11 +1156,16 @@ Five `cargo xtask` commands guard the dependency tree:
   a dependency is adopted and costs nothing -- no network -- on a
   commit that leaves the lockfiles untouched. A *whole-tree* gate is
   deliberately avoided: it would flag every already-locked
-  version on every routine update. Inside `validate`, like
-  `audit`, a check that cannot finish (unreachable registry,
-  missing `HEAD` baseline, unreadable `Cargo.lock`) degrades to
-  a warning -- unless `RUSTBASE_DEP_AGE_STRICT=1` or `CI=true`
-  makes it fail; the standalone command always fails on it.
+  version on every routine update. A check that cannot finish
+  (unreachable registry, missing `HEAD` baseline, an unreadable or
+  unparseable lockfile) **fails**, inside `validate` as well as
+  standalone: unlike `audit`, it never degrades to a warning,
+  because a dependency whose age could not be checked is exactly
+  the one a flaky connection would wave through. Offline work is
+  not blocked by it: an unchanged lockfile needs no network. With
+  no `HEAD` at all (before the first commit, or a source tarball)
+  there is nothing to diff against and no allow-list entry can
+  help: commit first, or run `cargo xtask validate --skip dep-age`.
   **CI runs the standalone command** (the `dep-age` job in
   `.github/workflows/ci.yml`) with `--base` set to the commit the
   pull request or push started from -- in CI the checkout *is*
