@@ -284,6 +284,10 @@ and this project adheres to
 - dep-preflight now runs `cargo update --precise` with the cargo of the
   toolchain in use (the `CARGO` variable), the same cargo as every other gate,
   instead of whichever `cargo` is first on `PATH`.
+- Template frontend: vite 8.1.4 -> 8.1.6 (range floor raised to `^8.1.6`),
+  clearing three high launch-editor advisories (GHSA-698v-4r3x-3vcv,
+  GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm) that failed the `validate` Audit
+  step (#50).
 
 ### Removed
 
