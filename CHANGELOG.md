@@ -327,6 +327,10 @@ and this project adheres to
   project set up with `Config::for_project` ignores. It also gives the value
   format (`name@version[,...]`) and says `cargo xtask validate` reads it,
   not dep-preflight (#46).
+- `cargo xtask clean-cache` counts the entries it could not delete by error
+  kind, e.g. `(3 PermissionDenied, 1 NotFound)`, before listing them, so a run
+  of transient Windows locks reads differently from a real failure -- the tally
+  hoard's copy had (#45).
 
 ### Removed
 

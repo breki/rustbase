@@ -22,7 +22,8 @@
 //! - Per-entry failures (locked files from AV scanners
 //!   or rust-analyzer handles -- the very motivation
 //!   for this tool) are collected and reported at the
-//!   end rather than aborting the loop. The remaining
+//!   end, with a count per `io::ErrorKind`, rather than
+//!   aborting the loop. The remaining
 //!   entries and the second `incremental/` directory
 //!   are still cleaned.
 
@@ -41,14 +42,15 @@ const INCREMENTAL_DIRS: &[&str] =
 /// contents, and report bytes freed per directory.
 ///
 /// If any per-entry deletions failed, prints them after
-/// the summary and returns `Err` with a count. The
+/// the summary, counted by kind first (`tally`), and
+/// returns `Err` with a count. The
 /// successful deletions are still applied -- this is a
 /// "best effort, report what you couldn't do" tool.
 pub fn clean_cache() -> Result<(), String> {
     let root = workspace_root();
 
     let mut total_freed: u64 = 0;
-    let mut all_errors: Vec<String> = Vec::new();
+    let mut all_errors: Vec<EntryError> = Vec::new();
 
     for rel in INCREMENTAL_DIRS {
         let path = root.join(rel);
@@ -60,7 +62,10 @@ pub fn clean_cache() -> Result<(), String> {
         total_freed += freed;
         println!("{rel:40} freed {:>10}", fmt_bytes(freed));
         for e in errors {
-            all_errors.push(format!("{rel}: {e}"));
+            all_errors.push(EntryError {
+                text: format!("{rel}: {}", e.text),
+                kind: e.kind,
+            });
         }
     }
 
@@ -70,8 +75,9 @@ pub fn clean_cache() -> Result<(), String> {
         Ok(())
     } else {
         eprintln!("\n{} entry/entries could not be deleted:", all_errors.len());
+        eprintln!("  {}", tally(&all_errors));
         for e in &all_errors {
-            eprintln!("  {e}");
+            eprintln!("  {}", e.text);
         }
         Err(format!("{} deletion error(s)", all_errors.len()))
     }
@@ -92,9 +98,9 @@ pub fn clean_cache() -> Result<(), String> {
 /// Symlinks are unlinked (`remove_file` on Unix,
 /// `remove_dir` with `remove_file` fallback on Windows
 /// for directory junctions) rather than recursed into.
-fn clear_dir_contents(dir: &Path) -> Result<(u64, Vec<String>), String> {
+fn clear_dir_contents(dir: &Path) -> Result<(u64, Vec<EntryError>), String> {
     let mut freed = 0u64;
-    let mut errors: Vec<String> = Vec::new();
+    let mut errors: Vec<EntryError> = Vec::new();
 
     let entries = fs::read_dir(dir)
         .map_err(|e| format!("read_dir {}: {e}", dir.display()))?;
@@ -102,10 +108,8 @@ fn clear_dir_contents(dir: &Path) -> Result<(u64, Vec<String>), String> {
         let entry = match entry {
             Ok(e) => e,
             Err(e) => {
-                errors.push(format!(
-                    "read_dir entry under {}: {e}",
-                    dir.display()
-                ));
+                let what = format!("read_dir entry under {}", dir.display());
+                errors.push(EntryError::new(what, &e));
                 continue;
             }
         };
@@ -114,7 +118,8 @@ fn clear_dir_contents(dir: &Path) -> Result<(u64, Vec<String>), String> {
         let file_type = match entry.file_type() {
             Ok(ft) => ft,
             Err(e) => {
-                errors.push(format!("file_type {}: {e}", path.display()));
+                let what = format!("file_type {}", path.display());
+                errors.push(EntryError::new(what, &e));
                 continue;
             }
         };
@@ -126,14 +131,20 @@ fn clear_dir_contents(dir: &Path) -> Result<(u64, Vec<String>), String> {
             // re-prefixing with `path`, which would
             // misleadingly name a parent when the real
             // culprit was deeper in the walk.
-            errors.push(w.to_string());
+            errors.push(EntryError {
+                text: w.to_string(),
+                kind: w.kind,
+            });
         }
 
         let outcome = delete_entry(&path, file_type);
 
         match outcome {
             Ok(()) => freed += size,
-            Err(e) => errors.push(format!("delete {}: {e}", path.display())),
+            Err(e) => {
+                let what = format!("delete {}", path.display());
+                errors.push(EntryError::new(what, &e));
+            }
         }
     }
 
@@ -250,6 +261,7 @@ fn fmt_bytes(bytes: u64) -> String {
 struct DirSizeWarning {
     path: PathBuf,
     message: String,
+    kind: io::ErrorKind,
 }
 
 impl fmt::Display for DirSizeWarning {
@@ -259,12 +271,46 @@ impl fmt::Display for DirSizeWarning {
 }
 
 impl DirSizeWarning {
-    fn new(path: &Path, message: impl Into<String>) -> Self {
+    fn new(path: &Path, what: &str, e: &io::Error) -> Self {
         Self {
             path: path.to_path_buf(),
-            message: message.into(),
+            message: format!("{what}: {e}"),
+            kind: e.kind(),
         }
     }
+}
+
+/// One entry `clean_cache` could not process, with the kind of its
+/// `io::Error` kept for the tally.
+#[derive(Debug)]
+struct EntryError {
+    text: String,
+    kind: io::ErrorKind,
+}
+
+impl EntryError {
+    fn new(what: impl fmt::Display, e: &io::Error) -> Self {
+        Self {
+            text: format!("{what}: {e}"),
+            kind: e.kind(),
+        }
+    }
+}
+
+/// `(3 PermissionDenied, 1 NotFound)`: the errors counted by kind, in
+/// the order each kind first appears, so a run of transient Windows
+/// locks reads differently from one real failure.
+fn tally(errors: &[EntryError]) -> String {
+    let mut counts: Vec<(io::ErrorKind, usize)> = Vec::new();
+    for e in errors {
+        match counts.iter_mut().find(|(k, _)| *k == e.kind) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((e.kind, 1)),
+        }
+    }
+    let parts: Vec<String> =
+        counts.iter().map(|(k, n)| format!("{n} {k:?}")).collect();
+    format!("({})", parts.join(", "))
 }
 
 /// Return `true` if `meta` describes a symlink (any
@@ -317,10 +363,7 @@ fn dir_size(path: &Path) -> (u64, Vec<DirSizeWarning>) {
     let meta = match fs::symlink_metadata(path) {
         Ok(m) => m,
         Err(e) => {
-            warnings.push(DirSizeWarning::new(
-                path,
-                format!("symlink_metadata: {e}"),
-            ));
+            warnings.push(DirSizeWarning::new(path, "symlink_metadata", &e));
             return (0, warnings);
         }
     };
@@ -335,7 +378,7 @@ fn dir_size(path: &Path) -> (u64, Vec<DirSizeWarning>) {
     let entries = match fs::read_dir(path) {
         Ok(e) => e,
         Err(e) => {
-            warnings.push(DirSizeWarning::new(path, format!("read_dir: {e}")));
+            warnings.push(DirSizeWarning::new(path, "read_dir", &e));
             return (0, warnings);
         }
     };
@@ -345,10 +388,7 @@ fn dir_size(path: &Path) -> (u64, Vec<DirSizeWarning>) {
         let entry = match entry {
             Ok(e) => e,
             Err(e) => {
-                warnings.push(DirSizeWarning::new(
-                    path,
-                    format!("read_dir entry: {e}"),
-                ));
+                warnings.push(DirSizeWarning::new(path, "read_dir entry", &e));
                 continue;
             }
         };
@@ -618,6 +658,26 @@ mod tests {
         assert_eq!(fmt_bytes(0), "0 B");
         assert_eq!(fmt_bytes(512), "512 B");
         assert_eq!(fmt_bytes(1023), "1023 B");
+    }
+
+    #[test]
+    fn the_tally_counts_each_kind_in_first_seen_order() {
+        use io::ErrorKind::{NotFound, PermissionDenied};
+        let err = |kind| EntryError {
+            text: "x".into(),
+            kind,
+        };
+        let errors =
+            [err(PermissionDenied), err(NotFound), err(PermissionDenied)];
+        assert_eq!(tally(&errors), "(2 PermissionDenied, 1 NotFound)");
+    }
+
+    #[test]
+    fn a_dir_size_warning_keeps_the_error_kind() {
+        let gone = temp_scratch("gone").join("missing");
+        let (_, warnings) = dir_size(&gone);
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].kind, io::ErrorKind::NotFound);
     }
 
     #[test]
