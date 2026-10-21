@@ -55,6 +55,14 @@ is harmless. A run that cannot open the log for another reason
 warns and is not logged, so the file then holds an earlier run's
 output.
 
+A frontend gate also keeps its tool's whole output, both streams, in
+`target/frontend-<gate>.log` (`fmt`, `check`, `dupes`, `test`),
+rewritten each run. A failure's report shows only the last few lines
+of the tool's output, so failing test names and counts printed
+earlier are only in that log. The report's first line names the
+file; under `validate` it follows the `FAILED` step line and the
+"iterate with" line.
+
 ## Implementation
 
 ```
