@@ -12,6 +12,24 @@ in `CLAUDE.md`, in the order `step::standard`
 (`crates/rustbase-xtask/src/step.rs`) gives, with the frontend
 gates `xtask/src/validate.rs` inserts after Deny
 
+`/validate --skip <gate>` -- leave a gate out, by its subcommand
+(`coverage`, `dupes`, `test`, `frontend-test`, ...) or its name,
+quoted when it has a space (`--skip "Frontend test"`); repeatable. A
+name matching no gate is refused with the list of subcommands, and a
+set leaving out every gate is refused. A partial run names the
+skipped gates before the first step and after the closing `Validate
+OK`.
+
+Which Rust tests a skip set runs (the library, `rustbase-xtask`, runs
+xtask's tests in the Test gate and every other crate's in Coverage):
+
+- `--skip coverage` -- all of them once, in a `Test (workspace)` step
+  that takes Coverage's slot and replaces the Test gate
+- `--skip coverage --skip test` -- none
+- `--skip test` -- every crate's but xtask's, in Coverage
+
+The frontend tests are their own gate, `frontend-test`.
+
 ## Output
 
 One line per gate (rows 6 to 14 left out):
@@ -40,5 +58,5 @@ output.
 ## Implementation
 
 ```
-cargo -q xtask validate
+cargo -q xtask validate $ARGUMENTS
 ```

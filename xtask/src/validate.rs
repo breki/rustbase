@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use rustbase_xtask::cargo_test;
 use rustbase_xtask::step::{self, Step};
 use rustbase_xtask::tee::{OpenError, Tee};
 
@@ -8,14 +9,19 @@ use crate::helpers::tasks_config;
 use crate::{frontend_check, frontend_dupes, frontend_fmt, frontend_test};
 
 /// The library's standard gates (`step::standard`, which gives their
-/// order), with this project's frontend gates after Deny: three
-/// static ones, then the frontend tests, ahead of the Rust tests.
+/// order), with this project's frontend gates after Deny (three static
+/// ones, then the frontend tests, ahead of the Rust tests), less any
+/// gate `skip` names; the skipped gates' names come back too. When
+/// Coverage is skipped but Test is not, a `Test (workspace)` step takes
+/// Coverage's slot and the Test gate goes too, unlisted: the stand-in
+/// runs its tests. A name matching no gate, or a set leaving none, is
+/// refused.
 ///
 /// The `[N/M]` numbering follows whichever gates are compiled in.
-// Without the frontend feature nothing is inserted, so nothing fails.
-#[cfg_attr(not(feature = "frontend"), allow(clippy::unnecessary_wraps))]
-fn steps(check: bool) -> Result<Vec<Step>, String> {
-    #[cfg_attr(not(feature = "frontend"), allow(unused_mut))]
+fn steps(
+    check: bool,
+    skip: &[String],
+) -> Result<(Vec<Step>, Vec<&'static str>), String> {
     let mut steps = step::standard(&tasks_config(), check);
     #[cfg(feature = "frontend")]
     step::insert_after(
@@ -28,14 +34,74 @@ fn steps(check: bool) -> Result<Vec<Step>, String> {
             frontend_test::step(),
         ],
     )?;
-    Ok(steps)
+    let skipped = skipped_gates(&steps, skip)?;
+    if skipped.contains(&step::names::COVERAGE)
+        && !skipped.contains(&step::names::TEST)
+    {
+        // Coverage runs every crate's tests but xtask's, and the Test
+        // gate runs xtask's. The stand-in runs them all, so it replaces
+        // both. With Test skipped too, it is never added.
+        if let Some(i) = step::position(&steps, step::names::COVERAGE) {
+            steps[i] = workspace_tests();
+        }
+        steps.retain(|s| s.name() != step::names::TEST);
+    }
+    steps.retain(|s| !skipped.contains(&s.name()));
+    if steps.is_empty() {
+        // It would end "Validate OK" having run nothing.
+        return Err("--skip leaves out every gate; nothing to validate".into());
+    }
+    Ok((steps, skipped))
 }
 
-/// Run every gate, printing one `[N/M]` line each. `check` makes the
-/// format gates read-only instead of fixing in place, for CI or
-/// before partial staging, where a rewrite would sweep unrelated
-/// drift into the working tree.
-pub fn validate(check: bool) -> Result<(), String> {
+/// Every crate's tests, xtask's included, run where Coverage would
+/// have run the rest.
+fn workspace_tests() -> Step {
+    let cfg = tasks_config();
+    Step::new(WORKSPACE_TESTS, "test", move || {
+        cargo_test::run(&cfg, cargo_test::Options::default())
+            .map_err(|f| f.to_string())?;
+        Ok(String::new())
+    })
+}
+
+/// The step that stands in for Coverage when it is skipped.
+const WORKSPACE_TESTS: &str = "Test (workspace)";
+
+/// The names of the gates `skip` names, matched without case against
+/// each gate's name or subcommand, in run order. A name matching no
+/// gate is refused: a typo must not turn into a run that skipped
+/// nothing. The gates are walked, keeping each that any name hits, so
+/// `--skip coverage --skip Coverage` reports Coverage once.
+fn skipped_gates(
+    steps: &[Step],
+    skip: &[String],
+) -> Result<Vec<&'static str>, String> {
+    let hit = |s: &Step, name: &str| {
+        s.name().eq_ignore_ascii_case(name)
+            || s.cmd().eq_ignore_ascii_case(name)
+    };
+    if let Some(name) = skip.iter().find(|n| !steps.iter().any(|s| hit(s, n))) {
+        let gates: Vec<&str> = steps.iter().map(Step::cmd).collect();
+        return Err(format!(
+            "--skip {name}: no such gate (gates: {})",
+            gates.join(", ")
+        ));
+    }
+    Ok(steps
+        .iter()
+        .filter(|s| skip.iter().any(|n| hit(s, n)))
+        .map(Step::name)
+        .collect())
+}
+
+/// Run every gate except those `skip` names, printing one `[N/M]` line
+/// each; a partial run names its skipped gates before the first step
+/// and after a passing run's last line. `check` makes the format gates
+/// read-only instead of fixing in place, for CI or before partial
+/// staging, where a rewrite would sweep unrelated drift into the
+/// working tree.
+pub fn validate(check: bool, skip: &[String]) -> Result<(), String> {
     // Opened first, so a failure at any later point reaches the log.
     let tee = open_log(&tasks_config().root)?;
     let result = (|| {
@@ -43,7 +109,18 @@ pub fn validate(check: bool) -> Result<(), String> {
             cfg!(feature = "frontend"),
             Path::new("frontend/package.json").exists(),
         )?;
-        step::run_all(steps(check)?, &tee)
+        let (steps, skipped) = steps(check, skip)?;
+        // Said first and last, so neither the head nor the tail of a
+        // partial run reads as a full one.
+        let names = skipped.join(", ");
+        if !skipped.is_empty() {
+            tee.println(&format!("Skipping: {names}"));
+        }
+        step::run_all(steps, &tee)?;
+        if !skipped.is_empty() {
+            tee.println(&format!("Partial run: skipped {names}"));
+        }
+        Ok(())
     })();
     record_failure(&tee, &result);
     result
@@ -108,7 +185,7 @@ mod tests {
         // a command that does not exist. `check` does not affect
         // the cmd strings, so either value exercises them all.
         let cli = crate::Cli::command();
-        for step in steps(false).unwrap() {
+        for step in steps(false, &[]).unwrap().0 {
             assert!(
                 cli.find_subcommand(step.cmd()).is_some(),
                 "validate step {:?} hints `cargo xtask {}`, \
@@ -124,7 +201,7 @@ mod tests {
         // The frontend gates are in the list exactly when the
         // feature compiles them in, so the `[N/M]` total counts
         // only gates that exist.
-        let all = steps(false).unwrap();
+        let all = steps(false, &[]).unwrap().0;
         let names: Vec<&str> = all.iter().map(Step::name).collect();
         let deny = names.iter().position(|n| *n == step::names::DENY).unwrap();
         let first = names.iter().position(|n| n.starts_with("Frontend"));
@@ -133,6 +210,105 @@ mod tests {
         } else {
             assert_eq!(first, None, "{names:?}");
         }
+    }
+
+    fn names_without(skip: &[&str]) -> Vec<&'static str> {
+        let skip: Vec<String> = skip.iter().map(|s| (*s).into()).collect();
+        steps(false, &skip)
+            .unwrap()
+            .0
+            .iter()
+            .map(Step::name)
+            .collect()
+    }
+
+    #[test]
+    fn skip_leaves_the_named_gates_out_ignoring_case() {
+        let names = names_without(&["coverage", "DUPLICATION"]);
+        assert!(!names.contains(&step::names::COVERAGE), "{names:?}");
+        assert!(!names.contains(&step::names::DUPLICATION), "{names:?}");
+        assert!(names.contains(&step::names::CLIPPY), "{names:?}");
+    }
+
+    #[test]
+    fn skip_also_matches_a_gate_by_its_subcommand() {
+        let names = names_without(&["dupes"]);
+        assert!(!names.contains(&step::names::DUPLICATION), "{names:?}");
+    }
+
+    #[test]
+    fn skipping_every_gate_is_refused() {
+        // A run with no gate would end "Validate OK" having run nothing.
+        let all: Vec<String> = steps(false, &[])
+            .unwrap()
+            .0
+            .iter()
+            .map(|s| s.cmd().to_owned())
+            .collect();
+        let err = steps(false, &all).err().unwrap();
+        assert!(err.contains("every gate"), "{err}");
+    }
+
+    #[test]
+    fn skipping_an_unknown_gate_is_refused() {
+        // A typo would otherwise skip nothing and read as a full run.
+        let err = steps(false, &["covrage".into()]).err().unwrap();
+        assert!(err.contains("covrage"), "{err}");
+    }
+
+    #[test]
+    fn skip_tolerates_a_repeated_name_in_any_case() {
+        let names = names_without(&["coverage", "Coverage"]);
+        assert!(!names.contains(&step::names::COVERAGE), "{names:?}");
+    }
+
+    #[test]
+    fn skip_reports_the_gates_it_removed_by_name() {
+        let skip = ["COVERAGE".to_owned(), "dupes".to_owned()];
+        let (_, skipped) = steps(false, &skip).unwrap();
+        assert_eq!(
+            skipped,
+            [step::names::DUPLICATION, step::names::COVERAGE],
+            "in run order, as the [N/M] lines name them"
+        );
+    }
+
+    #[test]
+    fn skipping_coverage_runs_every_crates_tests_once_in_its_place() {
+        // Coverage is where the library runs the workspace's tests, so
+        // a stand-in takes its slot. It runs xtask's tests too, so the
+        // separate xtask step goes rather than running them twice.
+        let full = names_without(&[]);
+        let expected: Vec<&str> = full
+            .iter()
+            .filter(|n| **n != step::names::TEST)
+            .map(|n| {
+                if *n == step::names::COVERAGE {
+                    WORKSPACE_TESTS
+                } else {
+                    n
+                }
+            })
+            .collect();
+        assert_eq!(names_without(&["coverage"]), expected);
+    }
+
+    #[test]
+    fn skipping_coverage_and_the_xtask_tests_by_name_runs_no_rust_tests() {
+        // The same as `--skip test`: one matching rule for name and
+        // subcommand alike.
+        let names = names_without(&["coverage", "Test (xtask only)"]);
+        assert!(!names.contains(&WORKSPACE_TESTS), "{names:?}");
+        assert!(!names.contains(&step::names::TEST), "{names:?}");
+    }
+
+    #[test]
+    fn skipping_coverage_and_test_runs_no_rust_tests_and_keeps_dep_age_first() {
+        // With Test skipped the stand-in is never added, and no step
+        // lands ahead of Dep-age, which vets what the tests compile.
+        let names = names_without(&["coverage", "test"]);
+        assert_eq!(names.first(), Some(&step::names::DEP_AGE), "{names:?}");
+        assert!(!names.contains(&WORKSPACE_TESTS), "{names:?}");
     }
 
     #[test]
