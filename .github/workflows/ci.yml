@@ -196,8 +196,6 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # xtask's frontend detection is cwd-relative, so run these
-      # from the repo root (not from `frontend/`).
       - name: Frontend format
         run: cargo xtask frontend-fmt --check
       - name: Frontend type check

@@ -19,8 +19,8 @@ workspace = true
 [features]
 default = ["frontend", "deploy", "template-tools", "clean-cache"]
 # The four `frontend-*` gates and subcommands (Prettier, svelte-check,
-# jscpd, vitest).
-frontend = []
+# jscpd, vitest), from the library's `frontend` feature.
+frontend = ["rustbase-xtask/frontend"]
 # `deploy` and `deploy-setup`.
 deploy = []
 # The commands behind `/template-sync`, `/template-improve` and

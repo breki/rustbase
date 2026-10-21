@@ -16,16 +16,6 @@ mod deploy_remote;
 mod deploy_setup;
 #[cfg(feature = "template-tools")]
 mod feedback;
-#[cfg(feature = "frontend")]
-mod frontend;
-#[cfg(feature = "frontend")]
-mod frontend_check;
-#[cfg(feature = "frontend")]
-mod frontend_dupes;
-#[cfg(feature = "frontend")]
-mod frontend_fmt;
-#[cfg(feature = "frontend")]
-mod frontend_test;
 mod helpers;
 #[cfg(feature = "template-tools")]
 mod sync;
@@ -64,27 +54,6 @@ enum XCommand {
         #[arg(long, value_name = "GATE")]
         skip: Vec<String>,
     },
-    /// Type-check the frontend (svelte-check); skips
-    /// cleanly when there is no frontend
-    #[cfg(feature = "frontend")]
-    FrontendCheck,
-    /// Format the frontend with Prettier; skips cleanly
-    /// when there is no frontend
-    #[cfg(feature = "frontend")]
-    FrontendFmt {
-        /// Check formatting read-only instead of
-        /// auto-fixing in place
-        #[arg(long)]
-        check: bool,
-    },
-    /// Check frontend code duplication (requires jscpd);
-    /// skips cleanly when there is no frontend
-    #[cfg(feature = "frontend")]
-    FrontendDupes,
-    /// Run the frontend unit suite (vitest); skips cleanly
-    /// when there is no frontend
-    #[cfg(feature = "frontend")]
-    FrontendTest,
     /// Deploy to a remote Linux host (build frontend, sync,
     /// build on remote, restart service)
     #[cfg(feature = "deploy")]
@@ -158,16 +127,6 @@ fn main() {
     let result = match cli.command {
         XCommand::Lib(cmd) => cli::run(cmd, &tasks_config()),
         XCommand::Validate { check, skip } => validate::validate(check, &skip),
-        #[cfg(feature = "frontend")]
-        XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
-        #[cfg(feature = "frontend")]
-        XCommand::FrontendFmt { check } => {
-            frontend_fmt::frontend_fmt_cmd(check)
-        }
-        #[cfg(feature = "frontend")]
-        XCommand::FrontendDupes => frontend_dupes::frontend_dupes_cmd(),
-        #[cfg(feature = "frontend")]
-        XCommand::FrontendTest => frontend_test::frontend_test_cmd(),
         #[cfg(feature = "deploy")]
         XCommand::Deploy => deploy::deploy(),
         #[cfg(feature = "deploy")]

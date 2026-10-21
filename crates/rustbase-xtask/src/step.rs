@@ -59,6 +59,18 @@ pub mod names {
     pub const COVERAGE: &str = "Coverage";
     /// Security advisories.
     pub const AUDIT: &str = "Audit";
+    /// Frontend formatting (Prettier).
+    #[cfg(feature = "frontend")]
+    pub const FRONTEND_FMT: &str = "Frontend fmt";
+    /// Frontend type check (svelte-check).
+    #[cfg(feature = "frontend")]
+    pub const FRONTEND_CHECK: &str = "Frontend check";
+    /// Frontend duplication (jscpd).
+    #[cfg(feature = "frontend")]
+    pub const FRONTEND_DUPES: &str = "Frontend dupes";
+    /// Frontend unit tests (Vitest).
+    #[cfg(feature = "frontend")]
+    pub const FRONTEND_TEST: &str = "Frontend test";
 }
 
 /// One gate: the name on its `[N/M]` line, the `cargo xtask`

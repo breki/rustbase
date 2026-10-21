@@ -6,10 +6,10 @@ use rustbase_xtask::tee::{OpenError, Tee};
 
 use crate::helpers::tasks_config;
 #[cfg(feature = "frontend")]
-use crate::{frontend_check, frontend_dupes, frontend_fmt, frontend_test};
+use rustbase_xtask::frontend;
 
 /// The library's standard gates (`step::standard`, which gives their
-/// order), with this project's frontend gates after Deny (three static
+/// order), with the library's frontend gates after Deny (three static
 /// ones, then the frontend tests, ahead of the Rust tests), less any
 /// gate `skip` names; the skipped gates' names come back too. When
 /// Coverage is skipped but Test is not, a `Test (workspace)` step takes
@@ -22,17 +22,13 @@ fn steps(
     check: bool,
     skip: &[String],
 ) -> Result<(Vec<Step>, Vec<&'static str>), String> {
-    let mut steps = step::standard(&tasks_config(), check);
+    let cfg = tasks_config();
+    let mut steps = step::standard(&cfg, check);
     #[cfg(feature = "frontend")]
     step::insert_after(
         &mut steps,
         step::names::DENY,
-        [
-            frontend_fmt::step(check),
-            frontend_check::step(),
-            frontend_dupes::step(),
-            frontend_test::step(),
-        ],
+        frontend::steps(&cfg, check),
     )?;
     let skipped = skipped_gates(&steps, skip)?;
     if skipped.contains(&step::names::COVERAGE)

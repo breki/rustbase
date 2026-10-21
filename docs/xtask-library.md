@@ -211,7 +211,7 @@ the library is a possible later step, not part of this plan.
 | `records` (bombyx's `records`) | extracted (#21) as the library's `records`: one parser for every record file (`todo` reads its items through it) and the `records-check` gate; the files are `Config::record_files`. It checks an id in an entry's `Depends on` / `Supersedes` field; canon-check checks a backlog ID cited in canon prose |
 | `clean_cache`, `helpers` | helpers grouped by the module that uses them (done, #5); Windows-only code stays behind `cfg` |
 | `validate` | step runner; each gate supplies its `step()` (done, #5). The runner, the `Step` type and the standard gate list moved into the library as `step` (#8); a project inserts its own steps (here, the frontend gates) |
-| `frontend*` | library-ready, optional feature |
+| `frontend*` | extracted (#44): `frontend`, behind the library's `frontend` feature (default off), with its four `frontend-*` subcommands in `cli::FrontendCommand`; the folder is `Config::frontend_dir`, found from `root`. The JS tools stay the project's npm dev dependencies |
 | `deploy*` | last; generic pieces (remote run, tag guard, staging, crash check) only, with hooks |
 | `backfeed`, `feedback`, `sync` | template-maintenance tools; stay in the template |
 
@@ -277,8 +277,9 @@ bullets. The steps, in the order clockdump took them:
    `main.rs` flattens the library's `cli::LibCommand` into its own
    `XCommand`, and `validate.rs` runs the library's
    `step::standard` gate list, so the downstream's vendored gate
-   modules go and nothing replaces them. Take every file, the
-   deploy, frontend and backfeed modules included: `main.rs` and
+   modules go and nothing replaces them; the frontend gates are the
+   library's too, under its `frontend` feature. Take every file, the
+   deploy and backfeed modules included: `main.rs` and
    `sync.rs` call into them, and `cargo xtask clippy` compiles each
    feature group. A module of the project's own (hoard's deploy
    pipeline, jutro's `worktree`, an architecture lint) stays: its
@@ -304,7 +305,8 @@ bullets. The steps, in the order clockdump took them:
 3. **`helpers.rs`**: `Config::for_project("<name>", ...)`, which keeps
    the `<NAME>_DEP_AGE_ALLOW` variable. Drop the template's canon
    exemptions, which name template paths, and the test that asserts
-   them; keep `audit_npm_dir` only with a frontend. A project that
+   them; keep `audit_npm_dir` and `frontend_dir` only with a
+   frontend. A project that
    vendored canon carries its own exemptions over, as exact paths:
    the library matches a path exactly, or a whole folder when it
    ends in `/`, where bombyx's copy matched any prefix. A project

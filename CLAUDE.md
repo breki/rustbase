@@ -147,15 +147,12 @@ For production, build the frontend first, then serve
 with the backend:
 `cargo run -p rustbase-web -- --frontend frontend/dist`
 
-**Restore the working directory to the repo root after an
-in-`frontend/` npm command before running `cargo xtask`.**
-npm operations must run from inside `frontend/` (see the
-`file:`-dependency trap below), but `cargo xtask`'s
-frontend detection is cwd-relative -- from `frontend/` it
-looks for `frontend/frontend/package.json`, finds nothing,
-and silently reports "no frontend" (a false skip that reads
-as a pass). The shell cwd persists across commands, so a
-lingering `cd frontend` will mask every later frontend gate.
+**npm commands run from inside `frontend/`; `cargo xtask`
+runs from anywhere.** npm must run inside `frontend/` (see
+the `file:`-dependency trap below). The frontend gates find
+the folder from the project root (`Config::frontend_dir` in
+`xtask/src/helpers.rs`), not the shell's working directory,
+so a lingering `cd frontend` does not hide them.
 
 **A major JS bump that hits `ERESOLVE`: climb the ladder in
 `/update-deps`, do not reset first.** npm compares the new
@@ -831,7 +828,7 @@ all on by default:
 
 | Feature | Commands |
 |-|-|
-| `frontend` | the four `frontend-*` gates and commands |
+| `frontend` | the four `frontend-*` gates and commands, from the library's `frontend` feature |
 | `deploy` | `deploy`, `deploy-setup` |
 | `template-tools` | `sync-candidates`, `feedback-add`, `backfeed-*` (`/template-sync`, `/template-improve`, `/template-backfeed`) |
 | `clean-cache` | `clean-cache` |

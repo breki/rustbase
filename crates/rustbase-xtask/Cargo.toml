@@ -19,6 +19,10 @@ workspace = true
 # Enables `cli` (the library's subcommands, for an xtask CLI) and
 # derives `clap::ValueEnum` on the public enums.
 clap = ["dep:clap"]
+# The four frontend gates (Prettier, svelte-check, jscpd, Vitest),
+# each running one of the project's npm scripts. No Node dependency:
+# the JS tools are the project's own npm dev dependencies.
+frontend = []
 
 [dependencies]
 clap = { version = "4", features = ["derive"], optional = true }

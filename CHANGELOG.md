@@ -162,6 +162,13 @@ and this project adheres to
   and end, a name matching no gate or a set leaving none is refused, and
   skipping Coverage still runs every crate's tests once, as a
   `Test (workspace)` step in its slot.
+- rustbase-xtask `frontend` feature (off by default): the four frontend gates --
+  Prettier, svelte-check, jscpd and Vitest, each running one of the project's
+  npm scripts -- as `frontend::steps` for `validate` to place after Deny, and
+  their `frontend-*` subcommands as `cli::FrontendCommand`, flattened into
+  `LibCommand`. The folder is the new `Config::frontend_dir`. The template's
+  xtask `frontend` feature now enables it, and its five `xtask/src/frontend*.rs`
+  copies are gone (#44).
 
 ### Changed
 
@@ -242,6 +249,12 @@ and this project adheres to
   strict mode, and `DepAgeResult::warnings` is renamed `unchecked`, since its
   entries now fail the gate. A project that replaced the Dep-age step to make it
   strict, as the downstream project hoard did, can drop that replacement (#47).
+- The frontend gates find the frontend from the project root, not the shell's
+  working directory, so `cargo xtask` run from inside `frontend/` no longer
+  reports "no frontend" and passes. A failing script's first lines are part of
+  the error, so they also reach `target/validate.log`, and a frontend without
+  `node_modules` is told to run `npm install` inside it rather than `npm
+  --prefix` (#44).
 
 ### Fixed
 

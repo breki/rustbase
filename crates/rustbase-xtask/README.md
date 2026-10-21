@@ -37,7 +37,11 @@ let steps = step::standard(&cfg, check_only);
 ```
 
 The `clap` feature enables `cli`; leave it out if you write your own
-CLI. The template's
+CLI. The `frontend` feature (off by default) adds `frontend`: four
+gates running the project's `format`, `check`, `dupes` and `test` npm
+scripts in `Config::frontend_dir`, for `validate` to place after Deny
+(`frontend::steps`), and their `frontend-*` subcommands. The
+template's
 [`xtask/`](https://github.com/breki/rustbase/tree/main/xtask) is the
 reference wiring.
 
