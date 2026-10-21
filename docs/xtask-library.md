@@ -415,8 +415,14 @@ bullets. The steps, in the order clockdump took them:
      its npm verdict reads `total` alone, so a 0 total with severity
      counts passes (#67). A hung audit: `validate --skip audit`.
    - **`fmt --check`** and **`frontend-test` path filters** are gone
-     (#68). Use `cargo fmt --all -- --check`, and `npm run test --
-     <filters>` run inside the frontend folder.
+     up to 0.2.4 (#68). There, use `cargo fmt --all -- --check`, and
+     `npm run test -- <filters>` run inside the frontend folder.
+     The next release, 0.3.0 (not yet published), takes both again;
+     keep the workarounds until the project is on it. It breaks code
+     that names `LibCommand::Fmt` or `FrontendCommand::FrontendTest`,
+     which became struct variants, or matches `FrontendCommand`
+     exhaustively, which is now `#[non_exhaustive]`. A project that
+     only flattens `LibCommand` in changes nothing.
    - **`dep-age`** passes a yanked crate version, and reads npm's
      `created` / `modified` keys as versions (#69). No workaround.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move

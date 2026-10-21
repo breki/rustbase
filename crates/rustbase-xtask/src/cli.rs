@@ -56,7 +56,12 @@ pub enum LibCommand {
         ignored: bool,
     },
     /// Format code
-    Fmt,
+    Fmt {
+        /// Check formatting read-only instead of
+        /// rewriting files in place
+        #[arg(long)]
+        check: bool,
+    },
     /// Run coverage check (requires cargo-llvm-cov)
     Coverage,
     /// Run code duplication check (requires code-dupes)
@@ -243,9 +248,13 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
             verbose,
             ignored,
         } => run_test(filter.as_deref(), verbose, ignored, cfg)?,
+        LibCommand::Fmt { check: true } => {
+            fmt::check(cfg).map_err(|f| f.report(FMT_DIFF_LINES))?;
+            println!("Fmt OK");
+        }
         // Its output streams to the terminal, so a failure's error is
         // only that it failed.
-        LibCommand::Fmt => {
+        LibCommand::Fmt { check: false } => {
             fmt::fix(cfg).map_err(|f| f.report(FMT_DIFF_LINES))?;
         }
         LibCommand::Coverage => {
@@ -361,6 +370,7 @@ fn run_test(
 /// The frontend gates' subcommands, flattened into [`LibCommand`].
 #[cfg(feature = "frontend")]
 #[derive(Debug, Subcommand)]
+#[non_exhaustive]
 pub enum FrontendCommand {
     /// Type-check the frontend (svelte-check); skips
     /// cleanly when there is no frontend
@@ -378,21 +388,28 @@ pub enum FrontendCommand {
     FrontendDupes,
     /// Run the frontend unit suite (vitest); skips cleanly
     /// when there is no frontend
-    FrontendTest,
+    FrontendTest {
+        /// Run only the test files whose path contains one of
+        /// these (passed to vitest); put vitest options after
+        /// `--`, as in `frontend-test -- -t name`
+        filters: Vec<String>,
+    },
 }
 
 /// `frontend-<gate>`.
 #[cfg(feature = "frontend")]
 fn run_frontend(c: &FrontendCommand, cfg: &Config) -> Result<(), String> {
     use frontend::{Gate, Outcome};
-    let gate = match *c {
-        FrontendCommand::FrontendCheck => Gate::Check,
-        FrontendCommand::FrontendFmt { check: true } => Gate::FmtCheck,
-        FrontendCommand::FrontendFmt { check: false } => Gate::Fmt,
-        FrontendCommand::FrontendDupes => Gate::Dupes,
-        FrontendCommand::FrontendTest => Gate::Test,
+    let (gate, extra): (Gate, &[String]) = match c {
+        FrontendCommand::FrontendCheck => (Gate::Check, &[]),
+        FrontendCommand::FrontendFmt { check: true } => (Gate::FmtCheck, &[]),
+        FrontendCommand::FrontendFmt { check: false } => (Gate::Fmt, &[]),
+        FrontendCommand::FrontendDupes => (Gate::Dupes, &[]),
+        FrontendCommand::FrontendTest { filters } => (Gate::Test, filters),
     };
-    match frontend::run(cfg, gate).map_err(|f| f.report(STANDALONE_LINES))? {
+    match frontend::run_with_args(cfg, gate, extra)
+        .map_err(|f| f.report(STANDALONE_LINES))?
+    {
         Outcome::Skipped => println!("{} {}", gate.name(), frontend::SKIPPED),
         Outcome::NotConfigured => {
             println!("{} {}", gate.name(), frontend::NOT_CONFIGURED);
@@ -513,6 +530,7 @@ mod tests {
             &["frontend-check"],
             &["frontend-dupes"],
             &["frontend-test"],
+            &["frontend-test", "src/a", "b.test"],
         ] {
             assert!(ok(args), "{args:?}: no frontend configured, so skipped");
         }
@@ -523,6 +541,7 @@ mod tests {
             &["test", "x", "--verbose", "--ignored"],
             &["test"],
             &["fmt"],
+            &["fmt", "--check"],
             &["coverage"],
             &["dupes"],
             &["deny"],
@@ -536,6 +555,26 @@ mod tests {
         parse(&["audit"]);
         parse(&["dep-age", "cargo", "serde", "1.0.0"]);
         parse(&["dep-age", "npm", "x", "--latest-aged", "--within", "3"]);
+    }
+
+    #[test]
+    fn fmt_check_reports_the_drift_and_leaves_the_file_alone() {
+        let dir = test_repo::empty_dir();
+        std::fs::write(
+            dir.0.join("Cargo.toml"),
+            "[package]\nname = \"t\"\nversion = \"0.1.0\"\n\
+             edition = \"2024\"\n[workspace]\n",
+        )
+        .unwrap();
+        std::fs::create_dir(dir.0.join("src")).unwrap();
+        let lib = dir.0.join("src/lib.rs");
+        std::fs::write(&lib, "pub fn a(){}\n").unwrap();
+        let cfg = Config::for_project("t", dir.0.clone());
+        let err = run(parse(&["fmt", "--check"]), &cfg).unwrap_err();
+        assert!(err.contains("formatting issues"), "{err}");
+        assert_eq!(std::fs::read_to_string(&lib).unwrap(), "pub fn a(){}\n");
+        run(parse(&["fmt"]), &cfg).unwrap();
+        assert_eq!(run(parse(&["fmt", "--check"]), &cfg), Ok(()));
     }
 
     #[test]

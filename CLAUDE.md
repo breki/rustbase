@@ -95,7 +95,8 @@ cargo xtask canon-check       # claims canon prose makes: paths, xrefs, grants, 
 cargo xtask records-check     # record files: ids unique and well-formed, refs resolve
 cargo xtask scripts-check     # scripts/ files with a shebang staged executable
 cargo xtask coverage          # coverage only (>=90%)
-cargo xtask fmt               # format code
+cargo xtask fmt [--check]     # format code (--check: read-only)
+cargo xtask frontend-test [filters] [-- vitest opts]  # frontend unit tests
 cargo xtask dupes             # code duplication check
 cargo xtask audit             # security-advisory audit (RUSTSEC + npm)
 cargo xtask deny              # offline licence/bans/sources gate (cargo-deny)
