@@ -144,8 +144,9 @@ nothing deploy-specific (#10).
 
 Published on crates.io as `rustbase-xtask` (#4); 0.1.0 went out on
 2026-10-20, tagged `rustbase-xtask-v0.1.0`, 0.2.0 on 2026-10-21
-(#44, #46, #47), tagged `rustbase-xtask-v0.2.0`, and 0.2.1 the same day
-(#55), tagged `rustbase-xtask-v0.2.1`. Through crates.io the
+(#44, #46, #47), tagged `rustbase-xtask-v0.2.0`, and 0.2.1 (#55) and
+0.2.2 (#62) the same day, tagged `rustbase-xtask-v0.2.1` and
+`rustbase-xtask-v0.2.2`. Through crates.io the
 licence/sources gate (`deny.toml` rejects git sources) and the
 cooldown and audit tooling apply to it like any other dependency. It
 follows SemVer with its own version, in
