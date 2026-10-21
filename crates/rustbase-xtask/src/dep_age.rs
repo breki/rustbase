@@ -44,19 +44,18 @@ fn allow_hint(cfg: &Config, base: &str) -> String {
     // Locally the base is HEAD; CI diffs from the change's base
     // branch, so a waiver only on the change's own branch passes here
     // and fails there. The library cannot know that branch's name.
-    if base == "HEAD" {
-        format!(
-            "allow via a `name@version` line in {file}, committed (and \
-             landed on the base branch before this change is pushed, for \
-             CI), or {env}"
-        )
+    let when = if base == "HEAD" {
+        "a `name@version` line, committed, and on the base branch before \
+         this change is pushed"
+            .to_owned()
     } else {
         format!(
-            "allow via a `name@version` line in {file} landed on the base \
-             branch (this run read it at {base}), then push again, since a \
-             re-run keeps the old base; or {env}"
+            "a `name@version` line on the base branch, read at {base}; in \
+             CI push again once it is there, since a re-run keeps the old \
+             base"
         )
-    }
+    };
+    format!("allow via {file} ({when}), or via {env}")
 }
 
 /// Do not adopt a version published fewer than this many
@@ -394,25 +393,30 @@ mod tests {
 
     #[test]
     fn the_hint_names_the_action_for_the_base_it_ran_against() {
-        // The library cannot know the branch name, so it says "the base
-        // branch", and it names what to do rather than a commit.
+        // The hint tells the reader what to do with the allow line, and
+        // names no branch, since the library cannot know it.
         let mut cfg = Config::for_project("my-app", "/r".into());
-        let hint = allow_hint(&cfg, "3f2a1b");
-        for part in [
-            ".dep-age-allow",
-            "on the base branch",
-            "push again",
-            "3f2a1b",
-            "MY_APP_DEP_AGE_ALLOW=name@version",
-        ] {
-            assert!(hint.contains(part), "{part}: {hint}");
-        }
-        let hint = allow_hint(&cfg, "HEAD");
-        for part in ["committed", "base branch", "before"] {
-            assert!(hint.contains(part), "{part}: {hint}");
-        }
-        for hint in [allow_hint(&cfg, "HEAD"), allow_hint(&cfg, "3f2a1b")] {
+        let other = allow_hint(&cfg, "3f2a1b");
+        let head = allow_hint(&cfg, "HEAD");
+        for hint in [&head, &other] {
+            // Both forms offer the same two waivers, in the same layout.
+            assert!(hint.starts_with("allow via .dep-age-allow ("), "{hint}");
+            assert!(
+                hint.ends_with(
+                    "), or via MY_APP_DEP_AGE_ALLOW=name@version[,...]"
+                ),
+                "{hint}"
+            );
             assert!(!hint.contains("main"), "{hint}");
+        }
+        for part in ["committed", "before this change is pushed"] {
+            assert!(head.contains(part), "{part}: {head}");
+        }
+        assert!(!head.contains("push again"), "{head}");
+        // Any other base is read as a CI run would read it; the advice
+        // says it is CI's, since `--base` can also be given locally.
+        for part in ["read at 3f2a1b", "in CI", "push again"] {
+            assert!(other.contains(part), "{part}: {other}");
         }
         cfg.dep_age_allow_file = None;
         let hint = allow_hint(&cfg, "HEAD");
