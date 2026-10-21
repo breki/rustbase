@@ -84,7 +84,7 @@ Both invocations run the same `xtask` binary, which:
 2. Tars the Rust source and `scp`s it to the remote
 3. Builds the release binary on the remote
 4. Stops the service, installs binary + frontend
-   (atomic swap)
+   (frontend swapped by two renames)
 5. Restarts and verifies the service (3 retries)
 
 The first build takes ~4 minutes (downloading +

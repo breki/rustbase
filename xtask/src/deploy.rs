@@ -176,7 +176,7 @@ fn stage_frontend(project_root: &Path, remote: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Atomic swap of the frontend directory.
+/// Swap of the frontend directory by two renames.
 ///
 /// Self-checks `DEPLOY_PATH` against the required
 /// constant before any `rm -rf`, as defense in depth
@@ -184,10 +184,14 @@ fn stage_frontend(project_root: &Path, remote: &str) -> Result<(), String> {
 /// passed as `$2` so the bash literal stays in lockstep
 /// with `deploy_config::REQUIRED_DEPLOY_PATH`.
 ///
-/// Performs a true POSIX-atomic swap: stages the new
-/// tree, renames the old one aside, renames the new one
-/// into place (single rename(2) — instantaneous), then
-/// cleans up. The path is never absent.
+/// Stages the new tree, renames the old one aside, renames
+/// the new one into place, then cleans up. The path is
+/// absent only between the two renames, while the service
+/// is stopped.
+///
+/// Every look into `DEPLOY_PATH` goes through `sudo`: setup
+/// leaves it mode 750, so the login user sees nothing there.
+/// `mv -T` fails rather than move a dir into one left behind.
 const INSTALL_FRONTEND: &str = r#"set -euo pipefail
 DEPLOY_PATH="$1"
 REQUIRED_PATH="$2"
@@ -199,10 +203,10 @@ sudo rm -rf "$DEPLOY_PATH/frontend-dist-new" \
     "$DEPLOY_PATH/frontend-dist-old"
 sudo cp -r ~/frontend-dist-tmp "$DEPLOY_PATH/frontend-dist-new"
 sudo chown -R rustbase:rustbase "$DEPLOY_PATH/frontend-dist-new"
-if [[ -e "$DEPLOY_PATH/frontend-dist" ]]; then
-    sudo mv "$DEPLOY_PATH/frontend-dist" "$DEPLOY_PATH/frontend-dist-old"
+if sudo test -e "$DEPLOY_PATH/frontend-dist"; then
+    sudo mv -T "$DEPLOY_PATH/frontend-dist" "$DEPLOY_PATH/frontend-dist-old"
 fi
-sudo mv "$DEPLOY_PATH/frontend-dist-new" "$DEPLOY_PATH/frontend-dist"
+sudo mv -T "$DEPLOY_PATH/frontend-dist-new" "$DEPLOY_PATH/frontend-dist"
 sudo rm -rf "$DEPLOY_PATH/frontend-dist-old"
 rm -rf ~/frontend-dist-tmp
 "#;
@@ -227,7 +231,7 @@ fn stop_swap_start(remote: &str, deploy_path: &str) -> Result<(), String> {
     deploy_remote::ssh_run(remote, &cmd, "install binary")
         .map_err(|e| e.to_string())?;
 
-    // Frontend — atomic swap.
+    // Frontend — swap by two renames.
     deploy_remote::ssh_bash(
         remote,
         INSTALL_FRONTEND,
@@ -288,6 +292,8 @@ fn npm_bin() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    use std::{env, io::Write};
 
     #[test]
     fn install_frontend_script_is_set_minus_e() {
@@ -312,6 +318,85 @@ mod tests {
                 .contains("rm -rf \"$DEPLOY_PATH/frontend-dist-new\""),
             "stale frontend-dist-new must be removed before cp"
         );
+    }
+
+    /// Runs the real swap twice against a deploy dir only `sudo`
+    /// can see into, as `setup` leaves it (mode 750, owned by the
+    /// service user). The `sudo` shim opens the dir for the one
+    /// command it runs.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn install_frontend_replaces_dist_the_login_user_cannot_see() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = env::temp_dir().join(format!(
+            "rustbase-xtask-install-frontend-{}",
+            std::process::id()
+        ));
+        let (bin, home, opt) =
+            (root.join("bin"), root.join("home"), root.join("opt"));
+        fs::create_dir_all(&bin).unwrap();
+        fs::create_dir_all(opt.join("frontend-dist")).unwrap();
+        fs::write(opt.join("frontend-dist/index.html"), "v0").unwrap();
+        let opt_s = opt.to_str().unwrap();
+        let sudo = format!(
+            "#!/usr/bin/env bash\nchmod 750 '{opt_s}'\n\"$@\"\nrc=$?\n\
+             chmod 000 '{opt_s}'\nexit $rc\n"
+        );
+        fs::write(bin.join("sudo"), sudo).unwrap();
+        // The test user cannot chown to the service user.
+        fs::write(bin.join("chown"), "#!/bin/sh\nexit 0\n").unwrap();
+        for shim in ["sudo", "chown"] {
+            fs::set_permissions(
+                bin.join(shim),
+                fs::Permissions::from_mode(0o755),
+            )
+            .unwrap();
+        }
+        let hide = |mode| {
+            fs::set_permissions(&opt, fs::Permissions::from_mode(mode))
+                .unwrap();
+        };
+        hide(0o000);
+        if opt.join("frontend-dist").exists() {
+            // Root sees through mode 000, so nothing would be tested.
+            hide(0o755);
+            fs::remove_dir_all(&root).ok();
+            eprintln!("skipped: the deploy dir is not hidden from this user");
+            return;
+        }
+
+        let path = format!("{}:{}", bin.display(), env::var("PATH").unwrap());
+        for version in ["v1", "v2"] {
+            fs::create_dir_all(home.join("frontend-dist-tmp")).unwrap();
+            fs::write(home.join("frontend-dist-tmp/index.html"), version)
+                .unwrap();
+            let mut child = Command::new("bash")
+                .args(["-s", "--", opt_s, opt_s])
+                .env("HOME", &home)
+                .env("PATH", &path)
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(INSTALL_FRONTEND.as_bytes())
+                .unwrap();
+            let status = child.wait().unwrap();
+
+            hide(0o755);
+            let served =
+                fs::read_to_string(opt.join("frontend-dist/index.html"));
+            let nested = opt.join("frontend-dist/frontend-dist-new").exists();
+            assert!(status.success(), "{version}: swap failed: {status}");
+            assert!(!nested, "{version}: new dist nested in the old one");
+            assert_eq!(served.unwrap(), version);
+            hide(0o000);
+        }
+        hide(0o755);
+        fs::remove_dir_all(&root).ok();
     }
 
     /// Guard against a future refactor wiping the remote
