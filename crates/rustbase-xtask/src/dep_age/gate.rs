@@ -13,7 +13,7 @@
 //! registry dependency, transitive ones included. A
 //! lockfile-churning update (`cargo update` / `npm update`)
 //! therefore can flag many fresh transitive versions at once;
-//! see `RUSTBASE_DEP_AGE_ALLOW` and the supply-chain notes in
+//! see `Config::dep_age_allow_env` and the supply-chain notes in
 //! `CLAUDE.md` for the intended workflow.
 //!
 //! The shared registry-fetch and date-verdict machinery lives

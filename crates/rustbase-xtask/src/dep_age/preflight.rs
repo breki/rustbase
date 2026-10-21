@@ -328,7 +328,12 @@ pub fn dep_preflight(cfg: &Config) -> Result<(), String> {
         );
         return Ok(());
     }
+    Err(failure_message(&report, &cfg.dep_age_allow_env))
+}
 
+/// The advice for a tree preflight could not certify, naming the
+/// project's own allow-list variable (`allow_env`).
+fn failure_message(report: &Report, allow_env: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !report.dead_ends.is_empty() {
         parts.push(format!(
@@ -343,13 +348,12 @@ pub fn dep_preflight(cfg: &Config) -> Result<(), String> {
             report.unresolved
         ));
     }
-    Err(format!(
+    format!(
         "dep-preflight could not certify the tree -- {}.\n  Wait out the \
          cooldown, adopt the fresh version deliberately (record it in \
-         RUSTBASE_DEP_AGE_ALLOW when you commit), or drop/adjust the \
-         dependency.",
+         {allow_env} when you commit), or drop/adjust the dependency.",
         parts.join("; ")
-    ))
+    )
 }
 
 #[cfg(test)]
@@ -521,6 +525,21 @@ mod tests {
             "{:?}",
             r.warnings
         );
+    }
+
+    #[test]
+    fn failure_message_names_the_projects_allow_variable() {
+        let report = Report {
+            clean: false,
+            pinned: Vec::new(),
+            dead_ends: vec!["foo@1.5.0".to_string()],
+            unresolved: 0,
+            warnings: Vec::new(),
+            iterations: 1,
+        };
+        let msg = failure_message(&report, "HOARD_DEP_AGE_ALLOW");
+        assert!(msg.contains("HOARD_DEP_AGE_ALLOW"), "{msg}");
+        assert!(!msg.contains("RUSTBASE_"), "{msg}");
     }
 
     #[test]

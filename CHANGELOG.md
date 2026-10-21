@@ -291,6 +291,10 @@ and this project adheres to
   GHSA-r825-w8mm-5pxw (medium). The range in `frontend/package.json` moves
   from `^8.0.0` to `^8.1.6`, so an install without the lockfile cannot pick an
   affected 8.0.x or 8.1.x (#50).
+- dep-preflight: when no aged version fits, its advice names the allow-list
+  variable the project actually reads (`Config::dep_age_allow_env`, e.g.
+  `HOARD_DEP_AGE_ALLOW`) instead of always `RUSTBASE_DEP_AGE_ALLOW`, which a
+  project set up with `Config::for_project` ignores (#46).
 
 ### Removed
 
