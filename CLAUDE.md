@@ -84,7 +84,8 @@ locally.
 
 ```bash
 cargo xtask check             # type-check all targets (compiles tests, runs none)
-cargo xtask validate          # fmt + clippy + tests + coverage
+cargo xtask validate          # every gate (see Definition of Done)
+cargo xtask validate --skip <gate>  # leave a gate out (repeatable)
 cargo xtask test [filter]     # tests only
 cargo xtask test --ignored    # run #[ignore]-tagged tests
 cargo xtask clippy            # lint (+ xtask: all features off, each alone)
@@ -684,7 +685,10 @@ cheapest first: Fmt, Canon, Records, Scripts, Duplication,
 Clippy, Doc, Deny, then the frontend static gates. The dynamic
 gates come last: the frontend and Rust tests, Coverage, then
 Audit, which needs the network. A failed step prints the single
-command to re-run just that gate. On a fresh full-stack checkout, run
+command to re-run just that gate. `validate --skip <gate>` leaves a
+gate out by name or subcommand and says so before the first step;
+skipping Coverage still runs the workspace's tests in its place. On a
+fresh full-stack checkout, run
 `npm --prefix frontend install` before `validate` -- the
 frontend gates fail (rather than silently skipping) when
 `frontend/` exists but its `node_modules` is not

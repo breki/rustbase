@@ -12,6 +12,13 @@ in `CLAUDE.md`, in the order `step::standard`
 (`crates/rustbase-xtask/src/step.rs`) gives, with the frontend
 gates `xtask/src/validate.rs` inserts after Deny
 
+`/validate --skip coverage` -- leave a gate out, by its name or its
+subcommand; repeatable. The run says first which gates it skipped,
+so a partial run is not read as a full one. Skipping Coverage still
+runs the workspace's tests, as a `Test (workspace)` step in its
+place (Coverage is where the library runs them); `--skip test`
+leaves that out too
+
 ## Output
 
 One line per gate (rows 6 to 14 left out):
@@ -40,5 +47,5 @@ output.
 ## Implementation
 
 ```
-cargo -q xtask validate
+cargo -q xtask validate $ARGUMENTS
 ```

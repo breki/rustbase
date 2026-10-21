@@ -57,6 +57,11 @@ enum XCommand {
         /// or before partial staging.
         #[arg(long)]
         check: bool,
+        /// Leave a gate out of this run, by its name or
+        /// subcommand (`--skip coverage --skip dupes`);
+        /// repeatable
+        #[arg(long, value_name = "GATE")]
+        skip: Vec<String>,
     },
     /// Type-check the frontend (svelte-check); skips
     /// cleanly when there is no frontend
@@ -151,7 +156,7 @@ fn main() {
 
     let result = match cli.command {
         XCommand::Lib(cmd) => cli::run(cmd, &tasks_config()),
-        XCommand::Validate { check } => validate::validate(check),
+        XCommand::Validate { check, skip } => validate::validate(check, &skip),
         #[cfg(feature = "frontend")]
         XCommand::FrontendCheck => frontend_check::frontend_check_cmd(),
         #[cfg(feature = "frontend")]

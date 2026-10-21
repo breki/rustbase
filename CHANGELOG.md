@@ -157,6 +157,10 @@ and this project adheres to
   `Strictness`, `canon::Rules`, `cli::LibCommand`) are `#[non_exhaustive]`, and
   the `text` and `markdown` modules are hidden from the docs and not covered by
   SemVer.
+- `cargo xtask validate --skip <gate>` leaves a gate out of a run, by its name
+  or subcommand (repeatable). The run names the skipped gates first, a name
+  matching no gate is refused, and skipping Coverage still runs the workspace
+  tests as a `Test (workspace)` step in its place.
 
 ### Changed
 
