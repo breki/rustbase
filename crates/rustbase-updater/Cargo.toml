@@ -1,0 +1,17 @@
+[package]
+name = "rustbase-updater"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Self-upgrade engine for apps that update from signed release tags"
+repository = "https://github.com/breki/rustbase"
+readme = "README.md"
+keywords = ["updater", "self-update", "release", "recovery"]
+categories = ["command-line-utilities"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

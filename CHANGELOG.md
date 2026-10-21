@@ -172,6 +172,11 @@ and this project adheres to
   "skipped: frontend_dir not set"). The template's xtask `frontend` feature
   now enables the library's, and its five `xtask/src/frontend*.rs` copies are
   gone (#44).
+- rustbase-updater, a library crate holding the self-upgrade engine jutro and
+  silkboard each carried a copy of: release selection, a durable upgrade
+  transaction, recovery, retry, the versioned state file and the command layer.
+  Each application declares its policy type, adapter id, usage and legacy-state
+  rule once in an App trait (#58).
 
 ### Changed
 
