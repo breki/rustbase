@@ -35,8 +35,8 @@
 use super::gate::{new_locked_versions, parse_cargo_lock};
 use super::io::{cargo_update_precise, git_show};
 use super::{
-    COOLDOWN_DAYS, Ecosystem, age_in_days, cargo_versions, fetch_registry,
-    today_days, version_key,
+    COOLDOWN_DAYS, Ecosystem, age_in_days, cargo_versions, cargo_yanked,
+    fetch_registry, today_days, version_key,
 };
 use crate::Config;
 use std::collections::{HashMap, HashSet};
@@ -61,7 +61,7 @@ enum CrateStep {
     /// version -- nothing to pin to.
     DeadEnd,
     /// The locked version is absent from the registry listing
-    /// (yanked / prerelease / unpublished) -- age can't be
+    /// (prerelease, or not published) -- age can't be
     /// assessed, so the tree can't be certified clean.
     Unknown,
 }
@@ -116,9 +116,30 @@ fn crate_step(
 type ReadLock<'a> = &'a dyn Fn() -> Result<String, String>;
 /// Fetch the `HEAD:Cargo.lock` baseline, or `None` if absent.
 type BaselineLock<'a> = &'a dyn Fn() -> Option<String>;
-/// `(version, publish-day)` list for a crate, or an error
-/// string when the registry is unreachable / unparseable.
-type FetchVersions<'a> = &'a dyn Fn(&str) -> Result<Vec<(String, i64)>, String>;
+/// What crates.io lists for a crate, or an error string when the
+/// registry is unreachable / unparseable.
+type FetchVersions<'a> = &'a dyn Fn(&str) -> Result<Listing, String>;
+
+/// A crate's registry listing, as preflight reads it.
+#[derive(Debug, Default)]
+pub(super) struct Listing {
+    /// `(version, publish-day)` for every non-prerelease,
+    /// non-yanked version.
+    pub versions: Vec<(String, i64)>,
+    /// The yanked versions, which no wait can make adoptable.
+    pub yanked: Vec<String>,
+}
+
+/// A listing with no yanked versions, as the tests' fakes build it.
+impl From<Vec<(String, i64)>> for Listing {
+    fn from(versions: Vec<(String, i64)>) -> Self {
+        Self {
+            versions,
+            yanked: Vec::new(),
+        }
+    }
+}
+
 /// Pin `name@current` to a target version; `Err` when cargo
 /// refuses the pin (target outside the requirement range).
 type Pin<'a> = &'a dyn Fn(&str, &str, &str) -> Result<(), String>;
@@ -132,7 +153,8 @@ pub(super) struct Io<'a> {
     pub read_lock: ReadLock<'a>,
     /// The `HEAD:Cargo.lock` baseline, or `None` if absent.
     pub baseline_lock: BaselineLock<'a>,
-    /// `(version, publish-day)` list for a crate.
+    /// A crate's `Listing`: its dated release versions and its
+    /// yanked ones.
     pub fetch_versions: FetchVersions<'a>,
     /// Pin a crate down to a target version. Treated as a dead
     /// end, not a fatal error, when cargo refuses the pin.
@@ -145,14 +167,17 @@ pub(super) struct Io<'a> {
 /// Outcome of a preflight run.
 #[derive(Debug)]
 pub(super) struct Report {
-    /// True when the changed set is entirely aged (or empty)
-    /// and every crate could be assessed -- safe to build.
+    /// True when the changed set is entirely aged (or empty), none
+    /// is locked to a yanked version, and every crate could be
+    /// assessed -- safe to build.
     pub clean: bool,
     /// `name: old -> new` for each crate pinned down.
     pub pinned: Vec<String>,
     /// `name@version` crates within the cooldown that could not
     /// be aged (no aged version, or cargo refused the pin).
     pub dead_ends: Vec<String>,
+    /// `name@version` crates locked to a yanked version.
+    pub yanked: Vec<String>,
     /// Count of changed crates whose age could not be checked
     /// (unreachable registry, or version absent from listing).
     pub unresolved: usize,
@@ -161,6 +186,8 @@ pub(super) struct Report {
     pub warnings: Vec<String>,
     /// Loop rounds taken.
     pub iterations: usize,
+    /// False when the loop stopped at `MAX_ITERS` still pinning.
+    pub converged: bool,
 }
 
 /// Run the pin-and-re-resolve loop over the injected I/O.
@@ -182,7 +209,7 @@ pub(super) fn run(io: &Io) -> Result<Report, String> {
     let mut iterations = 0usize;
     // A crate's published version set is stable for the run, so
     // fetch each distinct crate at most once across rounds.
-    let mut versions_of: HashMap<String, Result<Vec<(String, i64)>, String>> =
+    let mut versions_of: HashMap<String, Result<Listing, String>> =
         HashMap::new();
     // `(name, target)` pins already applied. Re-reaching the
     // same pin means another crate keeps forcing this one fresh
@@ -202,6 +229,7 @@ pub(super) fn run(io: &Io) -> Result<Report, String> {
         // the report reflects the converged tree, not history;
         // only `pinned` / `warnings` accumulate.
         let mut dead_ends: Vec<String> = Vec::new();
+        let mut yanked: Vec<String> = Vec::new();
         let mut unresolved = 0usize;
         let mut progressed = false;
 
@@ -209,15 +237,19 @@ pub(super) fn run(io: &Io) -> Result<Report, String> {
             if !versions_of.contains_key(name) {
                 versions_of.insert(name.clone(), (io.fetch_versions)(name));
             }
-            let versions = match &versions_of[name] {
-                Ok(v) => v,
+            let listing = match &versions_of[name] {
+                Ok(l) => l,
                 Err(e) => {
                     warnings.push(format!("{name}@{ver}: {e}"));
                     unresolved += 1;
                     continue;
                 }
             };
-            match crate_step(ver, versions, io.today) {
+            if listing.yanked.contains(ver) {
+                yanked.push(format!("{name}@{ver}"));
+                continue;
+            }
+            match crate_step(ver, &listing.versions, io.today) {
                 CrateStep::Aged => {}
                 CrateStep::Unknown => {
                     warnings.push(format!(
@@ -249,14 +281,17 @@ pub(super) fn run(io: &Io) -> Result<Report, String> {
         }
 
         if !progressed {
-            let clean = dead_ends.is_empty() && unresolved == 0;
+            let clean =
+                dead_ends.is_empty() && yanked.is_empty() && unresolved == 0;
             return Ok(Report {
                 clean,
                 pinned,
                 dead_ends,
+                yanked,
                 unresolved,
                 warnings,
                 iterations,
+                converged: true,
             });
         }
         if iterations >= MAX_ITERS {
@@ -266,9 +301,11 @@ pub(super) fn run(io: &Io) -> Result<Report, String> {
                 clean: false,
                 pinned,
                 dead_ends,
+                yanked,
                 unresolved,
                 warnings,
                 iterations,
+                converged: false,
             });
         }
     }
@@ -281,13 +318,13 @@ fn real_read_lock(cfg: &Config) -> Result<String, String> {
         .map_err(|e| format!("cannot read {}: {e}", path.display()))
 }
 
-/// `(version, publish-day)` for a crate from crates.io.
-fn real_fetch_versions(
-    cfg: &Config,
-    name: &str,
-) -> Result<Vec<(String, i64)>, String> {
+/// A crate's listing from crates.io.
+fn real_fetch_versions(cfg: &Config, name: &str) -> Result<Listing, String> {
     let json = fetch_registry(cfg, Ecosystem::Cargo, name)?;
-    Ok(cargo_versions(&json))
+    Ok(Listing {
+        versions: cargo_versions(&json),
+        yanked: cargo_yanked(&json),
+    })
 }
 
 /// `cargo xtask dep-preflight` entry point. Prints what was
@@ -332,10 +369,17 @@ pub fn dep_preflight(cfg: &Config) -> Result<(), String> {
     Err(failure_message(&report, &super::allow_hint(cfg, "HEAD")))
 }
 
-/// The advice for a tree preflight could not certify, ending with
-/// `allow_hint`: how `validate` would take a fresh version anyway.
+/// The advice for a tree preflight could not certify, closing with
+/// `allow_hint`: how `validate` would take such a version anyway.
 fn failure_message(report: &Report, allow_hint: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
+    if !report.yanked.is_empty() {
+        parts.push(format!(
+            "withdrawn by the registry, so pick another version -- \
+             yanked: {}",
+            report.yanked.join(", ")
+        ));
+    }
     if !report.dead_ends.is_empty() {
         parts.push(format!(
             "no version outside the {COOLDOWN_DAYS}-day cooldown satisfies \
@@ -349,11 +393,27 @@ fn failure_message(report: &Report, allow_hint: &str) -> String {
             report.unresolved
         ));
     }
+    if !report.converged {
+        parts.push(format!(
+            "pinning did not converge within {MAX_ITERS} rounds"
+        ));
+    }
+    // The wait advice goes only when yanked crates are the sole cause:
+    // no wait makes a yanked version adoptable.
+    let only_yanked = !report.yanked.is_empty()
+        && report.dead_ends.is_empty()
+        && report.unresolved == 0
+        && report.converged;
+    let wait = if only_yanked {
+        ""
+    } else {
+        "\n  Wait out the cooldown, adopt the fresh version deliberately, or \
+         drop/adjust the dependency."
+    };
     format!(
-        "dep-preflight could not certify the tree -- {}.\n  Wait out the \
-         cooldown, adopt the fresh version deliberately, or drop/adjust \
-         the dependency.\n  To adopt one anyway for `cargo xtask \
-         validate`: {allow_hint}. dep-preflight reads neither.",
+        "dep-preflight could not certify the tree -- {}.{wait}\n  To adopt \
+         such a version anyway for `cargo xtask validate`: {allow_hint}. \
+         dep-preflight reads neither.",
         parts.join("; ")
     )
 }
@@ -452,7 +512,7 @@ mod tests {
         let same = lock(&[("serde", "1.0.100")]);
         let read = || Ok(same.clone());
         let base = || Some(same.clone());
-        let fetch = |_: &str| -> Result<Vec<(String, i64)>, String> {
+        let fetch = |_: &str| -> Result<Listing, String> {
             panic!("must not fetch when nothing changed")
         };
         let pin = |_: &str, _: &str, _: &str| Ok(());
@@ -475,7 +535,9 @@ mod tests {
         let current = lock(&[("ghost", "9.9.9")]);
         let read = || Ok(current.clone());
         let base = || Some(base_lock.clone());
-        let fetch = |_: &str| Ok(vec![("1.0.0".to_string(), day(2026, 1, 1))]);
+        let fetch = |_: &str| {
+            Ok(Listing::from(vec![("1.0.0".to_string(), day(2026, 1, 1))]))
+        };
         let pin = |_: &str, _: &str, _: &str| Ok(());
         let io = Io {
             read_lock: &read,
@@ -494,6 +556,37 @@ mod tests {
     }
 
     #[test]
+    fn run_names_a_yanked_crate_as_yanked() {
+        // Waiting out the cooldown never helps a withdrawn version.
+        let base_lock = lock(&[]);
+        let current = lock(&[("serde_json", "1.0.23")]);
+        let read = || Ok(current.clone());
+        let base = || Some(base_lock.clone());
+        let fetch = |_: &str| {
+            Ok(Listing {
+                versions: vec![("1.0.24".to_string(), day(2026, 1, 1))],
+                yanked: vec!["1.0.23".to_string()],
+            })
+        };
+        let pin = |_: &str, _: &str, _: &str| Ok(());
+        let io = Io {
+            read_lock: &read,
+            baseline_lock: &base,
+            fetch_versions: &fetch,
+            pin: &pin,
+            today: TODAY(),
+        };
+        let r = run(&io).unwrap();
+        assert!(!r.clean);
+        assert_eq!(r.yanked, ["serde_json@1.0.23"]);
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        let msg = failure_message(&r, "ALLOW");
+        assert!(msg.contains("yanked: serde_json@1.0.23"), "{msg}");
+        assert!(msg.contains("pick another version"), "{msg}");
+        assert!(!msg.contains("Wait out"), "{msg}");
+    }
+
+    #[test]
     fn run_gives_up_at_its_round_ceiling() {
         // Each round surfaces a different fresh crate, so every
         // round makes progress and only the ceiling stops it.
@@ -506,10 +599,10 @@ mod tests {
         };
         let base = || Some(base_lock.clone());
         let fetch = |_: &str| {
-            Ok(vec![
+            Ok(Listing::from(vec![
                 ("1.4.0".to_string(), day(2026, 6, 1)),
                 ("1.5.0".to_string(), day(2026, 7, 14)),
-            ])
+            ]))
         };
         let pin = |_: &str, _: &str, _: &str| Ok(());
         let io = Io {
@@ -527,6 +620,10 @@ mod tests {
             "{:?}",
             r.warnings
         );
+        // Nothing is listed as failed, so the message names the cause.
+        let msg = failure_message(&r, "ALLOW");
+        assert!(msg.contains("did not converge"), "{msg}");
+        assert!(msg.contains("Wait out"), "{msg}");
     }
 
     #[test]
@@ -535,15 +632,17 @@ mod tests {
             clean: false,
             pinned: Vec::new(),
             dead_ends: vec!["foo@1.5.0".to_string()],
+            yanked: Vec::new(),
             unresolved: 0,
             warnings: Vec::new(),
             iterations: 1,
+            converged: true,
         };
         let msg = failure_message(&report, "allow via HINT");
         assert!(msg.contains("foo@1.5.0"), "{msg}");
         assert!(
             msg.ends_with(
-                "\n  To adopt one anyway for `cargo xtask validate`: \
+                "\n  To adopt such a version anyway for `cargo xtask validate`: \
                  allow via HINT. dep-preflight reads neither."
             ),
             "{msg}"
@@ -565,12 +664,12 @@ mod tests {
         let state = RefCell::new(lock(&[("foo", "1.5.0")]));
         let read = || Ok(state.borrow().clone());
         let base = || Some(lock(&[]));
-        let fetch = |name: &str| -> Result<Vec<(String, i64)>, String> {
+        let fetch = |name: &str| -> Result<Listing, String> {
             assert_eq!(name, "foo");
-            Ok(vec![
+            Ok(Listing::from(vec![
                 ("1.4.0".to_string(), day(2026, 6, 1)),
                 ("1.5.0".to_string(), day(2026, 7, 14)),
-            ])
+            ]))
         };
         let pin = |name: &str, _cur: &str, target: &str| {
             assert_eq!(name, "foo");
@@ -597,10 +696,10 @@ mod tests {
         let read = || Ok(cur.clone());
         let base = || Some(lock(&[]));
         let fetch = |_: &str| {
-            Ok(vec![
+            Ok(Listing::from(vec![
                 ("2.0.0".to_string(), day(2026, 7, 10)),
                 ("2.0.1".to_string(), day(2026, 7, 14)),
-            ])
+            ]))
         };
         let pin = |_: &str, _: &str, _: &str| Ok(());
         let io = Io {
@@ -625,10 +724,10 @@ mod tests {
         let read = || Ok(cur.clone());
         let base = || Some(lock(&[]));
         let fetch = |_: &str| {
-            Ok(vec![
+            Ok(Listing::from(vec![
                 ("3.0.0".to_string(), day(2026, 6, 1)), // aged
                 ("3.1.0".to_string(), day(2026, 7, 14)), // fresh
-            ])
+            ]))
         };
         let pin = |_: &str, _: &str, _: &str| Err("not in range".to_string());
         let io = Io {
@@ -649,7 +748,7 @@ mod tests {
         let cur = lock(&[("qux", "1.0.0")]);
         let read = || Ok(cur.clone());
         let base = || Some(lock(&[]));
-        let fetch = |_: &str| -> Result<Vec<(String, i64)>, String> {
+        let fetch = |_: &str| -> Result<Listing, String> {
             Err("network down".to_string())
         };
         let pin = |_: &str, _: &str, _: &str| Ok(());
@@ -679,10 +778,10 @@ mod tests {
         let read = || Ok(cur.clone());
         let base = || Some(lock(&[]));
         let fetch = |_: &str| {
-            Ok(vec![
+            Ok(Listing::from(vec![
                 ("0.9.0".to_string(), day(2026, 6, 1)), // aged, lower
                 ("1.0.0".to_string(), day(2026, 7, 14)), // fresh
-            ])
+            ]))
         };
         // Pin reports success but leaves the lock unchanged.
         let pin = |_: &str, _: &str, _: &str| Ok(());
@@ -705,7 +804,7 @@ mod tests {
         let cur = lock(&[]);
         let read = || Ok(cur.clone());
         let base = || None;
-        let fetch = |_: &str| Ok(Vec::new());
+        let fetch = |_: &str| Ok(Listing::default());
         let pin = |_: &str, _: &str, _: &str| Ok(());
         let io = Io {
             read_lock: &read,

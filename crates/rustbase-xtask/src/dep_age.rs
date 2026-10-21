@@ -33,9 +33,9 @@ pub(crate) use gate::verdict;
 pub use gate::{DepAgeResult, check_changed_deps, dep_age_check};
 pub use preflight::dep_preflight;
 
-/// How a fresh dependency is waived, for the gate's and preflight's
-/// failure messages: the allow file as committed at `base`, or the
-/// env var.
+/// How a fresh or yanked dependency is waived, for the gate's and
+/// preflight's failure messages: the allow file as committed at
+/// `base`, or the env var.
 fn allow_hint(cfg: &Config, base: &str) -> String {
     let env = format!("{}=name@version[,...]", cfg.dep_age_allow_env);
     let Some(file) = &cfg.dep_age_allow_file else {
@@ -83,9 +83,10 @@ pub fn dep_age(
 ) -> Result<(), String> {
     let json = fetch_registry(cfg, ecosystem, package)?;
     let (resolved, published) = match ecosystem {
-        Ecosystem::Npm => npm_version_date(&json, version)?,
-        Ecosystem::Cargo => cargo_version_date(&json, version)?,
-    };
+        Ecosystem::Npm => npm_version_date(&json, version),
+        Ecosystem::Cargo => cargo_version_date(&json, version),
+    }
+    .map_err(|e| e.to_string())?;
 
     let published_days = parse_iso_date(&published)?;
     let age = age_in_days(published_days, today_days());
@@ -149,50 +150,110 @@ fn percent_encode_segment(s: &str) -> String {
     out
 }
 
+/// Why a version's publish date was not returned.
+#[derive(Debug, PartialEq, Eq)]
+enum DateError {
+    /// Its publisher yanked the version on crates.io: a verdict, not a
+    /// failure to look it up.
+    Yanked { version: String },
+    /// No usable publish date: absent from the document, or the name
+    /// asked for is not a version (npm's time keys, an unpublished
+    /// version).
+    NotFound(String),
+}
+
+impl std::fmt::Display for DateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Yanked { version } => {
+                write!(f, "cargo: version {version} is yanked")
+            }
+            Self::NotFound(s) => f.write_str(s),
+        }
+    }
+}
+
+/// A [`DateError::NotFound`] carrying `msg`.
+fn not_found(msg: &str) -> DateError {
+    DateError::NotFound(msg.to_owned())
+}
+
 /// Resolve (version, publish-date) from an npm registry
 /// document. `version` defaults to `dist-tags.latest`.
 fn npm_version_date(
     json: &Value,
     version: Option<&str>,
-) -> Result<(String, String), String> {
+) -> Result<(String, String), DateError> {
     let resolved = match version {
         Some(v) => v.to_string(),
         None => json["dist-tags"]["latest"]
             .as_str()
-            .ok_or("npm: missing dist-tags.latest")?
+            .ok_or_else(|| not_found("npm: missing dist-tags.latest"))?
             .to_string(),
     };
+    // `time` also holds the package's own timestamps under these keys.
+    if resolved == "created" || resolved == "modified" {
+        return Err(DateError::NotFound(format!(
+            "npm: '{resolved}' is a time key, not a version"
+        )));
+    }
+    // `time` also keeps the date of a version npm has unpublished. A
+    // document with no `versions` map skips the check, as
+    // `npm_versions` does, rather than refusing every version.
+    if let Some(published) = json["versions"].as_object()
+        && !published.contains_key(&resolved)
+    {
+        return Err(DateError::NotFound(format!(
+            "npm: version {resolved} is not published"
+        )));
+    }
     let date = json["time"][&resolved]
         .as_str()
-        .ok_or_else(|| format!("npm: no publish time for version {resolved}"))?
+        .ok_or_else(|| {
+            DateError::NotFound(format!(
+                "npm: no publish time for version {resolved}"
+            ))
+        })?
         .to_string();
     Ok((resolved, date))
 }
 
 /// Resolve (version, publish-date) from a crates.io crate
-/// document. `version` defaults to `crate.max_stable_version`.
+/// document. `version` defaults to `crate.max_stable_version`. A
+/// yanked version is refused, whatever its age.
 fn cargo_version_date(
     json: &Value,
     version: Option<&str>,
-) -> Result<(String, String), String> {
+) -> Result<(String, String), DateError> {
     let resolved = match version {
         Some(v) => v.to_string(),
         None => json["crate"]["max_stable_version"]
             .as_str()
             .or_else(|| json["crate"]["newest_version"].as_str())
-            .ok_or("cargo: missing crate.max_stable_version")?
+            .ok_or_else(|| {
+                not_found("cargo: missing crate.max_stable_version")
+            })?
             .to_string(),
     };
     let versions = json["versions"]
         .as_array()
-        .ok_or("cargo: missing versions array")?;
+        .ok_or_else(|| not_found("cargo: missing versions array"))?;
     let entry = versions
         .iter()
         .find(|v| v["num"].as_str() == Some(resolved.as_str()))
-        .ok_or_else(|| format!("cargo: version {resolved} not found"))?;
+        .ok_or_else(|| {
+            DateError::NotFound(format!("cargo: version {resolved} not found"))
+        })?;
+    if entry["yanked"].as_bool() == Some(true) {
+        return Err(DateError::Yanked { version: resolved });
+    }
     let date = entry["created_at"]
         .as_str()
-        .ok_or_else(|| format!("cargo: no created_at for version {resolved}"))?
+        .ok_or_else(|| {
+            DateError::NotFound(format!(
+                "cargo: no created_at for version {resolved}"
+            ))
+        })?
         .to_string();
     Ok((resolved, date))
 }
@@ -352,6 +413,18 @@ fn cargo_versions(json: &Value) -> Vec<(String, i64)> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Every yanked version in a crates.io crate document, which
+/// `cargo_versions` leaves out.
+fn cargo_yanked(json: &Value) -> Vec<String> {
+    json["versions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|v| v["yanked"].as_bool() == Some(true))
+        .filter_map(|v| v["num"].as_str().map(str::to_owned))
+        .collect()
 }
 
 /// `(version, publish-day)` for every non-prerelease version
@@ -536,6 +609,53 @@ mod tests {
     }
 
     #[test]
+    fn a_yanked_crate_version_is_refused() {
+        // Old enough to pass the cooldown, so only the yank can fail it.
+        let json: Value = serde_json::from_str(
+            r#"{"crate":{"max_stable_version":"1.0.0"},
+                "versions":[{"num":"1.1.0","created_at":"2019-05-05T00:00:00Z",
+                             "yanked":true},
+                            {"num":"1.0.0","created_at":"2019-01-01T00:00:00Z",
+                             "yanked":false}]}"#,
+        )
+        .unwrap();
+        let err = cargo_version_date(&json, Some("1.1.0")).unwrap_err();
+        assert!(err.to_string().contains("1.1.0 is yanked"), "{err}");
+        assert!(cargo_version_date(&json, Some("1.0.0")).is_ok());
+    }
+
+    #[test]
+    fn npms_time_keys_are_not_versions() {
+        let json: Value = serde_json::from_str(
+            r#"{"dist-tags":{"latest":"1.0.0"},
+                "time":{"created":"2019-01-01T00:00:00Z",
+                        "modified":"2026-07-15T00:00:00Z",
+                        "1.0.0":"2019-01-02T00:00:00Z"}}"#,
+        )
+        .unwrap();
+        for key in ["created", "modified"] {
+            let err = npm_version_date(&json, Some(key)).unwrap_err();
+            assert!(err.to_string().contains("not a version"), "{err}");
+        }
+        assert!(npm_version_date(&json, Some("1.0.0")).is_ok());
+    }
+
+    #[test]
+    fn an_unpublished_npm_version_is_not_found() {
+        // npm keeps the time entry of a version it unpublished.
+        let json: Value = serde_json::from_str(
+            r#"{"dist-tags":{"latest":"1.0.0"},
+                "versions":{"1.0.0":{}},
+                "time":{"1.0.0":"2019-01-02T00:00:00Z",
+                        "1.1.0":"2019-02-02T00:00:00Z"}}"#,
+        )
+        .unwrap();
+        let err = npm_version_date(&json, Some("1.1.0")).unwrap_err();
+        assert!(err.to_string().contains("not published"), "{err}");
+        assert!(npm_version_date(&json, Some("1.0.0")).is_ok());
+    }
+
+    #[test]
     fn latest_aged_picks_newest_outside_cooldown() {
         let today = days_from_civil(2026, 7, 15);
         let versions = vec![
@@ -635,6 +755,8 @@ mod tests {
         let v = cargo_versions(&json);
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].0, "1.2.0");
+        // The yanked ones are listed apart, so preflight can name them.
+        assert_eq!(cargo_yanked(&json), ["1.1.0"]);
     }
 
     #[test]

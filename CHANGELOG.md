@@ -391,6 +391,12 @@ and this project adheres to
   its reported total and the sum of its severity counts, so a report with a 0
   or missing `total` beside non-zero counts fails, and a count that is not a
   whole number makes the report unreadable (#67).
+- `cargo xtask dep-age` and `dep-age-check` fail a yanked crate version whatever
+  its age; the gate reports it as refused, beside dependencies within the
+  cooldown, and `dep-preflight` names it as yanked instead of advising a wait.
+  `dep-age npm` refuses `created` / `modified` and versions npm has
+  unpublished, rather than reporting the date `time` keeps for them; the gate
+  lists these as unchecked, which fails it too (#69).
 
 ### Removed
 
