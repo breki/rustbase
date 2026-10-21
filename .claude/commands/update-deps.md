@@ -123,10 +123,9 @@ For each frontend package in scope:
       transitive floats into the cooldown (one downstream
       pass pulled in 21 fresh ones). Budget for re-pinning
       all of them in step 5.
-4. **Restore the working directory to the repo root**
-   before any `cargo xtask` call -- xtask's frontend
-   detection is cwd-relative and a lingering `cd frontend`
-   makes every frontend gate falsely report "no frontend".
+4. **No need to leave `frontend/` for `cargo xtask`**: its
+   frontend gates find the folder from the project root,
+   so the next step runs from either directory.
 5. `cargo -q xtask dep-age-check` again. There is no npm
    preflight, so pin each fresh **transitive** package by
    hand with an `overrides` entry in
@@ -189,7 +188,7 @@ fresh with its age-out date.
 - **Never allow-list a fresh version without a stated
   justification.** Security fixes are the standing
   exception.
-- **Restore cwd to the repo root after any in-`frontend/`
-  npm command** before running `cargo xtask`.
+- **npm runs inside `frontend/`; `cargo xtask` runs from
+  either directory** (step 4).
 - **Never commit a red `validate`.** Back out the offending
   bump or escalate instead.

@@ -162,6 +162,16 @@ and this project adheres to
   and end, a name matching no gate or a set leaving none is refused, and
   skipping Coverage still runs every crate's tests once, as a
   `Test (workspace)` step in its slot.
+- rustbase-xtask `frontend` feature (off by default): the four frontend gates --
+  Prettier, svelte-check, jscpd and Vitest, each running one of the project's
+  npm scripts -- as `frontend::steps` for `validate` to place after Deny, and
+  their `frontend-*` subcommands as `cli::FrontendCommand`, flattened into
+  `LibCommand`. The folder is the new `Config::frontend_dir`: a derived project
+  with a frontend sets `cfg.frontend_dir = Some("frontend".into())` in its
+  `tasks_config()`, or `validate` refuses to run (unset, the gates report
+  "skipped: frontend_dir not set"). The template's xtask `frontend` feature
+  now enables the library's, and its five `xtask/src/frontend*.rs` copies are
+  gone (#44).
 
 ### Changed
 
@@ -234,14 +244,24 @@ and this project adheres to
   `Config::audit_npm_dir`.
 - The library's subcommands moved into it as `cli::LibCommand` (behind its
   `clap` feature), dispatched by `cli::run`; a project's `xtask` flattens them
-  into its own command enum and keeps only its own commands (`validate`, the
-  frontend, deploy, template tools, clean-cache). The thirteen wrapper modules
+  into its own command enum and keeps only its own commands (`validate`,
+  deploy, template tools, clean-cache). The thirteen wrapper modules
   under `xtask/src/` are gone.
 - rustbase-xtask API, breaking against its 0.1.0 release (so its next release is
   0.2.0): `Config::dep_age_strict_env` is removed, since Dep-age no longer has a
   strict mode, and `DepAgeResult::warnings` is renamed `unchecked`, since its
   entries now fail the gate. A project that replaced the Dep-age step to make it
   strict, as the downstream project hoard did, can drop that replacement (#47).
+- The frontend gates find the frontend from the project root, not the shell's
+  working directory, so `cargo xtask` run from inside `frontend/` no longer
+  reports "no frontend" and passes, and `validate`'s refusal of a frontend it
+  would not check looks from the root too. A failing script is reported as
+  every gate reports a failed run: the last 10 lines of the tool's stderr,
+  else its stdout, of which `validate` shows the first 5 and the standalone
+  command all 10 (per-tool key lines: #55), as part of the error, so they also
+  reach `target/validate.log`. A frontend without
+  `node_modules` is told to run `npm install` inside it rather than `npm
+  --prefix` (#44).
 
 ### Fixed
 

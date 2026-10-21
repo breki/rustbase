@@ -32,6 +32,8 @@ pub mod dep_age;
 pub mod doc;
 pub mod dupes;
 pub mod fmt;
+#[cfg(feature = "frontend")]
+pub mod frontend;
 pub mod licenses;
 #[doc(hidden)]
 pub mod markdown;
@@ -197,6 +199,11 @@ pub struct Config {
     /// The npm project the audit step also audits, when it holds a
     /// `package.json`; `None` audits Rust only.
     pub audit_npm_dir: Option<PathBuf>,
+    /// The frontend the `frontend` feature's four gates run in,
+    /// relative to `root`. A folder with no `package.json` means no
+    /// frontend, and the gates skip; `None` skips too, but reports
+    /// "`frontend_dir` not set", so a forgotten setting shows.
+    pub frontend_dir: Option<PathBuf>,
     /// The manifest of the package whose version, as cargo resolves it
     /// (inherited from the workspace or not), is the project's; the
     /// one `version_sync` copies into the docs.
@@ -229,6 +236,7 @@ impl Config {
                 .map(|f| (*f).to_owned())
                 .collect(),
             audit_npm_dir: None,
+            frontend_dir: None,
             version_manifest: PathBuf::from(format!(
                 "crates/{project}/Cargo.toml"
             )),

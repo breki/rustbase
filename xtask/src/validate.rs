@@ -6,10 +6,10 @@ use rustbase_xtask::tee::{OpenError, Tee};
 
 use crate::helpers::tasks_config;
 #[cfg(feature = "frontend")]
-use crate::{frontend_check, frontend_dupes, frontend_fmt, frontend_test};
+use rustbase_xtask::frontend;
 
 /// The library's standard gates (`step::standard`, which gives their
-/// order), with this project's frontend gates after Deny (three static
+/// order), with the library's frontend gates after Deny (three static
 /// ones, then the frontend tests, ahead of the Rust tests), less any
 /// gate `skip` names; the skipped gates' names come back too. When
 /// Coverage is skipped but Test is not, a `Test (workspace)` step takes
@@ -22,17 +22,13 @@ fn steps(
     check: bool,
     skip: &[String],
 ) -> Result<(Vec<Step>, Vec<&'static str>), String> {
-    let mut steps = step::standard(&tasks_config(), check);
+    let cfg = tasks_config();
+    let mut steps = step::standard(&cfg, check);
     #[cfg(feature = "frontend")]
     step::insert_after(
         &mut steps,
         step::names::DENY,
-        [
-            frontend_fmt::step(check),
-            frontend_check::step(),
-            frontend_dupes::step(),
-            frontend_test::step(),
-        ],
+        frontend::steps(&cfg, check),
     )?;
     let skipped = skipped_gates(&steps, skip)?;
     if skipped.contains(&step::names::COVERAGE)
@@ -105,10 +101,9 @@ pub fn validate(check: bool, skip: &[String]) -> Result<(), String> {
     // Opened first, so a failure at any later point reaches the log.
     let tee = open_log(&tasks_config().root)?;
     let result = (|| {
-        frontend_feature_check(
-            cfg!(feature = "frontend"),
-            Path::new("frontend/package.json").exists(),
-        )?;
+        // A frontend on disk must be checked: the feature on, and
+        // `frontend_dir` set.
+        frontend_feature_check(cfg!(feature = "frontend"), &tasks_config())?;
         let (steps, skipped) = steps(check, skip)?;
         // Said first and last, so neither the head nor the tail of a
         // partial run reads as a full one.
@@ -153,18 +148,31 @@ fn record_failure(tee: &Tee, result: &Result<(), String>) {
     }
 }
 
-/// Refuse a frontend on disk when the `frontend` feature is off:
-/// its gates are then compiled out, and a run with none of them
-/// would read as a pass.
+/// Refuse a frontend on disk that `validate` would not check: with the
+/// `frontend` feature off its gates are compiled out, and with no
+/// `frontend_dir` they skip. Looked for from `cfg.root` (in
+/// `frontend/` when no folder is set), not the working directory.
 fn frontend_feature_check(
     feature_on: bool,
-    has_frontend: bool,
+    cfg: &rustbase_xtask::Config,
 ) -> Result<(), String> {
-    if has_frontend && !feature_on {
-        return Err("frontend/ exists but xtask's `frontend` feature is \
-             off, so validate would run none of its gates -- add \
-             \"frontend\" to `default` in xtask/Cargo.toml, or delete \
-             frontend/"
+    let dir = cfg.frontend_dir.as_deref().unwrap_or(Path::new("frontend"));
+    if !cfg.root.join(dir).join("package.json").is_file() {
+        return Ok(());
+    }
+    if !feature_on {
+        return Err(format!(
+            "{} exists but xtask's `frontend` feature is off, so validate \
+             would run none of its gates -- add \"frontend\" to `default` \
+             in xtask/Cargo.toml, or delete the folder",
+            dir.display()
+        ));
+    }
+    if cfg.frontend_dir.is_none() {
+        return Err("frontend/ exists but tasks_config() sets no \
+             frontend_dir, so its gates would skip -- add \
+             `cfg.frontend_dir = Some(\"frontend\".into());` in \
+             xtask/src/helpers.rs"
             .into());
     }
     Ok(())
@@ -356,13 +364,31 @@ mod tests {
     }
 
     #[test]
-    fn frontend_on_disk_needs_the_frontend_feature() {
-        // With the feature off its gates are compiled out, so a
-        // frontend on disk would pass validate unchecked.
-        let err = frontend_feature_check(false, true).unwrap_err();
+    fn frontend_on_disk_needs_the_feature_and_the_folder_setting() {
+        // Either gap leaves a real frontend unchecked: the feature off
+        // compiles its gates out, and no `frontend_dir` makes them skip.
+        // The frontend is found from the root, wherever validate runs.
+        struct Gone(std::path::PathBuf);
+        impl Drop for Gone {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let root = std::env::temp_dir()
+            .join(format!("xtask-validate-fe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root); // a crashed earlier run's
+        let _gone = Gone(root.clone());
+        std::fs::create_dir_all(root.join("frontend")).unwrap();
+        let mut cfg = rustbase_xtask::Config::for_project("t", root.clone());
+        assert!(frontend_feature_check(false, &cfg).is_ok(), "none on disk");
+        std::fs::write(root.join("frontend/package.json"), "{}").unwrap();
+        let err = frontend_feature_check(false, &cfg).unwrap_err();
         assert!(err.contains("`frontend` feature"), "{err}");
-        assert!(frontend_feature_check(true, true).is_ok());
-        assert!(frontend_feature_check(true, false).is_ok());
-        assert!(frontend_feature_check(false, false).is_ok());
+        let err = frontend_feature_check(true, &cfg).unwrap_err();
+        assert!(err.contains("frontend_dir"), "{err}");
+        cfg.frontend_dir = Some("frontend".into());
+        assert!(frontend_feature_check(true, &cfg).is_ok());
+        let err = frontend_feature_check(false, &cfg).unwrap_err();
+        assert!(err.contains("`frontend` feature"), "{err}");
     }
 }

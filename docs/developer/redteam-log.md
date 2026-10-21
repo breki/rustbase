@@ -15,6 +15,19 @@ red team review is warranted before continuing feature work.
 
 ---
 
+### rt-2026-10-21-frontend-failure-key-lines
+
+**Category:** usability (failure reports)
+**Issue:** #55
+
+The frontend gates (`crates/rustbase-xtask/src/frontend.rs`) report a
+failed script with `Failure::of_run`, the end of stderr else stdout.
+For Vitest that is the last failure's code frame, not the failing test
+names or the counts. #44's review tried per-tool key lines and did not
+converge in three rounds; the operator split the work into #55, which
+holds the tools' real output formats (they differ under an AI agent),
+every defect the attempts hit, and the last implementation.
+
 ### rt-2026-10-20-scripts-check-one-git-per-file
 
 **Category:** cost / offline

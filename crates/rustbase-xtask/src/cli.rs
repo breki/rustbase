@@ -15,6 +15,8 @@
 
 use clap::Subcommand;
 
+#[cfg(feature = "frontend")]
+use crate::frontend;
 use crate::{
     Config, FMT_DIFF_LINES, STANDALONE_LINES, Strictness, audit, canon,
     cargo_test, changelog, check, clippy, coverage, deny, dep_age, doc, dupes,
@@ -65,6 +67,10 @@ pub enum LibCommand {
     /// Licence, bans and sources gate (offline); requires
     /// cargo-deny
     Deny,
+    /// The four frontend gates, as `frontend-<gate>`.
+    #[cfg(feature = "frontend")]
+    #[command(flatten)]
+    Frontend(FrontendCommand),
     /// Report a dependency version's age and flag it if
     /// within the publish cooldown (on-demand; requires curl)
     DepAge {
@@ -236,18 +242,7 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
             filter,
             verbose,
             ignored,
-        } => {
-            // Every failing test is named, so the report is not capped.
-            let opts = cargo_test::Options {
-                filter: filter.as_deref(),
-                verbose,
-                ignored,
-            };
-            cargo_test::run(cfg, opts).map_err(|f| f.to_string())?;
-            if !verbose {
-                println!("Test OK");
-            }
-        }
+        } => run_test(filter.as_deref(), verbose, ignored, cfg)?,
         // Its output streams to the terminal, so a failure's error is
         // only that it failed.
         LibCommand::Fmt => {
@@ -272,6 +267,8 @@ pub fn run(cmd: LibCommand, cfg: &Config) -> Result<(), String> {
         LibCommand::Deny => {
             println!("Deny OK ({})", deny::check(cfg)?);
         }
+        #[cfg(feature = "frontend")]
+        LibCommand::Frontend(c) => run_frontend(&c, cfg)?,
         LibCommand::DepAge {
             ecosystem,
             package,
@@ -337,6 +334,70 @@ fn run_changelog(action: ChangelogAction, cfg: &Config) -> Result<(), String> {
             changelog::promote(cfg, &version, &date)?;
             println!("Promoted [Unreleased] to [{version}] - {date}.");
         }
+    }
+    Ok(())
+}
+
+/// `test [filter]`. Every failing test is named, so the report is not
+/// capped.
+fn run_test(
+    filter: Option<&str>,
+    verbose: bool,
+    ignored: bool,
+    cfg: &Config,
+) -> Result<(), String> {
+    let opts = cargo_test::Options {
+        filter,
+        verbose,
+        ignored,
+    };
+    cargo_test::run(cfg, opts).map_err(|f| f.to_string())?;
+    if !verbose {
+        println!("Test OK");
+    }
+    Ok(())
+}
+
+/// The frontend gates' subcommands, flattened into [`LibCommand`].
+#[cfg(feature = "frontend")]
+#[derive(Debug, Subcommand)]
+pub enum FrontendCommand {
+    /// Type-check the frontend (svelte-check); skips
+    /// cleanly when there is no frontend
+    FrontendCheck,
+    /// Format the frontend with Prettier; skips cleanly
+    /// when there is no frontend
+    FrontendFmt {
+        /// Check formatting read-only instead of
+        /// auto-fixing in place
+        #[arg(long)]
+        check: bool,
+    },
+    /// Check frontend code duplication (requires jscpd);
+    /// skips cleanly when there is no frontend
+    FrontendDupes,
+    /// Run the frontend unit suite (vitest); skips cleanly
+    /// when there is no frontend
+    FrontendTest,
+}
+
+/// `frontend-<gate>`.
+#[cfg(feature = "frontend")]
+fn run_frontend(c: &FrontendCommand, cfg: &Config) -> Result<(), String> {
+    use frontend::{Gate, Outcome};
+    let gate = match *c {
+        FrontendCommand::FrontendCheck => Gate::Check,
+        FrontendCommand::FrontendFmt { check: true } => Gate::FmtCheck,
+        FrontendCommand::FrontendFmt { check: false } => Gate::Fmt,
+        FrontendCommand::FrontendDupes => Gate::Dupes,
+        FrontendCommand::FrontendTest => Gate::Test,
+    };
+    match frontend::run(cfg, gate).map_err(|f| f.report(STANDALONE_LINES))? {
+        Outcome::Skipped => println!("{} {}", gate.name(), frontend::SKIPPED),
+        Outcome::NotConfigured => {
+            println!("{} {}", gate.name(), frontend::NOT_CONFIGURED);
+        }
+        _ => println!("{} OK", gate.name()),
     }
     Ok(())
 }
@@ -445,6 +506,16 @@ mod tests {
         assert!(ok(&["records-check"]), "absent files are skipped");
         assert!(ok(&["canon-check"]), "no canon files to read");
         assert!(ok(&["scripts-check"]), "skipped outside a work tree");
+        #[cfg(feature = "frontend")]
+        for args in [
+            &["frontend-fmt", "--check"][..],
+            &["frontend-fmt"],
+            &["frontend-check"],
+            &["frontend-dupes"],
+            &["frontend-test"],
+        ] {
+            assert!(ok(args), "{args:?}: no frontend configured, so skipped");
+        }
         for args in [
             &["check"][..],
             &["clippy"],
@@ -474,7 +545,11 @@ mod tests {
         use clap::CommandFactory;
         let cli = Cli::command();
         let cfg = Config::for_project("p", "/w".into());
-        for step in crate::step::standard(&cfg, false) {
+        let steps = crate::step::standard(&cfg, false);
+        #[cfg(feature = "frontend")]
+        let steps =
+            steps.into_iter().chain(crate::frontend::steps(&cfg, false));
+        for step in steps {
             assert!(
                 cli.find_subcommand(step.cmd()).is_some(),
                 "step {:?} hints `{}`, which is no library command",
