@@ -25,6 +25,8 @@ struct CargoAudit {
     vulnerabilities: u64,
     /// Number of advisory warnings (informational).
     warnings: u64,
+    /// One line per vulnerability, for the failure message.
+    advisories: Vec<String>,
 }
 
 /// Parsed `npm audit --json` result.
@@ -36,6 +38,8 @@ struct NpmAudit {
     high: u64,
     /// Critical-severity count (for the summary line).
     critical: u64,
+    /// One line per vulnerable package, for the failure message.
+    advisories: Vec<String>,
 }
 
 /// Combined audit outcome.
@@ -48,6 +52,8 @@ struct AuditResult {
     /// Why a check could not finish (a tool missing, the network
     /// unreachable, an unparseable response).
     warnings: Vec<String>,
+    /// One line per vulnerability found, listed under the error.
+    advisories: Vec<String>,
 }
 
 /// Runs the gate: the detail line on success, else the error.
@@ -117,10 +123,34 @@ fn parse_cargo_audit(stdout: &str) -> Result<CargoAudit, String> {
             .map(|v| v.as_array().map_or(0, Vec::len) as u64)
             .sum()
     });
+    let advisories = j["vulnerabilities"]["list"]
+        .as_array()
+        .map_or_else(Vec::new, |list| list.iter().map(rustsec_line).collect());
     Ok(CargoAudit {
         vulnerabilities,
         warnings,
+        advisories,
     })
+}
+
+/// `RUSTSEC-<id> <crate> <version>: <title> (patched: <ranges>)`.
+fn rustsec_line(v: &Value) -> String {
+    let text = |p: &Value| p.as_str().unwrap_or("?").to_owned();
+    let patched: Vec<String> = v["versions"]["patched"]
+        .as_array()
+        .map_or_else(Vec::new, |a| a.iter().map(text).collect());
+    let patched = if patched.is_empty() {
+        "no patched version".to_owned()
+    } else {
+        format!("patched: {}", patched.join("; "))
+    };
+    format!(
+        "{} {} {}: {} ({patched})",
+        text(&v["advisory"]["id"]),
+        text(&v["package"]["name"]),
+        text(&v["package"]["version"]),
+        text(&v["advisory"]["title"]),
+    )
 }
 
 /// Parse `metadata.vulnerabilities` from `npm audit --json`. npm
@@ -134,11 +164,55 @@ fn parse_npm_audit(stdout: &str) -> Result<NpmAudit, String> {
     let total = v["total"]
         .as_u64()
         .ok_or("missing metadata.vulnerabilities.total in npm audit output")?;
+    let advisories =
+        j["vulnerabilities"].as_object().map_or_else(Vec::new, |o| {
+            o.iter().map(|(name, e)| npm_line(name, e)).collect()
+        });
     Ok(NpmAudit {
         total,
         high: get("high"),
         critical: get("critical"),
+        advisories,
     })
+}
+
+/// `npm <package> <range> <severity>: <advisories> (<fix>)`. A `via`
+/// entry is an advisory (its GHSA id and title) or, for a package that
+/// is vulnerable only through a dependency, that dependency's name.
+fn npm_line(name: &str, e: &Value) -> String {
+    let text = |p: &Value| p.as_str().unwrap_or("?").to_owned();
+    let via: Vec<String> = e["via"].as_array().map_or_else(Vec::new, |a| {
+        a.iter()
+            .map(|v| {
+                if let Some(dep) = v.as_str() {
+                    return format!("via {dep}");
+                }
+                let url = text(&v["url"]);
+                let id = url.rsplit('/').next().unwrap_or("?");
+                format!("{id} {}", text(&v["title"]))
+            })
+            .collect()
+    });
+    let fix = match &e["fixAvailable"] {
+        Value::Bool(true) => "fix available".to_owned(),
+        Value::Object(f) => format!(
+            "fix: {}@{}{}",
+            f.get("name").and_then(Value::as_str).unwrap_or(name),
+            f.get("version").and_then(Value::as_str).unwrap_or("?"),
+            if f.get("isSemVerMajor") == Some(&Value::Bool(true)) {
+                ", a major bump"
+            } else {
+                ""
+            }
+        ),
+        _ => "no fix".to_owned(),
+    };
+    format!(
+        "npm {name} {} {}: {} ({fix})",
+        text(&e["range"]),
+        text(&e["severity"]),
+        via.join("; ")
+    )
 }
 
 /// Classify per-source outcomes: a positive vulnerability count is
@@ -152,9 +226,11 @@ fn classify(
     let mut parts: Vec<String> = Vec::new();
     let mut fatal: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
+    let mut advisories: Vec<String> = Vec::new();
 
     match cargo {
         Ok(c) => {
+            advisories.extend(c.advisories);
             if c.vulnerabilities > 0 {
                 fatal.push(format!("{} RUSTSEC", c.vulnerabilities));
             }
@@ -172,6 +248,7 @@ fn classify(
     if let Some(npm) = npm {
         match npm {
             Ok(n) => {
+                advisories.extend(n.advisories);
                 if n.total > 0 {
                     fatal.push(format!(
                         "{} npm ({} high, {} critical)",
@@ -195,6 +272,7 @@ fn classify(
             Some(format!("vulnerabilities found: {}", fatal.join("; ")))
         },
         warnings,
+        advisories,
     }
 }
 
@@ -208,7 +286,12 @@ fn verdict(r: AuditResult, strictness: Strictness) -> Result<String, String> {
         } else {
             format!("; also: {unfinished}")
         };
-        return Err(format!("{err} ({}){also}", r.detail));
+        let mut msg = format!("{err} ({}){also}", r.detail);
+        for line in &r.advisories {
+            msg.push_str("\n  ");
+            msg.push_str(line);
+        }
+        return Err(msg);
     }
     if r.warnings.is_empty() {
         return Ok(r.detail);
@@ -241,13 +324,75 @@ mod tests {
     const NPM_THREE: &str = r#"{"metadata":{"vulnerabilities":
         {"high":2,"critical":1,"total":3}}}"#;
 
+    /// Trimmed from a real `cargo audit --json` run on smallvec 1.6.0.
+    const CARGO_SMALLVEC: &str = r#"{"vulnerabilities":{"found":true,
+        "count":1,"list":[{"advisory":{"id":"RUSTSEC-2021-0003",
+        "package":"smallvec","title":"Buffer overflow in SmallVec::insert_many"},
+        "versions":{"patched":[">=0.6.14, <1.0.0",">=1.6.1"]},
+        "package":{"name":"smallvec","version":"1.6.0"}}]},"warnings":{}}"#;
+
+    /// Trimmed from a real `npm audit --json` run on minimist 1.2.5;
+    /// `optimist` follows the documented shape of a dependent that is
+    /// vulnerable only through another package.
+    const NPM_MINIMIST: &str = r#"{"vulnerabilities":{
+        "minimist":{"name":"minimist","severity":"critical",
+          "range":"1.0.0 - 1.2.5","fixAvailable":{"name":"minimist",
+          "version":"1.2.8","isSemVerMajor":false},
+          "via":[{"source":1097678,"title":"Prototype Pollution in minimist",
+          "url":"https://github.com/advisories/GHSA-xvch-5gv4-984h",
+          "severity":"critical","range":">=1.0.0 <1.2.6"}]},
+        "optimist":{"name":"optimist","severity":"critical","range":"*",
+          "fixAvailable":false,"via":["minimist"]}},
+        "metadata":{"vulnerabilities":{"high":0,"critical":2,"total":2}}}"#;
+
+    #[test]
+    fn each_rustsec_advisory_becomes_one_line() {
+        let a = parse_cargo_audit(CARGO_SMALLVEC).unwrap();
+        assert_eq!(
+            a.advisories,
+            ["RUSTSEC-2021-0003 smallvec 1.6.0: Buffer overflow in \
+              SmallVec::insert_many (patched: >=0.6.14, <1.0.0; >=1.6.1)"]
+        );
+    }
+
+    #[test]
+    fn each_npm_advisory_becomes_one_line() {
+        let a = parse_npm_audit(NPM_MINIMIST).unwrap();
+        assert_eq!(
+            a.advisories,
+            [
+                "npm minimist 1.0.0 - 1.2.5 critical: GHSA-xvch-5gv4-984h \
+                 Prototype Pollution in minimist (fix: minimist@1.2.8)",
+                "npm optimist * critical: via minimist (no fix)",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_finding_lists_every_advisory_in_full() {
+        let r = classify(
+            parse_cargo_audit(CARGO_SMALLVEC),
+            Some(parse_npm_audit(NPM_MINIMIST)),
+        );
+        let err = verdict(r, Strictness::Fail).unwrap_err();
+        let lines: Vec<&str> = err.lines().collect();
+        assert!(lines[0].starts_with("vulnerabilities found:"), "{err}");
+        assert_eq!(lines.len(), 4, "{err}");
+        assert!(
+            lines[1].starts_with("  RUSTSEC-2021-0003 smallvec"),
+            "{err}"
+        );
+        assert!(lines[3].starts_with("  npm optimist"), "{err}");
+    }
+
     #[test]
     fn parse_cargo_audit_clean() {
         assert_eq!(
             parse_cargo_audit(CLEAN_CARGO).unwrap(),
             CargoAudit {
                 vulnerabilities: 0,
-                warnings: 0
+                warnings: 0,
+                advisories: Vec::new(),
             }
         );
     }
@@ -285,7 +430,8 @@ mod tests {
             NpmAudit {
                 total: 0,
                 high: 0,
-                critical: 0
+                critical: 0,
+                advisories: Vec::new(),
             }
         );
     }
@@ -322,6 +468,7 @@ mod tests {
         CargoAudit {
             vulnerabilities: 0,
             warnings: 1,
+            advisories: Vec::new(),
         }
     }
 
@@ -339,6 +486,7 @@ mod tests {
             Ok(CargoAudit {
                 vulnerabilities: 2,
                 warnings: 0,
+                advisories: Vec::new(),
             }),
             None,
         );
@@ -353,6 +501,7 @@ mod tests {
                 total: 3,
                 high: 2,
                 critical: 1,
+                advisories: Vec::new(),
             })),
         );
         assert!(r.error.as_ref().unwrap().contains("3 npm"));
@@ -378,6 +527,7 @@ mod tests {
             Ok(CargoAudit {
                 vulnerabilities: 1,
                 warnings: 0,
+                advisories: Vec::new(),
             }),
             Some(Err("registry unreachable".into())),
         );
@@ -390,6 +540,7 @@ mod tests {
             detail: "cargo: unavailable".into(),
             error: None,
             warnings: vec!["cargo audit unavailable: offline".into()],
+            advisories: Vec::new(),
         }
     }
 
@@ -410,6 +561,7 @@ mod tests {
                 detail: "cargo: 1 vuln, 0 warn".into(),
                 error: Some("vulnerabilities found: 1 RUSTSEC".into()),
                 warnings: Vec::new(),
+                advisories: Vec::new(),
             };
             assert!(verdict(r, s).unwrap_err().contains("1 RUSTSEC"));
         }
@@ -429,6 +581,7 @@ mod tests {
             Ok(CargoAudit {
                 vulnerabilities: 1,
                 warnings: 0,
+                advisories: Vec::new(),
             }),
             Some(Err("registry unreachable".into())),
         );

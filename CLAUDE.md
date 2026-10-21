@@ -1137,7 +1137,10 @@ Five `cargo xtask` commands guard the dependency tree:
 - **`cargo xtask audit`** runs `cargo audit` (RUSTSEC) over
   `Cargo.lock` and `npm audit` over the frontend, failing on
   any vulnerability (advisory *warnings* -- unsound /
-  unmaintained / yanked -- are reported, not fatal). It runs
+  unmaintained / yanked -- are reported, not fatal). The failure
+  lists each vulnerability on a line of its own: the RUSTSEC id,
+  crate, version, title and patched ranges, or the npm package,
+  affected range, severity, advisory and fix. It runs
   late in `validate`, so **`validate` needs `cargo-audit`
   installed (`cargo install cargo-audit`) and network access**
   to the advisory DB / npm registry.
