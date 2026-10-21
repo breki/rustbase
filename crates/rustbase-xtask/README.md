@@ -20,7 +20,7 @@ general-purpose xtask library.
 ```toml
 # xtask/Cargo.toml
 [dependencies]
-rustbase-xtask = { version = "0.1", features = ["clap"] }
+rustbase-xtask = { version = "0.2", features = ["clap"] }
 ```
 
 ```rust,ignore

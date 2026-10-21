@@ -142,7 +142,8 @@ hooks are #10.
 ### Distribution and versioning
 
 Published on crates.io as `rustbase-xtask` (#4); 0.1.0 went out on
-2026-10-20, tagged `rustbase-xtask-v0.1.0`. Through crates.io the
+2026-10-20, tagged `rustbase-xtask-v0.1.0`, and 0.2.0 on 2026-10-21
+(#44, #46, #47), tagged `rustbase-xtask-v0.2.0`. Through crates.io the
 licence/sources gate (`deny.toml` rejects git sources) and the
 cooldown and audit tooling apply to it like any other dependency. It
 follows SemVer with its own version, in
@@ -170,7 +171,7 @@ bookkeeping commit, like `/release`'s, not one made through
    `rustbase-xtask-v*` tag that touch the library
    (`git log rustbase-xtask-vX.Y.Z.. -- crates/rustbase-xtask`). A
    bump that leaves the range of the requirement `xtask/Cargo.toml`
-   puts on the library (`version = "0.1"`) -- a minor bump while the
+   puts on the library (`version = "0.2"`) -- a minor bump while the
    version is `0.x`, or a major one -- also raises that requirement
    to the new `0.y` (or `x`); otherwise cargo stops every command
    with "failed to select a version for the requirement". Run
@@ -299,8 +300,9 @@ bullets. The steps, in the order clockdump took them:
 2. **`xtask/Cargo.toml`**: take the template's, then leave the
    feature groups the project does not use out of `default` and drop
    the `path` from the library dependency, leaving
-   `rustbase-xtask = { version = "0.1", features = ["clap"] }` (the
-   downstream has no copy of the crate). The rest of the file is
+   `rustbase-xtask = { version = "0.2", features = ["clap"] }` (the
+   downstream has no copy of the crate; the xtask `frontend` feature
+   adds the library's `frontend` one). The rest of the file is
    needed: `clean-cache` names the optional `windows-sys`
    dependency, and the Deny gate wants the `license` field.
 3. **`helpers.rs`**: `Config::for_project("<name>", ...)`, which keeps
