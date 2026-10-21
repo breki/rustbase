@@ -393,6 +393,10 @@ bitten too.
   intra-doc `[link]`.** The public rustdoc pass of `cargo
   xtask doc` rejects a link from a public page to a private
   item.
+- **Echo arguments into a log or a message with `{:?}`, not
+  hand-written quoting.** Debug formatting keeps each argument
+  whole whatever it holds; a home-made quoting rule meets a
+  new edge case each review round (#68).
 - Wrap markdown at 80 characters per line
 - Maximum code line width: 80 characters (`rustfmt.toml`)
 - **The toolchain channel is unpinned `stable`.**
