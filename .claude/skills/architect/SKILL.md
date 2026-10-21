@@ -46,6 +46,10 @@ rustbase/
           main.rs       # CLI entry point
       tests/
         integration_test.rs
+    rustbase-updater/   # self-upgrade engine as a library
+      src/
+        lib.rs          # App trait (per-application identity)
+        engine.rs       # poll, retry, Backend trait
     rustbase-web/       # Axum web server (optional)
       src/
         main.rs         # server entry point
