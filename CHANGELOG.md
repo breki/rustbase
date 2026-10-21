@@ -284,10 +284,13 @@ and this project adheres to
 - dep-preflight now runs `cargo update --precise` with the cargo of the
   toolchain in use (the `CARGO` variable), the same cargo as every other gate,
   instead of whichever `cargo` is first on `PATH`.
-- Template frontend: vite 8.1.4 -> 8.1.6 (range floor raised to `^8.1.6`),
-  clearing three high launch-editor advisories (GHSA-698v-4r3x-3vcv,
-  GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm) that failed the `validate` Audit
-  step (#50).
+- Template frontend: vite 8.1.4 -> 8.1.6, so the `validate` Audit step passes
+  again. It failed on three advisories against the launch-editor code vite
+  bundles inside itself, which has no lockfile entry of its own, so only a vite
+  upgrade fixes it: GHSA-587h-7wmj-h5pm (high), GHSA-698v-4r3x-3vcv and
+  GHSA-r825-w8mm-5pxw (medium). The range in `frontend/package.json` moves
+  from `^8.0.0` to `^8.1.6`, so an install without the lockfile cannot pick an
+  affected 8.0.x or 8.1.x (#50).
 
 ### Removed
 
