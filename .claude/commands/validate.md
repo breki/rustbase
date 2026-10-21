@@ -28,7 +28,9 @@ xtask's tests in the Test gate and every other crate's in Coverage):
 - `--skip coverage --skip test` -- none
 - `--skip test` -- every crate's but xtask's, in Coverage
 
-The frontend tests are their own gate, `frontend-test`.
+The frontend tests are their own gate, `frontend-test`. Run alone, it
+takes path filters: `cargo xtask frontend-test <filters>` runs only the
+test files whose path contains one.
 
 ## Output
 

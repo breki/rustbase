@@ -415,8 +415,9 @@ bullets. The steps, in the order clockdump took them:
      its npm verdict reads `total` alone, so a 0 total with severity
      counts passes (#67). A hung audit: `validate --skip audit`.
    - **`fmt --check`** and **`frontend-test` path filters** are gone
-     (#68). Use `cargo fmt --all -- --check`, and `npm run test --
-     <filters>` run inside the frontend folder.
+     up to 0.2.4 (#68). There, use `cargo fmt --all -- --check`, and
+     `npm run test -- <filters>` run inside the frontend folder; the
+     next release takes both again.
    - **`dep-age`** passes a yanked crate version, and reads npm's
      `created` / `modified` keys as versions (#69). No workaround.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move

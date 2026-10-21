@@ -189,6 +189,9 @@ and this project adheres to
   fix through .dep-age-allow (landed on the base branch first), then judge from
   the deployed release whether production is exposed and file any hardening of
   our own code separately (#62).
+- `cargo xtask fmt --check` checks formatting read-only, and `cargo xtask
+  frontend-test <filters>` runs only the frontend test files whose path contains
+  a filter; both went missing when the gates moved into `rustbase-xtask` (#68).
 
 ### Changed
 
