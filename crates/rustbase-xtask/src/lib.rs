@@ -27,6 +27,7 @@ pub mod check;
 pub mod cli;
 pub mod clippy;
 pub mod coverage;
+mod deadline;
 pub mod deny;
 pub mod dep_age;
 pub mod doc;

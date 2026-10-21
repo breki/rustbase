@@ -1146,7 +1146,10 @@ Five `cargo xtask` commands guard the dependency tree:
   to the advisory DB / npm registry. Without either, the
   standalone `cargo xtask audit` **fails**, but inside `validate`
   (which runs it late) it only **warns** and the gate passes --
-  which is why `/release` also runs the standalone command.
+  which is why `/release` also runs the standalone command. Each
+  audit is stopped after three minutes, and a stopped one counts
+  the same as an unreachable DB. npm's verdict takes the larger of
+  its reported total and the sum of its severity counts.
 - **`cargo xtask dep-age <npm|cargo> <package> [version]`**
   reports how many days ago a version was published (on-demand,
   a single package). Add **`--latest-aged`** to instead print

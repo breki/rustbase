@@ -12,6 +12,7 @@
 //! [`Strictness`].
 
 use std::path::Path;
+use std::time::Duration;
 
 use serde_json::Value;
 
@@ -76,11 +77,16 @@ pub fn check(
 ) -> Result<String, String> {
     let r = collect(
         npm_dir,
-        || process::cargo(&cfg.root, &["audit", "--json"]),
-        |dir| process::npm(dir, &["audit", "--json"]),
+        || process::cargo_within(&cfg.root, &["audit", "--json"], DEADLINE),
+        |dir| process::npm_within(dir, &["audit", "--json"], DEADLINE),
     );
     verdict(r, strictness)
 }
+
+/// How long each audit may run. Both reach the network, and a host
+/// that accepts the connection and never answers would otherwise hang
+/// the gate; a run past this is a check that could not finish.
+const DEADLINE: Duration = Duration::from_secs(180);
 
 /// Run both audits through the injected spawns and classify the
 /// results, without deciding what a check that could not finish
@@ -182,6 +188,10 @@ fn rustsec_line(v: &Value) -> String {
     )
 }
 
+/// The severity keys of npm's `metadata.vulnerabilities`.
+const NPM_SEVERITIES: [&str; 5] =
+    ["info", "low", "moderate", "high", "critical"];
+
 /// Parse the counts in `metadata.vulnerabilities` from `npm audit
 /// --json`, and turn each entry of the top-level `vulnerabilities`
 /// map into one line (`npm_line`). npm exits non-zero when it finds
@@ -192,9 +202,21 @@ fn parse_npm_audit(stdout: &str) -> Result<NpmAudit, String> {
         .map_err(|e| format!("failed to parse npm audit JSON: {e}"))?;
     let v = &j["metadata"]["vulnerabilities"];
     let get = |k: &str| v[k].as_u64().unwrap_or(0);
-    let total = v["total"]
-        .as_u64()
-        .ok_or("missing metadata.vulnerabilities.total in npm audit output")?;
+    // The larger of npm's total and its own severity counts, so a
+    // report whose `total` is missing or 0 beside non-zero counts
+    // still fails.
+    let counted = NPM_SEVERITIES.iter().map(|k| get(k)).sum::<u64>();
+    let has_counts = NPM_SEVERITIES.iter().any(|k| v[*k].is_u64());
+    let total = match v["total"].as_u64() {
+        Some(t) => t.max(counted),
+        None if has_counts => counted,
+        None => {
+            return Err(
+                "missing metadata.vulnerabilities counts in npm audit output"
+                    .into(),
+            );
+        }
+    };
     let advisories =
         j["vulnerabilities"].as_object().map_or_else(Vec::new, |o| {
             o.iter().map(|(name, e)| npm_line(name, e)).collect()
@@ -561,7 +583,22 @@ mod tests {
     }
 
     #[test]
-    fn parse_npm_audit_rejects_missing_total_and_garbage() {
+    fn a_zero_npm_total_with_severity_counts_is_not_clean() {
+        // The verdict must not rest on one field: a report whose
+        // `total` disagrees with its own severity counts fails.
+        let json = r#"{"metadata":{"vulnerabilities":
+            {"low":1,"moderate":1,"high":1,"critical":0,"total":0}}}"#;
+        assert_eq!(parse_npm_audit(json).unwrap().total, 3);
+    }
+
+    #[test]
+    fn a_missing_npm_total_is_the_sum_of_the_severities() {
+        let json = r#"{"metadata":{"vulnerabilities":{"high":2}}}"#;
+        assert_eq!(parse_npm_audit(json).unwrap().total, 2);
+    }
+
+    #[test]
+    fn parse_npm_audit_rejects_no_counts_and_garbage() {
         let json = r#"{"metadata":{"vulnerabilities":{}}}"#;
         assert!(parse_npm_audit(json).is_err());
         assert!(parse_npm_audit("not json").is_err());
