@@ -18,6 +18,18 @@ work.
 
 ---
 
+### fr-2026-10-22-gpg-home-privacy-check-in-the-wrong-test
+
+**Category:** test organisation
+**Issue:** #80
+
+`tag_signature::tests::the_gpg_home_leaves_room_for_the_agent_sockets`
+also checks that `private_dir_under` makes a 0700 directory, which its
+name does not say; a reader looking for the privacy check will not find
+it there. Move it into a test of its own named for it. Splitting a test
+is a code change, so stage 3 logged it; the comment now gives the
+reason.
+
 ### fr-2026-10-22-yanked-messages-blame-the-registry
 
 **Category:** wording (failure messages)
