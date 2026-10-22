@@ -1,6 +1,6 @@
 [package]
 name = "rustbase"
-version = "0.17.0"
+version = "0.18.0"
 edition = "2024"
 # Starter code a project copies and renames, not a library: kept off
 # crates.io. Remove to publish your own crate.

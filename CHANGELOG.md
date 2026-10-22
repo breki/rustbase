@@ -12,6 +12,16 @@ and this project adheres to
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.18.0] - 2026-10-22
+
+### Added
+
 - `cargo xtask changelog add` and `cargo xtask todo` (list/add/done) commands
   that edit CHANGELOG.md and docs/todo.md mechanically, so `/commit`, `/todo`,
   and `/implement` no longer hand-edit those files. `docs/todo.md` is an
