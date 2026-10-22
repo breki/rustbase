@@ -151,3 +151,44 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+// These duplicate what `tests/toolkit.rs` reaches, so the coverage gate
+// does not hang on that one binary's profile (#81).
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn release(tag: &str) -> Release {
+        Release::new(tag, &"a".repeat(40)).unwrap()
+    }
+
+    #[test]
+    fn only_an_eligible_admission_yields_its_release() {
+        let candidate = release("v0.2.0");
+        let eligible = Admission::Eligible {
+            release: candidate.clone(),
+        };
+        assert_eq!(eligible.release(), Some(&candidate));
+        let waiting = Admission::Waiting {
+            reason: "checks running".into(),
+        };
+        assert_eq!(waiting.release(), None);
+        assert_eq!(Admission::NotAdmitted.release(), None);
+    }
+
+    #[test]
+    fn display_names_the_stage_and_each_reported_recovery_result() {
+        let bare = Error::new(Stage::Build, "compile failed");
+        assert_eq!(bare.to_string(), "Build: compile failed");
+
+        let mut error = Error::new(Stage::Health, "no answer");
+        error.restored = Some(Box::new(release("v0.1.0")));
+        error.recovery =
+            Some(Box::new(Error::new(Stage::Recovery, "restart failed")));
+        assert_eq!(
+            error.to_string(),
+            "Health: no answer; restored v0.1.0; \
+             recovery failed: Recovery: restart failed"
+        );
+    }
+}
