@@ -145,8 +145,9 @@ nothing deploy-specific (#10).
 Published on crates.io as `rustbase-xtask` (#4); 0.1.0 went out on
 2026-10-20, tagged `rustbase-xtask-v0.1.0`, 0.2.0 on 2026-10-21
 (#44, #46, #47), tagged `rustbase-xtask-v0.2.0`, and 0.2.1 (#55),
-0.2.2, 0.2.3 and 0.2.4 (all #62) the same day, each tagged
-`rustbase-xtask-v<version>`. Through crates.io the
+0.2.2, 0.2.3 and 0.2.4 (all #62) the same day, and 0.3.0 on
+2026-10-22 (#67, #68, #69), each tagged `rustbase-xtask-v<version>`.
+Through crates.io the
 licence/sources gate (`deny.toml` rejects git sources) and the
 cooldown and audit tooling apply to it like any other dependency. It
 follows SemVer with its own version, in
@@ -411,25 +412,26 @@ bullets. The steps, in the order clockdump took them:
 
    jutro's comparison found six, none needing code in `validate.rs`
    today; its canon names the workarounds:
-   - **`audit`** has no deadline on `cargo audit` / `npm audit`, and
-     its npm verdict reads `total` alone, so a 0 total with severity
-     counts passes (#67). A hung audit: `validate --skip audit`.
+   - **`audit`**, up to 0.2.4, has no deadline on `cargo audit` /
+     `npm audit`, and its npm verdict reads `total` alone, so a 0
+     total with severity counts passes (#67). There, a hung audit:
+     `validate --skip audit`. 0.3.0 fixes both.
    - **`fmt --check`** and **`frontend-test` path filters** are gone
      up to 0.2.4 (#68). There, use `cargo fmt --all -- --check`, and
      `npm run test -- <filters>` run inside the frontend folder.
-     The next release, 0.3.0 (not yet published), takes both again;
-     keep the workarounds until the project is on it. It breaks code
-     that names `LibCommand::Fmt` or `FrontendCommand::FrontendTest`,
-     which became struct variants, or matches `FrontendCommand`
-     exhaustively, which is now `#[non_exhaustive]`. A project that
-     only flattens `LibCommand` in changes nothing.
+     0.3.0 takes both again; keep the workarounds until the project
+     is on it. It breaks code that names `LibCommand::Fmt` or
+     `FrontendCommand::FrontendTest`, which became struct variants,
+     or matches `FrontendCommand` exhaustively, which is now
+     `#[non_exhaustive]`. A project that only flattens `LibCommand`
+     in changes nothing.
    - **`dep-age`**, up to 0.2.4, passes a yanked crate version, reads
      npm's `created` / `modified` keys as versions, and reports an
      unpublished npm version as published (#69). For the yanked case,
      run `cargo audit` itself and read its yanked warnings (`cargo
      xtask audit` only counts them); for the npm cases, check the
-     version against `npm view <pkg> versions`. The next release,
-     0.3.0, fails all three.
+     version against `npm view <pkg> versions`. 0.3.0 fails all
+     three.
 5. **Coverage exclusions** a vendored `coverage.rs` hard-coded move
    to `[workspace.metadata.coverage] ignore` in the root
    `Cargo.toml`.
