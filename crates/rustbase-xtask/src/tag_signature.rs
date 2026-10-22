@@ -489,7 +489,7 @@ mod tests {
         let dir = empty_dir();
         let key = keygen(&dir.0, "trusted");
         let repo = repo(&dir);
-        if !gpg_signed_tag(&dir, &repo, "v1.0.0") {
+        if !gpg_signed_tag(&repo, "v1.0.0") {
             eprintln!("gpg not installed; skipping");
             return;
         }
@@ -498,15 +498,33 @@ mod tests {
         assert!(err.contains("not SSH-signed"), "{err}");
     }
 
+    #[cfg(not(windows))]
+    #[test]
+    fn the_gpg_home_leaves_room_for_the_agent_sockets() {
+        use std::os::unix::fs::PermissionsExt;
+        // The home of a failing macOS run (#80): its longest agent
+        // socket path came to exactly the 103-byte limit.
+        let macos = Path::new(concat!(
+            "/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/",
+            "rustbase-xtask-test-33731-47/gnupg"
+        ));
+        assert!(!agent_sockets_fit(macos));
+        let home = gpg_home();
+        assert!(agent_sockets_fit(&home.0), "{}", home.0.display());
+        let mode = std::fs::metadata(&home.0).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700, "gpg warns on a shared home");
+    }
+
     /// Signs `tag` with a throwaway `OpenPGP` key kept in a private
     /// `GNUPGHOME` (gpg's key store directory). Returns false when gpg
     /// is not installed.
     #[cfg(not(windows))]
-    fn gpg_signed_tag(dir: &TempRepo, repo: &Path, tag: &str) -> bool {
-        let home = dir.0.join("gnupg");
-        std::fs::create_dir(&home).unwrap();
+    fn gpg_signed_tag(repo: &Path, tag: &str) -> bool {
+        let guard = gpg_home();
+        let home = guard.0.as_path();
+        assert!(agent_sockets_fit(home), "{}", home.display());
         let Ok(generated) = Command::new("gpg")
-            .env("GNUPGHOME", &home)
+            .env("GNUPGHOME", home)
             .args([
                 "--batch",
                 "--pinentry-mode",
@@ -529,7 +547,7 @@ mod tests {
             String::from_utf8_lossy(&generated.stderr)
         );
         let out = isolated_git(repo)
-            .env("GNUPGHOME", &home)
+            .env("GNUPGHOME", home)
             .args([
                 "-c",
                 "gpg.format=openpgp",
@@ -550,9 +568,37 @@ mod tests {
         );
         // Stop the gpg agent that signing started for this home.
         let _ = Command::new("gpgconf")
-            .env("GNUPGHOME", &home)
+            .env("GNUPGHOME", home)
             .args(["--kill", "gpg-agent"])
             .status();
         true
+    }
+
+    /// A private gpg home under `/tmp`, removed when dropped. gpg keeps
+    /// its agent's sockets in the home, and a socket path is limited to
+    /// 103 bytes on macOS, which the system temp folder there nearly
+    /// fills (#80).
+    #[cfg(not(windows))]
+    fn gpg_home() -> TempRepo {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let home = PathBuf::from("/tmp").join(format!(
+            "rbx-gpg-{}-{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::SeqCst)
+        ));
+        std::fs::create_dir_all(&home).unwrap();
+        let private = std::fs::Permissions::from_mode(0o700);
+        std::fs::set_permissions(&home, private).unwrap();
+        TempRepo(home)
+    }
+
+    /// Whether gpg's longest agent socket path in `home` stays clear of
+    /// the 103-byte limit; the margin is there because a run at exactly
+    /// 103 still failed (#80).
+    #[cfg(not(windows))]
+    fn agent_sockets_fit(home: &Path) -> bool {
+        home.as_os_str().len() + "/S.gpg-agent.browser".len() < 100
     }
 }
