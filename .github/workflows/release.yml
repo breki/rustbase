@@ -13,9 +13,16 @@ name: Release
 # built from require their texts to travel with it. It also copies
 # the project's own `LICENSE` into that directory, which the
 # generated file refers to.
+#
+# It can also be started by hand (Actions, Release, Run workflow) on
+# any branch: the gates then run before a tag rather than only after
+# one, and a re-run after an intermittent failure (#81) checks the
+# same code again. Started by hand it only checks; it publishes
+# nothing.
 on:
   push:
     tags: [ "v*.*.*" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -70,9 +77,12 @@ jobs:
       # rebuilds rather than trusting a binary already on `PATH`.
       # Releases are infrequent, so paying the fresh build each
       # time is the cheaper trade than trusting a replayed cache.
+      # cargo-llvm-cov is pinned: an unpinned install takes whatever
+      # was released last, so its measurement could change with no
+      # change here. Bump it deliberately, as with the toolchain.
       - name: Install gate tools (uncached)
         run: |
-          cargo install --locked --force cargo-llvm-cov
+          cargo install --locked --force cargo-llvm-cov@0.9.1
           cargo install --locked --force code-dupes
 
       # `cargo-audit` is installed separately and **never from the

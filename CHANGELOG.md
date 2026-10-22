@@ -12,6 +12,12 @@ and this project adheres to
 
 ### Added
 
+- `release.yml` can be started by hand (Actions, Release, Run workflow) on any
+  branch, so its coverage, duplication and audit gates run before a tag and can
+  be re-run after an intermittent failure; it only checks and publishes nothing.
+  `cargo-llvm-cov` is pinned there (0.9.1) instead of taking the newest release
+  (#81).
+
 ### Changed
 
 ### Fixed
