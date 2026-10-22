@@ -12,13 +12,18 @@ name: Release
 # --out <archive dir>/` in it: the licences of the crates a binary is
 # built from require their texts to travel with it. It also copies
 # the project's own `LICENSE` into that directory, which the
-# generated file refers to.
+# generated file refers to. Such a job must run on a tag push only
+# (`if: github.event_name == 'push' && startsWith(github.ref,
+# 'refs/tags/v')`), since this workflow can also be started by hand.
 #
-# It can also be started by hand (Actions, Release, Run workflow) on
-# any branch: the gates then run before a tag rather than only after
-# one, and a re-run after an intermittent failure (#81) checks the
-# same code again. Started by hand it only checks; it publishes
-# nothing.
+# Started by hand (Actions, Release, Run workflow) on any branch, it
+# runs the gates on that branch's tip before a tag, rather than only
+# after one. While there is no publish job, a manual run only checks;
+# it publishes nothing. The coverage gate is known to fail now and
+# then, with lines only one integration test reaches counted as
+# unrun, for a reason not yet understood (#81): when a run goes red
+# on coverage alone, run it again before treating it as a
+# regression.
 on:
   push:
     tags: [ "v*.*.*" ]
@@ -31,7 +36,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Everything every-push CI already runs, re-run at the tag.
+  # Everything every-push CI already runs, re-run at the tag or on a
+  # manual run.
   ci:
     uses: ./.github/workflows/ci.yml
 
@@ -71,29 +77,32 @@ jobs:
       # **No `~/.cargo/bin` cache for these tools, and installed
       # `--force`.** cargo-llvm-cov runs the instrumented test
       # suite with the runner's privileges, so a wholesale-
-      # restored bin cache under a fixed key is an
-      # arbitrary-code-execution vector for it -- the same reason
-      # cargo-audit below is installed uncached. `--force`
-      # rebuilds rather than trusting a binary already on `PATH`.
-      # Releases are infrequent, so paying the fresh build each
-      # time is the cheaper trade than trusting a replayed cache.
-      # cargo-llvm-cov is pinned: an unpinned install takes whatever
-      # was released last, so its measurement could change with no
-      # change here. Bump it deliberately, as with the toolchain.
+      # restored bin cache under a fixed key would be an
+      # arbitrary-code-execution vector for it. `--force` rebuilds
+      # rather than trusting a binary already on `PATH`. Releases
+      # are infrequent, so paying the fresh build each time is the
+      # cheaper trade than trusting a replayed cache.
+      #
+      # **Both versions are pinned.** An unpinned install takes
+      # whatever was released last, so a measurement could change
+      # with no change here. Change a version here and in README.md's
+      # prerequisites together. The Rust toolchain itself is not
+      # pinned (`rust-toolchain.toml` takes the newest stable), so a
+      # measurement can still shift when stable moves. The versions
+      # are echoed so the log records what measured.
       - name: Install gate tools (uncached)
         run: |
           cargo install --locked --force cargo-llvm-cov@0.9.1
-          cargo install --locked --force code-dupes
+          cargo install --locked --force code-dupes@0.2.1
+          cargo llvm-cov --version
+          code-dupes --version
 
-      # `cargo-audit` is installed separately and **never from the
-      # cache**, because it is the tool the security gate consists
-      # of. The `command -v X || cargo install X` idiom above is
-      # satisfied by *any* file named `cargo-audit` on `PATH`, and
-      # `~/.cargo/bin` is restored wholesale from a cache under a
-      # fixed key -- so a poisoned or merely broken entry would make
-      # the audit step trivially passable while the release claims
-      # the advisory DB was consulted. Pinned, and the version is
-      # echoed so the log records what actually ran.
+      # `cargo-audit` is the tool the security gate consists of, so it
+      # is built fresh (`--force`, never from a cache): a cached or
+      # stale binary could make the audit pass trivially while the
+      # release claims the advisory database was consulted. Pinned,
+      # and the version is echoed so the log records what actually
+      # ran.
       - name: Install cargo-audit (uncached)
         run: |
           cargo install --locked --force cargo-audit@0.22.2

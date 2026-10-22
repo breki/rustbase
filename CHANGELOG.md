@@ -13,12 +13,17 @@ and this project adheres to
 ### Added
 
 - `release.yml` can be started by hand (Actions, Release, Run workflow) on any
-  branch, so its coverage, duplication and audit gates run before a tag and can
-  be re-run after an intermittent failure; it only checks and publishes nothing.
-  `cargo-llvm-cov` is pinned there (0.9.1) instead of taking the newest release
-  (#81).
+  branch, so its coverage, duplication and audit gates run before a tag, and
+  again after the coverage gate's intermittent failure (#81). In this template,
+  which has no publish job, a manual run only checks; a project that adds one
+  must limit it to tag pushes.
 
 ### Changed
+
+- The release workflow pins `cargo-llvm-cov` (0.9.1) and `code-dupes` (0.2.1)
+  instead of installing the newest, and logs their versions; README.md's
+  prerequisites pin the same versions, so local and CI gates measure alike
+  (#81).
 
 ### Fixed
 
