@@ -159,9 +159,13 @@ npx playwright test --ui      # interactive mode
 
 - Rust (stable, via `rust-toolchain.toml`)
 - `cargo-llvm-cov` for coverage:
-  `cargo install cargo-llvm-cov`
+  `cargo install --locked cargo-llvm-cov@0.9.1`
 - `code-dupes` for duplication checks:
-  `cargo install code-dupes`
+  `cargo install --locked code-dupes@0.2.1`
+
+These two versions match the release workflow's pins
+(`.github/workflows/release.yml`), so local and CI gates measure
+alike: change a version here and in that file together.
 - Node.js 22+ (for frontend, if using web app)
 
 ## License
