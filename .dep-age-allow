@@ -6,3 +6,11 @@
 # the tip before the push. So push or merge a waiver to main before
 # the change that adopts the version. Prune a line once its version
 # is 14 days old.
+vitest@4.1.12  # GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp; prune 2026-10-29
+@vitest/mocker@4.1.12  # GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp
+@vitest/expect@4.1.12  # same release as vitest@4.1.12
+@vitest/pretty-format@4.1.12  # same release as vitest@4.1.12
+@vitest/runner@4.1.12  # same release as vitest@4.1.12
+@vitest/snapshot@4.1.12  # same release as vitest@4.1.12
+@vitest/spy@4.1.12  # same release as vitest@4.1.12
+@vitest/utils@4.1.12  # same release as vitest@4.1.12
