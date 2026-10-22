@@ -192,7 +192,11 @@ mod tests {
     };
     use crate::Config;
     use crate::process::Captured;
+    #[cfg(not(windows))]
+    use crate::test_repo::private_dir_under;
     use crate::test_repo::{TempRepo, empty_dir};
+    #[cfg(not(windows))]
+    use std::os::unix::fs::PermissionsExt;
 
     /// git in the fixture repository `repo`, with the empty global
     /// config beside it and no system config, so the developer's own
@@ -489,7 +493,7 @@ mod tests {
         let dir = empty_dir();
         let key = keygen(&dir.0, "trusted");
         let repo = repo(&dir);
-        if !gpg_signed_tag(&dir, &repo, "v1.0.0") {
+        if !gpg_signed_tag(&repo, "v1.0.0") {
             eprintln!("gpg not installed; skipping");
             return;
         }
@@ -498,15 +502,48 @@ mod tests {
         assert!(err.contains("not SSH-signed"), "{err}");
     }
 
+    #[cfg(not(windows))]
+    #[test]
+    fn the_gpg_home_leaves_room_for_the_agent_sockets() {
+        // gpg starts a gpg-agent that puts its sockets in GNUPGHOME, and
+        // a Unix socket path has a length limit (`SOCKET_PATH_MAX`
+        // below). This home, from a macOS run where gpg failed with
+        // "No agent running" (#80), put the longest socket at exactly
+        // that limit.
+        let macos = Path::new(concat!(
+            "/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/",
+            "rustbase-xtask-test-33731-47/gnupg"
+        ));
+        let longest = macos.as_os_str().len() + LONGEST_SOCKET.len();
+        assert_eq!(longest, SOCKET_PATH_MAX);
+        assert!(!agent_sockets_fit(macos));
+        // macOS's temp folder holds a home directly; one that leaves no
+        // room falls back to /tmp.
+        let temp = macos.parent().unwrap().parent().unwrap();
+        assert_eq!(gpg_home_base(temp), temp);
+        let deep = macos.parent().unwrap();
+        assert_eq!(gpg_home_base(deep), Path::new("/tmp"));
+        // gpg warns on a home others can read, so it is made private.
+        // Checked on `private_dir_under` itself, which needs neither gpg
+        // nor /tmp.
+        let home = private_dir_under(&std::env::temp_dir(), "rbx-gpg");
+        let mode = std::fs::metadata(&home.0).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700, "gpg warns on a shared home");
+    }
+
     /// Signs `tag` with a throwaway `OpenPGP` key kept in a private
     /// `GNUPGHOME` (gpg's key store directory). Returns false when gpg
     /// is not installed.
     #[cfg(not(windows))]
-    fn gpg_signed_tag(dir: &TempRepo, repo: &Path, tag: &str) -> bool {
-        let home = dir.0.join("gnupg");
-        std::fs::create_dir(&home).unwrap();
+    fn gpg_signed_tag(repo: &Path, tag: &str) -> bool {
+        if Command::new("gpg").arg("--version").output().is_err() {
+            return false;
+        }
+        let guard = gpg_home();
+        let home = guard.0.0.as_path();
+        assert!(agent_sockets_fit(home), "{}", home.display());
         let Ok(generated) = Command::new("gpg")
-            .env("GNUPGHOME", &home)
+            .env("GNUPGHOME", home)
             .args([
                 "--batch",
                 "--pinentry-mode",
@@ -529,7 +566,7 @@ mod tests {
             String::from_utf8_lossy(&generated.stderr)
         );
         let out = isolated_git(repo)
-            .env("GNUPGHOME", &home)
+            .env("GNUPGHOME", home)
             .args([
                 "-c",
                 "gpg.format=openpgp",
@@ -548,11 +585,74 @@ mod tests {
             "git tag: {}",
             String::from_utf8_lossy(&out.stderr)
         );
-        // Stop the gpg agent that signing started for this home.
-        let _ = Command::new("gpgconf")
-            .env("GNUPGHOME", &home)
-            .args(["--kill", "gpg-agent"])
-            .status();
         true
+    }
+
+    /// The kernel's limit on a Unix socket path on macOS: 104 bytes
+    /// with the terminating zero. It is the smallest of the Unix
+    /// limits, so it is applied on every Unix host. gpg was seen failing
+    /// at exactly this length (#80), so a usable path must be strictly
+    /// shorter; why gpg's bound is stricter is unconfirmed.
+    #[cfg(not(windows))]
+    const SOCKET_PATH_MAX: usize = 103;
+
+    /// The longest of the socket names gpg-agent puts in its home.
+    #[cfg(not(windows))]
+    const LONGEST_SOCKET: &str = "/S.gpg-agent.browser";
+
+    /// Room kept below [`SOCKET_PATH_MAX`]. A guess, not a measured
+    /// bound: generous because the cause is unconfirmed (#80).
+    #[cfg(not(windows))]
+    const SOCKET_MARGIN: usize = 4;
+
+    /// A home name as long as `gpg_home` makes in practice: a 10-digit
+    /// pid and a 5-digit counter. The counter is shared by every test
+    /// temp dir in the process, so five digits assumes fewer than
+    /// 100000 of them.
+    #[cfg(not(windows))]
+    const LONGEST_HOME_NAME: &str = "rbx-gpg-4294967295-99999";
+
+    /// A private gpg home; when dropped, its agent is stopped and the
+    /// directory removed. gpg keeps its agent's sockets in the home, so
+    /// it goes directly under the temp folder when a home there fits
+    /// and under `/tmp` otherwise.
+    #[cfg(not(windows))]
+    fn gpg_home() -> GpgHome {
+        let base = gpg_home_base(&std::env::temp_dir());
+        GpgHome(private_dir_under(&base, "rbx-gpg"))
+    }
+
+    /// `temp` when a home of the longest possible name fits there,
+    /// otherwise `/tmp`, short enough on every Unix host.
+    #[cfg(not(windows))]
+    fn gpg_home_base(temp: &Path) -> PathBuf {
+        if agent_sockets_fit(&temp.join(LONGEST_HOME_NAME)) {
+            temp.to_path_buf()
+        } else {
+            PathBuf::from("/tmp")
+        }
+    }
+
+    /// A gpg home whose agent is stopped before the directory goes,
+    /// also when a test fails halfway.
+    #[cfg(not(windows))]
+    struct GpgHome(TempRepo);
+
+    #[cfg(not(windows))]
+    impl Drop for GpgHome {
+        fn drop(&mut self) {
+            let _ = Command::new("gpgconf")
+                .env("GNUPGHOME", &self.0.0)
+                .args(["--kill", "gpg-agent"])
+                .status();
+        }
+    }
+
+    /// Whether gpg's longest agent socket path in `home` stays
+    /// [`SOCKET_MARGIN`] below [`SOCKET_PATH_MAX`].
+    #[cfg(not(windows))]
+    fn agent_sockets_fit(home: &Path) -> bool {
+        home.as_os_str().len() + LONGEST_SOCKET.len()
+            <= SOCKET_PATH_MAX - SOCKET_MARGIN
     }
 }

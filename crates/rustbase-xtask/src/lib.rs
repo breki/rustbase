@@ -296,26 +296,59 @@ impl Default for Thresholds {
     }
 }
 
-/// A throwaway git repository for tests that exercise the real
-/// `git` calls without touching the network.
+/// Temp-directory helpers for tests, among them throwaway git
+/// repositories for tests that exercise the real `git` calls without
+/// touching the network.
 #[cfg(test)]
 pub(crate) mod test_repo {
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    /// A temp directory removed when dropped.
+    /// Any temp directory, removed when dropped: a git repository or
+    /// not, whatever the name suggests.
     pub(crate) struct TempRepo(pub PathBuf);
 
     /// An empty temp directory, not a repository.
     pub(crate) fn empty_dir() -> TempRepo {
+        dir_under(&std::env::temp_dir(), "rustbase-xtask-test")
+    }
+
+    /// A new empty directory `<base>/<prefix>-<pid>-<n>`, unique within
+    /// the process; `base` is created when missing. A leftover of an
+    /// earlier run under the same name is removed first; a directory
+    /// that cannot be (another user's) fails the test rather than being
+    /// reused.
+    pub(crate) fn dir_under(base: &Path, prefix: &str) -> TempRepo {
+        new_dir(base, prefix, |dir| std::fs::create_dir(dir))
+    }
+
+    /// [`dir_under`], created with mode 0700 in the same call, so no
+    /// other user can write into it before it is private.
+    #[cfg(unix)]
+    pub(crate) fn private_dir_under(base: &Path, prefix: &str) -> TempRepo {
+        use std::os::unix::fs::DirBuilderExt;
+        new_dir(base, prefix, |dir| {
+            std::fs::DirBuilder::new().mode(0o700).create(dir)
+        })
+    }
+
+    fn new_dir(
+        base: &Path,
+        prefix: &str,
+        create: impl FnOnce(&Path) -> std::io::Result<()>,
+    ) -> TempRepo {
         static SEQ: AtomicU64 = AtomicU64::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "rustbase-xtask-test-{}-{}",
+        std::fs::create_dir_all(base)
+            .unwrap_or_else(|e| panic!("create {}: {e}", base.display()));
+        let dir = base.join(format!(
+            "{prefix}-{}-{}",
             std::process::id(),
             SEQ.fetch_add(1, Ordering::SeqCst)
         ));
-        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let _ = std::fs::remove_dir_all(&dir);
+        create(&dir)
+            .unwrap_or_else(|e| panic!("create {}: {e}", dir.display()));
         TempRepo(dir)
     }
 
@@ -375,6 +408,16 @@ pub(crate) mod test_repo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_test_dir_is_made_under_a_base_that_does_not_exist_yet() {
+        // A TMPDIR not created yet must not fail every test.
+        let parent = test_repo::empty_dir();
+        let base = parent.0.join("not").join("yet");
+        let dir = test_repo::dir_under(&base, "x");
+        assert!(dir.0.is_dir(), "{}", dir.0.display());
+        assert!(dir.0.starts_with(&base));
+    }
 
     #[test]
     fn project_defaults_derive_the_env_var_and_user_agent() {
